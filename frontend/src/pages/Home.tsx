@@ -141,11 +141,12 @@ function Works() {
       link: isAdmin ? { to: '/admin', label: '進入' } : { to: '/login', label: '登入' },
     },
     {
-      glyph: '？',
-      title: '下一個 APP',
-      body: '還在腦袋裡轉。做好了會出現在這裡。',
-      tag: '製作中',
-      soon: true,
+      glyph: '戲',
+      title: '小遊戲',
+      body: '貪食蛇、五子棋、象棋、西洋棋、黑白棋、1A2B、數獨、踩地雷。棋類可以跟電腦下，也能開房間線上對戰。',
+      tag: '8 款',
+      live: true,
+      link: { to: '/games', label: '去玩' },
     },
   ]
 
