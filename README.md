@@ -31,6 +31,53 @@ cd frontend && npm run lint && npm run build
 
 資料庫 migration 放在 `backend/migrations/`，服務啟動時自動執行。
 
+## 登入與權限
+
+```
+使用者 ──user_roles──▶ 角色 ──role_permissions──▶ 權限
+alice                  admin（系統管理員）         admin.users
+```
+
+- 密碼用 argon2id 雜湊；session 是隨機 token 放在 HttpOnly cookie（`session_<env>`），資料庫只存 token 的 SHA-256，7 天過期。
+- 同一個 IP 15 分鐘內登入失敗 10 次會暫停登入。
+- 停用帳號、重設密碼會讓該帳號所有裝置登出；自己改密碼只保留目前這個裝置。
+- 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
+
+頁面：`/login` 登入、`/account` 改密碼、`/admin` 系統管理（需要 `admin.users`）。
+
+### 建立或救回管理員
+
+帳號已存在時會重設密碼、重新啟用並加回 `admin` 角色。密碼從 stdin 讀，不會留在指令列或 shell 歷史裡：
+
+```shell
+# 本機
+cd backend && cargo run -- create-admin admin
+
+# 伺服器（<env> 是 staging 或 prod），輸入密碼後按 Enter
+cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin admin
+```
+
+### 新的 APP 要加權限時
+
+1. 新增 migration，登記權限並授權給角色：
+   ```sql
+   INSERT INTO permissions (name, description) VALUES ('notes.write', '編輯筆記');
+   INSERT INTO role_permissions (role_id, permission) SELECT id, 'notes.write' FROM roles WHERE name = 'admin';
+   ```
+   需要新角色就 `INSERT INTO roles (name, description) VALUES ('editor', '編輯者');`。
+2. 在 `backend/src/auth.rs` 定義權限，handler 參數加上 `Require<NotesWrite>`，沒登入回 401、沒權限回 403：
+   ```rust
+   pub struct NotesWrite;
+   impl Permission for NotesWrite {
+       const NAME: &'static str = "notes.write";
+   }
+
+   async fn create_note(Require(user, _): Require<NotesWrite>, ...) { ... }
+   ```
+3. 前端用 `useAuth().can('notes.write')` 決定要不要顯示，用 `<RequireAuth permission="notes.write">` 保護頁面。前端的判斷只是介面，真正的檢查在後端。
+
+> 目前 staging / prod 都還是 HTTP，密碼和 cookie 在網路上是明文傳送。接上 HTTPS 前不要在公共網路登入重要帳號；接上之後在 `<env>.env` 加 `COOKIE_SECURE=true`。
+
 ## 部署
 
 | 環境 | 觸發 | Image tag | 伺服器 port |

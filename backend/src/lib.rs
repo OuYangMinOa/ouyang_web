@@ -1,3 +1,6 @@
+pub mod admin;
+pub mod auth;
+
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
@@ -14,7 +17,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, patch, post},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -34,6 +37,22 @@ pub struct AppState {
     pub commit: String,
     /// 收到 SIGTERM 後設為 true：health 回 503 讓 Traefik 移除這個容器，其他請求照常處理
     pub draining: Arc<AtomicBool>,
+    /// 有 HTTPS 之後要設成 true，session cookie 才只會經由 HTTPS 傳送
+    pub cookie_secure: bool,
+    pub login_limiter: Arc<auth::LoginLimiter>,
+}
+
+impl AppState {
+    pub fn new(pool: SqlitePool, app_env: impl Into<String>, commit: impl Into<String>) -> Self {
+        Self {
+            pool,
+            app_env: app_env.into(),
+            commit: commit.into(),
+            draining: Arc::default(),
+            cookie_secure: false,
+            login_limiter: Arc::default(),
+        }
+    }
 }
 
 /// `/api/*` 走 JSON API，其他路徑交給 React 的靜態檔（找不到就回 index.html 讓前端路由處理）。
@@ -41,15 +60,18 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
     let api = Router::new()
         .route("/health", get(health))
         .route("/messages", get(list_messages).post(create_message))
+        .route("/auth/login", post(auth::login))
+        .route("/auth/logout", post(auth::logout))
+        .route("/auth/me", get(auth::me))
+        .route("/auth/password", post(auth::change_password))
+        .route("/admin/users", get(admin::list_users).post(admin::create_user))
+        .route("/admin/users/{id}", patch(admin::update_user))
+        .route("/admin/roles", get(admin::list_roles))
         .fallback(api_not_found);
 
     let spa = ServeDir::new(static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
 
-    Router::new()
-        .nest("/api", api)
-        .fallback_service(spa)
-        .layer(TraceLayer::new_for_http())
-        .with_state(state)
+    Router::new().nest("/api", api).fallback_service(spa).layer(TraceLayer::new_for_http()).with_state(state)
 }
 
 async fn health(State(state): State<AppState>) -> Response {
@@ -97,11 +119,10 @@ pub struct NewMessage {
 }
 
 async fn list_messages(State(state): State<AppState>) -> Result<Json<Vec<Message>>, AppError> {
-    let messages = sqlx::query_as::<_, Message>(
-        "SELECT id, content, created_at FROM messages ORDER BY id DESC LIMIT 50",
-    )
-    .fetch_all(&state.pool)
-    .await?;
+    let messages =
+        sqlx::query_as::<_, Message>("SELECT id, content, created_at FROM messages ORDER BY id DESC LIMIT 50")
+            .fetch_all(&state.pool)
+            .await?;
     Ok(Json(messages))
 }
 
@@ -117,12 +138,11 @@ async fn create_message(
         return Err(AppError::BadRequest(format!("content 不可超過 {MAX_MESSAGE_LEN} 字")));
     }
 
-    let message = sqlx::query_as::<_, Message>(
-        "INSERT INTO messages (content) VALUES (?) RETURNING id, content, created_at",
-    )
-    .bind(content)
-    .fetch_one(&state.pool)
-    .await?;
+    let message =
+        sqlx::query_as::<_, Message>("INSERT INTO messages (content) VALUES (?) RETURNING id, content, created_at")
+            .bind(content)
+            .fetch_one(&state.pool)
+            .await?;
     Ok((StatusCode::CREATED, Json(message)))
 }
 
@@ -130,11 +150,32 @@ async fn api_not_found() -> AppError {
     AppError::NotFound
 }
 
+#[derive(Debug)]
 pub enum AppError {
     BadRequest(String),
+    Unauthorized(&'static str),
+    Forbidden,
     NotFound,
+    Conflict(String),
+    TooManyRequests,
     Database(sqlx::Error),
+    Internal(String),
 }
+
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BadRequest(message) | Self::Conflict(message) | Self::Internal(message) => f.write_str(message),
+            Self::Unauthorized(message) => f.write_str(message),
+            Self::Forbidden => f.write_str("沒有權限"),
+            Self::NotFound => f.write_str("not found"),
+            Self::TooManyRequests => f.write_str("嘗試次數過多，請 15 分鐘後再試"),
+            Self::Database(err) => write!(f, "database error: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for AppError {}
 
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
@@ -144,13 +185,20 @@ impl From<sqlx::Error> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
-            Self::NotFound => (StatusCode::NOT_FOUND, "not found".into()),
-            Self::Database(err) => {
-                tracing::error!(error = %err, "database error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal server error".into())
-            }
+        let status = match &self {
+            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            Self::Forbidden => StatusCode::FORBIDDEN,
+            Self::NotFound => StatusCode::NOT_FOUND,
+            Self::Conflict(_) => StatusCode::CONFLICT,
+            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            Self::Database(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = if status == StatusCode::INTERNAL_SERVER_ERROR {
+            tracing::error!(error = %self, "internal error");
+            "internal server error".to_owned()
+        } else {
+            self.to_string()
         };
         (status, Json(json!({ "error": message }))).into_response()
     }
