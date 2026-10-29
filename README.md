@@ -35,20 +35,25 @@ cd frontend && npm run lint && npm run build
 
 | 環境 | 觸發 | Image tag | 伺服器 port |
 |---|---|---|---|
-| staging | push 到 `main` | `sha-<commit>` | 8102 |
-| prod | 推 `v*` tag | `v1.2.3`、`latest`（直接沿用 staging 的 image） | 80 |
+| staging | merge / push 到 `dev` | `staging-<commit>`、`staging-latest` | 8102 |
+| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | 443（目前是 HTTP，之後接 HTTPS） |
 
-```shell
-# 發佈正式版：該 commit 必須已經在 main 上跑完 staging
-git tag v0.1.0
-git push origin v0.1.0
+分支流程：
+
+```
+feature/xxx ──PR──▶ dev ──PR──▶ main
+                     │            │
+                  staging        prod
 ```
 
-回滾：對舊的 commit 重新打一個新版本 tag，或在伺服器上手動指定舊 image：
+- `main` 受保護：只能透過 PR 合併，且 CI 的 `test` 必須通過，不能 force push 或刪除。
+- 對 `dev` / `main` 開的 PR 只會跑測試，merge 後才會建置並部署。
+
+回滾：在伺服器上手動指定舊 image（tag 可以在 GitHub 的 Packages 頁面找到）：
 
 ```shell
 cd ~/ouyang_web/prod
-IMAGE=ghcr.io/ouyangminoa/ouyang_web:v0.1.0 docker compose -p ouyang-web-prod --env-file prod.env up -d
+IMAGE=ghcr.io/ouyangminoa/ouyang_web:prod-<commit> docker compose -p ouyang-web-prod --env-file prod.env up -d
 ```
 
 ### 需要的 GitHub secrets

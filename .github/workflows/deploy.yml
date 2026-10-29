@@ -1,13 +1,18 @@
-name: Staging
+name: CI/CD
 
+# PR → 只跑測試（main 的保護規則要求 test 通過才能 merge）
+# push 到 dev  → 部署 staging（:8102）
+# push 到 main → 部署 prod（:443）
 on:
+  pull_request:
+    branches: [dev, main]
   push:
-    branches: [main]
+    branches: [dev, main]
   workflow_dispatch:
 
 concurrency:
-  group: staging
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -35,17 +40,24 @@ jobs:
 
   build:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     outputs:
       image: ${{ steps.meta.outputs.image }}
+      env_name: ${{ steps.meta.outputs.env_name }}
     steps:
       - uses: actions/checkout@v5
       - id: meta
         # GHCR 的名稱必須全小寫
-        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          if [ "$GITHUB_REF_NAME" = main ]; then env_name=prod; else env_name=staging; fi
+          echo "env_name=$env_name" >> "$GITHUB_OUTPUT"
+          echo "image=$repo:$env_name-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "latest=$repo:$env_name-latest" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -57,7 +69,9 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.image }}
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.latest }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -68,6 +82,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      ENV_NAME: ${{ needs.build.outputs.env_name }}
     steps:
       - uses: actions/checkout@v5
       - name: Upload deploy files
@@ -77,7 +93,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: deploy/*
-          target: /home/ubuntu/ouyang_web/staging
+          target: /home/ubuntu/ouyang_web/${{ env.ENV_NAME }}
           strip_components: 1
       - name: Deploy
         uses: appleboy/ssh-action@v1
@@ -89,5 +105,5 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: GHCR_USER,GHCR_TOKEN,IMAGE
-          script: bash /home/ubuntu/ouyang_web/staging/deploy.sh staging "$IMAGE"
+          envs: GHCR_USER,GHCR_TOKEN,IMAGE,ENV_NAME
+          script: bash "/home/ubuntu/ouyang_web/$ENV_NAME/deploy.sh" "$ENV_NAME" "$IMAGE"
