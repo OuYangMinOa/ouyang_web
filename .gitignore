@@ -1,0 +1,17 @@
+# backend
+backend/target/
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+
+# frontend
+node_modules/
+dist/
+*.local
+
+# editor / os
+.vscode/
+.idea/
+.DS_Store
+.env
