@@ -118,15 +118,20 @@ input:not([type='checkbox']) {
   border-radius: 8px;
   background: transparent;
   color: var(--text-h);
+  /* 小於 16px 時 iOS 會在聚焦時自動放大畫面 */
+  font-size: 16px;
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
 button {
   font: inherit;
+  min-height: 40px;
   padding: 8px 16px;
   border: 0;
   border-radius: 8px;
   background: var(--accent);
-  color: var(--bg);
+  color: var(--on-accent);
   cursor: pointer;
 }
 button:disabled {
@@ -149,6 +154,17 @@ button.link {
   color: var(--text);
 }
 
+.theme-toggle {
+  min-height: 32px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .stack > button {
   align-self: flex-start;
 }
@@ -158,9 +174,21 @@ button.link {
   border: 1px solid var(--border);
   border-radius: 12px;
   margin-top: 16px;
+  background: var(--surface);
 }
 .card.narrow {
   max-width: 400px;
+}
+.card > h1,
+.card > h2,
+.card > h3 {
+  margin: 0;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .error {
@@ -197,7 +225,7 @@ table {
 th,
 td {
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
   padding: 10px 8px;
   border-bottom: 1px solid var(--border);
 }
@@ -208,7 +236,7 @@ th {
   white-space: nowrap;
 }
 
-tr.disabled td:first-child {
+tr.disabled .username {
   text-decoration: line-through;
 }
 
@@ -231,7 +259,7 @@ td .edit {
   margin: 0 4px 4px 0;
   border-radius: 999px;
   background: var(--accent);
-  color: var(--bg);
+  color: var(--on-accent);
   font-size: 13px;
 }
 .chip.subtle {
@@ -274,4 +302,91 @@ td .edit {
 time {
   flex-shrink: 0;
   font-size: 13px;
+}
+
+/* ---- 手機（窄螢幕） ---- */
+
+@media (max-width: 640px) {
+  main {
+    margin: 20px auto 48px;
+  }
+
+  h1 {
+    font-size: 24px;
+    margin-bottom: 16px;
+  }
+
+  /* 第一行：品牌、版本、主題；第二行：導覽連結（太多時可以左右滑） */
+  .site-header {
+    gap: 8px 12px;
+    padding: 12px 0;
+  }
+  .site-header nav {
+    order: 1;
+    width: 100%;
+    margin-left: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .theme-toggle {
+    margin-left: auto;
+  }
+
+  .card {
+    padding: 16px;
+  }
+  .card.narrow {
+    max-width: none;
+  }
+
+  /* 表格改成一列一張卡片，欄位名稱取自 td 的 data-label */
+  table.responsive thead {
+    display: none;
+  }
+  table.responsive,
+  table.responsive tbody,
+  table.responsive tr,
+  table.responsive td {
+    display: block;
+  }
+  table.responsive tr {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px 16px;
+    margin-bottom: 12px;
+    background: var(--surface);
+  }
+  table.responsive td {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0;
+  }
+  table.responsive td:last-child {
+    border-bottom: 0;
+  }
+  table.responsive td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 72px;
+    color: var(--text);
+  }
+  table.responsive td.primary {
+    font-weight: 600;
+    color: var(--text-h);
+  }
+  table.responsive td.actions {
+    justify-content: flex-start;
+  }
+  td.actions button {
+    flex: 1;
+    margin: 0;
+  }
+  td .edit {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .messages li {
+    flex-direction: column;
+    gap: 4px;
+  }
 }

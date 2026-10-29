@@ -1,26 +1,24 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router'
+import { Navigate, useLocation } from 'react-router'
 import { errorMessage, PERMISSIONS } from '../api'
 import { useAuth } from '../auth'
 
 export default function Login() {
-  const { user, login } = useAuth()
-  const navigate = useNavigate()
+  const { user, login, can } = useAuth()
   const from = (useLocation().state as { from?: string } | null)?.from
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  if (user) return <Navigate to={from ?? '/'} replace />
+  // 登入成功後 user 會更新、重新 render 到這裡：回到原本要去的頁面，否則管理員進系統管理、其他人回首頁
+  if (user) return <Navigate to={from ?? (can(PERMISSIONS.adminUsers) ? '/admin' : '/')} replace />
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     try {
-      const me = await login(username, password)
-      const home = me.permissions.includes(PERMISSIONS.adminUsers) ? '/admin' : '/'
-      navigate(from ?? home, { replace: true })
+      await login(username, password)
     } catch (e) {
       setError(errorMessage(e))
       setBusy(false)

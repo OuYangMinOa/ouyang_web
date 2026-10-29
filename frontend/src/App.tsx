@@ -6,9 +6,34 @@ import Account from './pages/Account'
 import Admin from './pages/Admin'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import { getThemePreference, setThemePreference, type ThemePreference } from './theme'
 import './App.css'
 
 type Health = { status: string; env: string; version: string; db: boolean }
+
+const THEMES: { value: ThemePreference; icon: string; label: string }[] = [
+  { value: 'system', icon: '◐', label: '跟隨系統' },
+  { value: 'light', icon: '☀', label: '亮色' },
+  { value: 'dark', icon: '☾', label: '深色' },
+]
+
+/** 依序切換：跟隨系統 → 亮色 → 深色 */
+function ThemeToggle() {
+  const [preference, setPreference] = useState(getThemePreference)
+  const current = THEMES.find((t) => t.value === preference) ?? THEMES[0]
+
+  function cycle() {
+    const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length].value
+    setThemePreference(next)
+    setPreference(next)
+  }
+
+  return (
+    <button type="button" className="theme-toggle" onClick={cycle} title={`主題：${current.label}（點擊切換）`}>
+      <span aria-hidden="true">{current.icon}</span> {current.label}
+    </button>
+  )
+}
 
 function Header() {
   const { user, can, logout } = useAuth()
@@ -34,6 +59,7 @@ function Header() {
           {health.env} · v{health.version}
         </span>
       )}
+      <ThemeToggle />
       <nav>
         <NavLink to="/" end>
           首頁

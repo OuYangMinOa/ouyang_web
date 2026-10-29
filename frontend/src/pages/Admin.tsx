@@ -187,7 +187,7 @@ export default function Admin() {
         <h2>使用者</h2>
         {error && <p className="error">{error}</p>}
         <div className="table-wrap">
-          <table>
+          <table className="responsive">
             <thead>
               <tr>
                 <th>帳號</th>
@@ -202,11 +202,11 @@ export default function Admin() {
                 const isSelf = user.id === me?.id
                 return (
                   <tr key={user.id} className={user.disabled ? 'disabled' : undefined}>
-                    <td>
-                      {user.username}
+                    <td data-label="帳號" className="primary">
+                      <span className="username">{user.username}</span>
                       {isSelf && <span className="chip subtle">你</span>}
                     </td>
-                    <td>
+                    <td data-label="角色">
                       {editing === user.id ? (
                         <EditUser
                           user={user}
@@ -225,8 +225,8 @@ export default function Admin() {
                         <span className="muted">無</span>
                       )}
                     </td>
-                    <td>{user.disabled ? <span className="error">已停用</span> : '啟用中'}</td>
-                    <td>
+                    <td data-label="狀態">{user.disabled ? <span className="error">已停用</span> : '啟用中'}</td>
+                    <td data-label="最後登入">
                       <time>{formatTime(user.last_login_at)}</time>
                     </td>
                     <td className="actions">
