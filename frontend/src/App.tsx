@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate } from 'react-router'
 import { api, PERMISSIONS } from './api'
 import { AuthProvider, RequireAuth, useAuth } from './auth'
+import GamePage from './games/GamePage'
+import GamesHub from './games/GamesHub'
 import Account from './pages/Account'
 import Admin from './pages/Admin'
 import Home from './pages/Home'
@@ -64,6 +66,7 @@ function Header() {
         <NavLink to="/" end>
           首頁
         </NavLink>
+        <NavLink to="/games">小遊戲</NavLink>
         {can(PERMISSIONS.adminUsers) && <NavLink to="/admin">系統管理</NavLink>}
         {user ? (
           <>
@@ -88,6 +91,8 @@ function App() {
         <main>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/games" element={<GamesHub />} />
+            <Route path="/games/:id" element={<GamePage />} />
             <Route path="/login" element={<Login />} />
             <Route
               path="/account"

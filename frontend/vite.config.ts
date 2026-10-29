@@ -11,7 +11,8 @@ export default defineConfig({
   server: {
     // 開發時把 /api 轉給本機的 Rust 後端（cargo run，預設 :8080）
     proxy: {
-      '/api': 'http://localhost:8080',
+      // ws：小遊戲線上對戰的 WebSocket 也走 /api
+      '/api': { target: 'http://localhost:8080', ws: true },
     },
   },
 })

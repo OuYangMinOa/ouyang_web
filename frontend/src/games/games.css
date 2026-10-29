@@ -1,0 +1,205 @@
+/* ---- 小遊戲：大廳 ---- */
+
+.games-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.game-card {
+  display: flex;
+  gap: 14px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+.game-card:hover,
+.game-card:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.game-card-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+.game-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.game-card-body strong {
+  color: var(--text-h);
+  font-size: 17px;
+}
+.game-card-tags .chip {
+  margin: 0 4px 0 0;
+}
+
+/* ---- 小遊戲：共用版面 ---- */
+
+.game-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.game-title h1 {
+  margin: 0;
+}
+.game-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 8px;
+  color: var(--text-h);
+  text-decoration: none;
+  font-size: 20px;
+}
+.game-back:hover {
+  background: var(--surface);
+}
+
+.game-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+  align-items: start;
+}
+.game-layout.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.game-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.game-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* 方形棋盤：不超過可用寬度，也不超過視窗高度（扣掉頁首與狀態列） */
+.board-box {
+  position: relative;
+  width: min(100%, 640px, calc(100dvh - 180px));
+  min-width: min(100%, 300px);
+  margin: 0 auto;
+}
+
+.segmented-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.segmented-label {
+  font-size: 14px;
+  color: var(--text);
+}
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.segmented button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.segmented button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.game-status {
+  margin: 0;
+  min-height: 24px;
+  font-weight: 600;
+  color: var(--text-h);
+  text-align: center;
+}
+.game-status.ok {
+  color: var(--ok);
+}
+.game-status.danger {
+  color: var(--danger);
+}
+.game-status.accent {
+  color: var(--accent);
+}
+
+.game-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.game-toolbar > button {
+  flex: 1 1 auto;
+}
+
+.game-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  color: var(--text-h);
+  border-radius: 8px;
+  z-index: 2;
+}
+
+.online-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.room-code {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.room-code strong {
+  font: 600 24px var(--mono);
+  letter-spacing: 0.15em;
+  color: var(--text-h);
+}
+
+@media (max-width: 800px) {
+  .game-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .game-title {
+    margin-bottom: 8px;
+  }
+  .board-box {
+    width: 100%;
+  }
+}

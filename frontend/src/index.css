@@ -19,6 +19,32 @@
   --grain-filter: none;
   --glow: rgb(217 72 15 / 0.16);
 
+  /* 小遊戲：棋盤、棋子、格子與提示色 */
+  --board: #e3bf86;
+  --board-line: #6b4a1f;
+  --stone-black: #1c1a17;
+  --stone-white: #fdfbf7;
+  --stone-edge: #6b645a;
+  --piece-red: #b91c1c;
+  --piece-face: #fbf3e2;
+  --highlight: rgb(194 65 12 / 0.3);
+  --hint: rgb(47 125 79 / 0.45);
+  --warn: #b45309;
+  --cell: #e2d9c8;
+  --cell-open: #fbf8f2;
+  --cell-alt: #efe9dd;
+  --snake: #2f7d4f;
+  --snake-head: #1f5c39;
+  --apple: #be123c;
+  --n1: #2563eb;
+  --n2: #2f7d4f;
+  --n3: #be123c;
+  --n4: #7c3aed;
+  --n5: #b45309;
+  --n6: #0f766e;
+  --n7: #1c1a17;
+  --n8: #6b645a;
+
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
   --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
@@ -48,6 +74,30 @@
     --grain-opacity: 0.05;
     --grain-filter: invert(1);
     --glow: rgb(255 106 46 / 0.2);
+    --board: #7a5a33;
+    --board-line: #2b1d0c;
+    --stone-black: #0c0a09;
+    --stone-white: #ece5d8;
+    --stone-edge: #a39b8f;
+    --piece-red: #ff6b6b;
+    --piece-face: #2a231c;
+    --highlight: rgb(255 122 61 / 0.38);
+    --hint: rgb(95 211 141 / 0.45);
+    --warn: #fbbf24;
+    --cell: #3a332b;
+    --cell-open: #1a1714;
+    --cell-alt: #221e1a;
+    --snake: #5fd38d;
+    --snake-head: #9be7b8;
+    --apple: #ff6b81;
+    --n1: #60a5fa;
+    --n2: #5fd38d;
+    --n3: #ff6b81;
+    --n4: #c084fc;
+    --n5: #fbbf24;
+    --n6: #2dd4bf;
+    --n7: #f4ede2;
+    --n8: #a39b8f;
     color-scheme: dark;
   }
 }
@@ -68,6 +118,30 @@
   --grain-opacity: 0.05;
   --grain-filter: invert(1);
   --glow: rgb(255 106 46 / 0.2);
+  --board: #7a5a33;
+  --board-line: #2b1d0c;
+  --stone-black: #0c0a09;
+  --stone-white: #ece5d8;
+  --stone-edge: #a39b8f;
+  --piece-red: #ff6b6b;
+  --piece-face: #2a231c;
+  --highlight: rgb(255 122 61 / 0.38);
+  --hint: rgb(95 211 141 / 0.45);
+  --warn: #fbbf24;
+  --cell: #3a332b;
+  --cell-open: #1a1714;
+  --cell-alt: #221e1a;
+  --snake: #5fd38d;
+  --snake-head: #9be7b8;
+  --apple: #ff6b81;
+  --n1: #60a5fa;
+  --n2: #5fd38d;
+  --n3: #ff6b81;
+  --n4: #c084fc;
+  --n5: #fbbf24;
+  --n6: #2dd4bf;
+  --n7: #f4ede2;
+  --n8: #a39b8f;
   color-scheme: dark;
 }
 
