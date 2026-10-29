@@ -1,0 +1,188 @@
+/* ---- 象棋 ---- */
+
+/* 棋盤是 9×10 的直式長方形：寬度依可用高度換算，確保整張棋盤都在視窗裡 */
+.board-box.xiangqi-box {
+  width: min(100%, 560px, calc((100dvh - 190px) * 364 / 404));
+}
+
+.xiangqi-board {
+  --xq-black: var(--stone-black);
+  --xq-font: 'KaiTi', 'BiauKai', 'DFKai-SB', 'Kaiti TC', 'STKaiti', 'Noto Serif TC', serif;
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 深色主題的 --stone-black 幾乎和棋子底色一樣深，黑方改用標題文字色 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .xiangqi-board {
+    --xq-black: var(--text-h);
+  }
+}
+:root[data-theme='dark'] .xiangqi-board {
+  --xq-black: var(--text-h);
+}
+
+.xiangqi-bg {
+  fill: var(--board);
+}
+.xiangqi-frame {
+  fill: none;
+  stroke: var(--board-line);
+  stroke-width: 2.5;
+}
+.xiangqi-grid {
+  fill: none;
+  stroke: var(--board-line);
+  stroke-width: 1.2;
+}
+.xiangqi-river {
+  fill: var(--board-line);
+  font: 600 20px var(--xq-font);
+  text-anchor: middle;
+  dominant-baseline: central;
+  opacity: 0.85;
+}
+
+.xiangqi-last {
+  fill: var(--highlight);
+}
+.xiangqi-check {
+  fill: color-mix(in srgb, var(--danger) 35%, transparent);
+  stroke: var(--danger);
+  stroke-width: 2.5;
+  animation: xiangqi-pulse 1s ease-in-out infinite alternate;
+}
+
+.xiangqi-piece-face {
+  fill: var(--piece-face);
+  stroke-width: 2;
+  filter: drop-shadow(0 1.5px 1px color-mix(in srgb, var(--board-line) 55%, transparent));
+}
+.xiangqi-piece-ring {
+  fill: none;
+  stroke-width: 0.8;
+  opacity: 0.7;
+}
+.xiangqi-piece-text {
+  font: 600 21px var(--xq-font);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.xiangqi-piece.red .xiangqi-piece-face,
+.xiangqi-piece.red .xiangqi-piece-ring {
+  stroke: var(--piece-red);
+}
+.xiangqi-piece.red .xiangqi-piece-text {
+  fill: var(--piece-red);
+}
+.xiangqi-piece.black .xiangqi-piece-face,
+.xiangqi-piece.black .xiangqi-piece-ring {
+  stroke: var(--xq-black);
+}
+.xiangqi-piece.black .xiangqi-piece-text {
+  fill: var(--xq-black);
+}
+/* 外層 <g> 用 transform 屬性定位，動畫放在內層才不會蓋掉位置 */
+.xiangqi-piece.moved > * {
+  animation: xiangqi-drop 0.18s ease-out;
+}
+
+.xiangqi-selected {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.xiangqi-capture {
+  fill: color-mix(in srgb, var(--danger) 15%, transparent);
+  stroke: var(--danger);
+  stroke-width: 3;
+  stroke-dasharray: 6 4;
+}
+.xiangqi-dot {
+  fill: var(--hint);
+  stroke: color-mix(in srgb, var(--board-line) 40%, transparent);
+  stroke-width: 1;
+}
+
+.xiangqi-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.xiangqi-board.disabled .xiangqi-hit {
+  cursor: default;
+}
+
+.xiangqi-overlay-title {
+  font-size: 20px;
+}
+
+@keyframes xiangqi-drop {
+  from {
+    transform: scale(1.18);
+    opacity: 0.6;
+  }
+}
+@keyframes xiangqi-pulse {
+  to {
+    stroke-width: 4;
+    fill: color-mix(in srgb, var(--danger) 20%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xiangqi-piece.moved > *,
+  .xiangqi-check {
+    animation: none;
+  }
+}
+
+/* ---- 棋譜 ---- */
+
+.xiangqi-record summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.xiangqi-record ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+}
+.xiangqi-record li {
+  display: grid;
+  grid-template-columns: 2.6em 1fr 1fr;
+  gap: 4px;
+  padding: 4px 8px;
+  color: var(--text-h);
+}
+.xiangqi-record li:nth-child(even) {
+  background: var(--surface);
+}
+.xiangqi-record-no {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.xiangqi-record-red {
+  color: var(--piece-red);
+}
+
+@media (max-width: 640px) {
+  .board-box.xiangqi-box {
+    width: 100%;
+  }
+  .xiangqi-record ol {
+    max-height: 220px;
+  }
+}
