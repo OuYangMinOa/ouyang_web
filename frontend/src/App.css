@@ -17,8 +17,7 @@ main {
 }
 
 .brand {
-  font-weight: 600;
-  font-size: 18px;
+  font: 900 19px var(--serif);
   color: var(--text-h);
   text-decoration: none;
 }
@@ -330,6 +329,10 @@ time {
   }
   .theme-toggle {
     margin-left: auto;
+  }
+  /* 窄螢幕只留圖示，頁首才能維持兩行 */
+  .theme-label {
+    display: none;
   }
 
   .card {

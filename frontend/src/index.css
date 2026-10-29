@@ -1,19 +1,29 @@
-/* 亮色是預設；深色在兩種情況套用：使用者選了深色（data-theme="dark"），或沒選、系統是深色 */
+/* 配色「墨與陽」：亮色是宣紙上的墨，深色是夜裡的餘燼；強調色是太陽的橘。
+   亮色是預設；深色在兩種情況套用：使用者選了深色（data-theme="dark"），或沒選、系統是深色 */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --surface: #faf9fb;
-  --border: #e5e4e7;
-  --accent: #aa3bff;
-  --on-accent: #fff;
-  --ok: #15803d;
-  --danger: #dc2626;
+  --text: #6b645a;
+  --text-h: #1c1a17;
+  --bg: #f4f0e8;
+  --surface: #fbf8f2;
+  --border: #e2dacb;
+  --accent: #c2410c;
+  --on-accent: #fffaf3;
+  --ok: #2f7d4f;
+  --danger: #be123c;
 
-  --sans: system-ui, 'Segoe UI', Roboto, 'Noto Sans TC', sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* 首頁 3D 粒子：a 是主色、b 是強調色；亮色背景用一般混色，深色背景用相加混色讓粒子發光 */
+  --particle-a: #26221d;
+  --particle-b: #d9480f;
+  --particle-blend: normal;
+  --grain-opacity: 0.09;
+  --grain-filter: none;
+  --glow: rgb(217 72 15 / 0.16);
 
-  font: 16px/1.5 var(--sans);
+  --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
+  --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  font: 16px/1.6 var(--sans);
   color-scheme: light;
   color: var(--text);
   background: var(--bg);
@@ -23,29 +33,41 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --surface: #1d1f26;
-    --border: #2e303a;
-    --accent: #c084fc;
-    --on-accent: #16171d;
-    --ok: #4ade80;
-    --danger: #f87171;
+    --text: #a39b8f;
+    --text-h: #f4ede2;
+    --bg: #100e0c;
+    --surface: #1a1714;
+    --border: #2d2823;
+    --accent: #ff7a3d;
+    --on-accent: #1a0e06;
+    --ok: #5fd38d;
+    --danger: #ff6b81;
+    --particle-a: #ffb27d;
+    --particle-b: #ff5a1f;
+    --particle-blend: additive;
+    --grain-opacity: 0.05;
+    --grain-filter: invert(1);
+    --glow: rgb(255 106 46 / 0.2);
     color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --text: #9ca3af;
-  --text-h: #f3f4f6;
-  --bg: #16171d;
-  --surface: #1d1f26;
-  --border: #2e303a;
-  --accent: #c084fc;
-  --on-accent: #16171d;
-  --ok: #4ade80;
-  --danger: #f87171;
+  --text: #a39b8f;
+  --text-h: #f4ede2;
+  --bg: #100e0c;
+  --surface: #1a1714;
+  --border: #2d2823;
+  --accent: #ff7a3d;
+  --on-accent: #1a0e06;
+  --ok: #5fd38d;
+  --danger: #ff6b81;
+  --particle-a: #ffb27d;
+  --particle-b: #ff5a1f;
+  --particle-blend: additive;
+  --grain-opacity: 0.05;
+  --grain-filter: invert(1);
+  --glow: rgb(255 106 46 / 0.2);
   color-scheme: dark;
 }
 

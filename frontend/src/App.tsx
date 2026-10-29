@@ -30,7 +30,7 @@ function ThemeToggle() {
 
   return (
     <button type="button" className="theme-toggle" onClick={cycle} title={`主題：${current.label}（點擊切換）`}>
-      <span aria-hidden="true">{current.icon}</span> {current.label}
+      <span aria-hidden="true">{current.icon}</span> <span className="theme-label">{current.label}</span>
     </button>
   )
 }
