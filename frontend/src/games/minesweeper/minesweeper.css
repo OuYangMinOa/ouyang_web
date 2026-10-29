@@ -1,0 +1,141 @@
+/* ---- 踩地雷 ---- */
+
+.ms-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.ms-top .segmented-field {
+  flex: 1 1 220px;
+}
+
+.ms-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.ms-counter {
+  min-width: 72px;
+  font: 600 18px var(--mono);
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.ms-counter:last-child {
+  text-align: right;
+}
+.ms-face {
+  min-width: 48px;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* 棋盤放不下時在這個容器裡面捲動，頁面本身不會橫向捲動 */
+.ms-scroll {
+  container-type: inline-size;
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+}
+
+.ms-board {
+  --gap: 1px;
+  /* 依容器寬度算格子大小，但至少 30px 好點、最多 44px */
+  --cs: clamp(30px, calc((100cqw - 6px - (var(--cols) - 1) * var(--gap)) / var(--cols)), 44px);
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cs));
+  grid-auto-rows: var(--cs);
+  gap: var(--gap);
+  width: max-content;
+  margin: 0 auto;
+  padding: 3px;
+  border-radius: 8px;
+  /* 格線要比未開格明顯，兩個主題下 --border 都太接近 --cell */
+  background: color-mix(in srgb, var(--text) 35%, var(--border));
+  /* 長按插旗時不要跳出選取、放大鏡或系統選單；也不要點兩下放大 */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ms-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--cell);
+  /* 未開格做出一點按鍵的立體感，和已開格區分 */
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--text) 30%, transparent);
+  color: var(--text-h);
+  font: 700 calc(var(--cs) * 0.5) / 1 var(--sans);
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.ms-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+@media (hover: hover) {
+  .ms-board:not(.done) .ms-cell:not(.open):hover {
+    background: color-mix(in srgb, var(--cell) 75%, var(--accent));
+  }
+}
+.ms-cell.open {
+  background: var(--cell-open);
+  box-shadow: none;
+  cursor: default;
+}
+.ms-cell.boom {
+  background: var(--danger);
+}
+.ms-cell.wrong {
+  background: color-mix(in srgb, var(--cell) 70%, var(--danger));
+}
+.ms-board.done .ms-cell {
+  cursor: default;
+}
+
+.ms-cell.n1 {
+  color: var(--n1);
+}
+.ms-cell.n2 {
+  color: var(--n2);
+}
+.ms-cell.n3 {
+  color: var(--n3);
+}
+.ms-cell.n4 {
+  color: var(--n4);
+}
+.ms-cell.n5 {
+  color: var(--n5);
+}
+.ms-cell.n6 {
+  color: var(--n6);
+}
+.ms-cell.n7 {
+  color: var(--n7);
+}
+.ms-cell.n8 {
+  color: var(--n8);
+}
+
+.ms-records {
+  text-align: center;
+}
+.ms-records .current {
+  color: var(--text-h);
+  font-weight: 600;
+}
