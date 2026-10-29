@@ -137,7 +137,10 @@ Traefik 每秒主動檢查 health，看到 503 就把它移出負載平衡，之
 
 `/api/health` 會回傳 `commit`，可以用來確認目前是哪一版在接流量。
 
-回滾：在伺服器上改 `.env` 的 `IMAGE` 再 rollout（tag 可以在 GitHub 的 Packages 頁面找到）：
+每次部署成功後會清掉同環境的舊 image：伺服器上只留這次的加上前 2 版（`deploy.sh` 的 `KEEP_PREVIOUS_IMAGES`），
+GHCR 上留最近 10 版（workflow 的 `cleanup` job）。
+
+回滾：在伺服器上改 `.env` 的 `IMAGE` 再 rollout（本機現有的版本用 `docker image ls` 看，更舊的 tag 在 GitHub 的 Packages 頁面，要先 `docker login ghcr.io` 才拉得到）：
 
 ```shell
 cd ~/ouyang_web/prod

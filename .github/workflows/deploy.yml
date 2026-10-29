@@ -108,3 +108,16 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: GHCR_USER,GHCR_TOKEN,IMAGE,ENV_NAME
           script: bash "/home/ubuntu/ouyang_web/$ENV_NAME/deploy.sh" "$ENV_NAME" "$IMAGE"
+
+  # 部署成功後清 GHCR：只動這個環境的 tag，留最近 10 版當回滾用，<env>-latest 永遠保留
+  cleanup:
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          delete-tags: ${{ needs.build.outputs.env_name }}-*
+          exclude-tags: ${{ needs.build.outputs.env_name }}-latest
+          keep-n-tagged: 10
