@@ -1,17 +1,37 @@
-# staging 和 prod 共用這份，差異寫在 <env>.env；IMAGE 由 deploy.sh 帶入。
-# 用不同的 project name（-p ouyang-web-<env>）啟動，volume 也會跟著分開。
+# staging 和 prod 共用這份，差異寫在 <env>.env；deploy.sh 會組出同目錄的 .env（含 IMAGE、專案名稱）。
+# 不對外綁 port：流量一律由 Traefik 經 ouyang-web 網路送進來，docker rollout 才能同時跑新舊兩個容器。
 services:
   app:
     image: ${IMAGE:?IMAGE is required}
     restart: unless-stopped
-    ports:
-      - "${HOST_PORT:?HOST_PORT is required}:8080"
     environment:
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       RUST_LOG: ${RUST_LOG:-info}
     volumes:
       - data:/data
+    networks:
+      - ouyang-web
     mem_limit: ${MEM_LIMIT:-256m}
+    # 收到 SIGTERM 後會先 drain 5 秒（DRAIN_SECS）再關閉，要留足時間避免被 SIGKILL
+    stop_grace_period: 20s
+    labels:
+      - traefik.enable=true
+      # router / entrypoint 都以環境命名（staging → :8102，prod → :443，定義在 traefik/compose.yaml）
+      - traefik.http.routers.${APP_ENV}.entrypoints=${APP_ENV}
+      - traefik.http.routers.${APP_ENV}.rule=PathPrefix(`/`)
+      - traefik.http.routers.${APP_ENV}.middlewares=${APP_ENV}-retry
+      - traefik.http.services.${APP_ENV}.loadbalancer.server.port=8080
+      # Traefik 每秒主動檢查；舊容器 drain 時 health 回 503，會在停止前就被移出負載平衡
+      - traefik.http.services.${APP_ENV}.loadbalancer.healthcheck.path=/api/health
+      - traefik.http.services.${APP_ENV}.loadbalancer.healthcheck.interval=1s
+      - traefik.http.services.${APP_ENV}.loadbalancer.healthcheck.timeout=1s
+      # 換版瞬間連到正在關閉的舊容器時，改送到另一個容器重試
+      - traefik.http.middlewares.${APP_ENV}-retry.retry.attempts=3
+      - traefik.http.middlewares.${APP_ENV}-retry.retry.initialinterval=100ms
 
 volumes:
   data:
+
+networks:
+  ouyang-web:
+    external: true
