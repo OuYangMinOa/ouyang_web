@@ -1,0 +1,103 @@
+.gomoku-board {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  /* 避免點兩下放大、長按選字與點擊時的灰色閃爍 */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.gomoku-board.interactive {
+  cursor: pointer;
+}
+
+.gomoku-bg {
+  fill: var(--board);
+}
+.gomoku-grid {
+  stroke: var(--board-line);
+  stroke-width: 0.04;
+}
+.gomoku-star {
+  fill: var(--board-line);
+}
+
+.gomoku-stone {
+  stroke: var(--stone-edge);
+  stroke-width: 0.04;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gomoku-drop 0.15s ease-out;
+}
+.gomoku-stone.black {
+  fill: var(--stone-black);
+}
+.gomoku-stone.white {
+  fill: var(--stone-white);
+}
+.gomoku-stone.hover {
+  opacity: 0.35;
+  animation: none;
+  pointer-events: none;
+}
+.gomoku-stone.pending {
+  opacity: 0.6;
+  stroke: var(--accent);
+  stroke-width: 0.1;
+  animation: gomoku-pulse 1s ease-in-out infinite alternate;
+}
+
+.gomoku-last {
+  fill: var(--danger);
+  pointer-events: none;
+}
+
+.gomoku-win {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.1;
+  pointer-events: none;
+}
+.gomoku-win-line {
+  stroke: var(--accent);
+  stroke-width: 0.12;
+  stroke-linecap: round;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.gomoku-option {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.gomoku-option input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+@keyframes gomoku-drop {
+  from {
+    transform: scale(1.25);
+    opacity: 0.4;
+  }
+}
+@keyframes gomoku-pulse {
+  to {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gomoku-stone,
+  .gomoku-stone.pending {
+    animation: none;
+  }
+}

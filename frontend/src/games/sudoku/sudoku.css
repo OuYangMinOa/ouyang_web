@@ -1,0 +1,207 @@
+/* ---- 數獨 ---- */
+
+/* 盤面、數字鍵盤、工具列同寬；桌機上限 480px，也不超過視窗高度（扣掉標題、鍵盤與工具列） */
+.sudoku-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(100%, 480px, calc(100dvh - 300px));
+  min-width: min(100%, 300px);
+  margin: 0 auto;
+}
+.sudoku-stack .board-box {
+  width: 100%;
+  min-width: 0;
+}
+
+.sudoku-info {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+.sudoku-bad {
+  color: var(--danger);
+}
+
+.sudoku-board {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-rows: repeat(9, minmax(0, 1fr));
+  aspect-ratio: 1;
+  border: 2px solid var(--text-h);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--cell-open);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sudoku-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
+  border-radius: 0;
+  background: var(--cell-open);
+  color: var(--accent);
+  font: 500 6cqw/1 var(--sans);
+  cursor: pointer;
+}
+.sudoku-cell:nth-child(9n) {
+  border-right: 0;
+}
+.sudoku-cell:nth-child(n + 73) {
+  border-bottom: 0;
+}
+/* 宮的分隔線比較粗 */
+.sudoku-cell.thick-r {
+  border-right: 2px solid var(--text-h);
+}
+.sudoku-cell.thick-b {
+  border-bottom: 2px solid var(--text-h);
+}
+.sudoku-cell:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.sudoku-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.sudoku-cell.given {
+  color: var(--text-h);
+  font-weight: 650;
+}
+.sudoku-cell.peer {
+  background: color-mix(in srgb, var(--accent) 9%, var(--cell-open));
+}
+.sudoku-cell.same {
+  background: var(--highlight);
+}
+.sudoku-cell.selected {
+  background: color-mix(in srgb, var(--accent) 30%, var(--cell-open));
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.sudoku-cell.wrong {
+  color: var(--danger);
+}
+.sudoku-cell.wrong:not(.selected) {
+  background: color-mix(in srgb, var(--danger) 14%, var(--cell-open));
+}
+
+.sudoku-notes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  font: 2.9cqw/1 var(--sans);
+  color: var(--text);
+}
+.sudoku-notes span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sudoku-notes .hit {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.sudoku-done {
+  font-size: 24px;
+  color: var(--ok);
+}
+.sudoku-stack .game-overlay p {
+  margin: 0;
+}
+
+/* 數字鍵盤：一排九個，下面小字是還剩幾個 */
+.sudoku-pad {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 4px;
+  touch-action: manipulation;
+}
+.sudoku-pad button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 2px 0;
+  gap: 2px;
+  line-height: 1;
+}
+.sudoku-pad-digit {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.sudoku-pad-left {
+  font-size: 11px;
+  color: var(--text);
+}
+.sudoku-pad button.used-up {
+  opacity: 0.35;
+}
+.sudoku-stack .game-toolbar {
+  touch-action: manipulation;
+}
+.sudoku-stack .game-toolbar > button {
+  flex: 1 1 0;
+  padding: 8px 4px;
+  white-space: nowrap;
+}
+
+.sudoku-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: 15px;
+}
+.sudoku-check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.sudoku-records {
+  margin-top: 0;
+}
+.sudoku-records dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 10px 0 0;
+}
+.sudoku-records dl div {
+  display: flex;
+  justify-content: space-between;
+}
+.sudoku-records dd {
+  margin: 0;
+  font-family: var(--mono);
+  color: var(--text-h);
+}
+
+/* 手機：盤面吃滿寬度（360px 寬時約 328px，每格約 36px），寧可讓工具列捲到下面 */
+@media (max-width: 640px) {
+  .sudoku-stack {
+    width: 100%;
+  }
+}

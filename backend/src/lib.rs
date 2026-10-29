@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod auth;
+pub mod games;
 
 use std::{
     io::{Read, Write},
@@ -40,6 +41,8 @@ pub struct AppState {
     /// 有 HTTPS 之後要設成 true，session cookie 才只會經由 HTTPS 傳送
     pub cookie_secure: bool,
     pub login_limiter: Arc<auth::LoginLimiter>,
+    /// 小遊戲線上對戰的房間（只存在記憶體）
+    pub rooms: Arc<games::Rooms>,
 }
 
 impl AppState {
@@ -51,6 +54,7 @@ impl AppState {
             draining: Arc::default(),
             cookie_secure: false,
             login_limiter: Arc::default(),
+            rooms: Arc::default(),
         }
     }
 }
@@ -67,6 +71,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/users", get(admin::list_users).post(admin::create_user))
         .route("/admin/users/{id}", patch(admin::update_user))
         .route("/admin/roles", get(admin::list_roles))
+        .route("/games/rooms", post(games::create_room))
+        .route("/games/rooms/{code}/ws", get(games::connect))
         .fallback(api_not_found);
 
     let spa = ServeDir::new(static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
@@ -158,6 +164,7 @@ pub enum AppError {
     NotFound,
     Conflict(String),
     TooManyRequests,
+    ServiceUnavailable(&'static str),
     Database(sqlx::Error),
     Internal(String),
 }
@@ -166,7 +173,7 @@ impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadRequest(message) | Self::Conflict(message) | Self::Internal(message) => f.write_str(message),
-            Self::Unauthorized(message) => f.write_str(message),
+            Self::Unauthorized(message) | Self::ServiceUnavailable(message) => f.write_str(message),
             Self::Forbidden => f.write_str("沒有權限"),
             Self::NotFound => f.write_str("not found"),
             Self::TooManyRequests => f.write_str("嘗試次數過多，請 15 分鐘後再試"),
@@ -192,6 +199,7 @@ impl IntoResponse for AppError {
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            Self::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Database(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let message = if status == StatusCode::INTERNAL_SERVER_ERROR {

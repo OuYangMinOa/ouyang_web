@@ -5,19 +5,21 @@ edition = "2024"
 
 [dependencies]
 argon2 = "0.6.0"
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["ws"] }
 getrandom = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
-tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
 tower-http = { version = "0.7.1", features = ["fs", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
+futures-util = "0.3.34"
 http-body-util = "0.1.5"
+tokio-tungstenite = "0.29.0"
 tower = { version = "0.5.3", features = ["util"] }
 
 # argon2 在 debug 模式下非常慢（每次登入要好幾秒），測試和本機開發也用最佳化編譯
