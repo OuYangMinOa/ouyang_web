@@ -49,11 +49,26 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 - `main` 受保護：只能透過 PR 合併，且 CI 的 `test` 必須通過，不能 force push 或刪除。
 - 對 `dev` / `main` 開的 PR 只會跑測試，merge 後才會建置並部署。
 
-回滾：在伺服器上手動指定舊 image（tag 可以在 GitHub 的 Packages 頁面找到）：
+### 不斷線部署（Traefik + docker-rollout）
+
+```
+外部 ─▶ Traefik（:8102 → staging、:443 → prod）─▶ app 容器（不直接對外綁 port）
+```
+
+`deploy.sh` 用 `docker rollout` 換版：先啟動新容器 → 等 healthcheck 通過 → 再等 3 秒讓 Traefik 接上 → 停掉舊容器。
+Traefik 只把流量送給 healthy 的容器，換版瞬間的連線錯誤由 retry middleware 重送。
+
+**migration 必須跟上一版相容**：換版期間新舊兩版會同時跑在同一個 SQLite 上。
+例如要改欄位名稱，分兩次部署：先加新欄位並讓程式兩邊都寫，下一版再移除舊欄位。
+
+`/api/health` 會回傳 `commit`，可以用來確認目前是哪一版在接流量。
+
+回滾：在伺服器上改 `.env` 的 `IMAGE` 再 rollout（tag 可以在 GitHub 的 Packages 頁面找到）：
 
 ```shell
 cd ~/ouyang_web/prod
-IMAGE=ghcr.io/ouyangminoa/ouyang_web:prod-<commit> docker compose -p ouyang-web-prod --env-file prod.env up -d
+sed -i 's#^IMAGE=.*#IMAGE=ghcr.io/ouyangminoa/ouyang_web:prod-<commit>#' .env
+docker rollout app
 ```
 
 ### 需要的 GitHub secrets
@@ -67,8 +82,10 @@ IMAGE=ghcr.io/ouyangminoa/ouyang_web:prod-<commit> docker compose -p ouyang-web-
 ### 伺服器上的檔案
 
 ```
-~/ouyang_web/staging/   compose.yaml、staging.env、deploy.sh（每次部署覆蓋）
+~/ouyang_web/staging/   compose.yaml、staging.env、deploy.sh、traefik/（每次部署覆蓋）、.env（deploy.sh 產生）
 ~/ouyang_web/prod/      同上
 ```
+
+Traefik 以固定的專案名稱 `ouyang-web-traefik` 執行，staging 和 prod 共用，所以修改 `deploy/traefik/` 會同時影響兩個環境。
 
 資料庫在 Docker volume `ouyang-web-staging_data` / `ouyang-web-prod_data`。

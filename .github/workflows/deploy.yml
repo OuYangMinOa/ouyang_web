@@ -68,6 +68,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
+          build-args: GIT_SHA=${{ github.sha }}
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}
@@ -92,7 +93,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: deploy/*
+          source: deploy
           target: /home/ubuntu/ouyang_web/${{ env.ENV_NAME }}
           strip_components: 1
       - name: Deploy

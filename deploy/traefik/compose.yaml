@@ -1,0 +1,32 @@
+# staging 與 prod 共用的反向代理，以固定專案名稱 ouyang-web-traefik 啟動（見 deploy.sh）。
+# 注意：任一環境部署時都會套用自己這份設定，所以修改這裡會同時影響 staging 和 prod。
+services:
+  traefik:
+    image: traefik:v3.7
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=ouyang-web
+      - --entrypoints.staging.address=:8102
+      # 目前 443 上先跑純 HTTP；之後接 HTTPS 時在這裡加 TLS / certresolver
+      - --entrypoints.prod.address=:443
+      - --ping=true
+      - --log.level=INFO
+    ports:
+      - "8102:8102"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ouyang-web
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  ouyang-web:
+    external: true

@@ -1,4 +1,9 @@
-use std::path::Path;
+use std::{
+    io::{Read, Write},
+    net::{SocketAddr, TcpStream},
+    path::Path,
+    time::Duration,
+};
 
 use axum::{
     Json, Router,
@@ -21,6 +26,8 @@ const MAX_MESSAGE_LEN: usize = 500;
 pub struct AppState {
     pub pool: SqlitePool,
     pub app_env: String,
+    /// 建置時的 git commit，用來確認目前是哪一版在接流量
+    pub commit: String,
 }
 
 /// `/api/*` 走 JSON API，其他路徑交給 React 的靜態檔（找不到就回 index.html 讓前端路由處理）。
@@ -46,9 +53,24 @@ async fn health(State(state): State<AppState>) -> Response {
         "status": if db_ok { "ok" } else { "degraded" },
         "env": state.app_env,
         "version": env!("CARGO_PKG_VERSION"),
+        "commit": state.commit,
         "db": db_ok,
     });
     (status, Json(body)).into_response()
+}
+
+/// 給 Docker healthcheck 用：distroless 沒有 curl，所以由程式自己打 /api/health。
+pub fn healthcheck(port: u16) -> bool {
+    let check = || -> std::io::Result<bool> {
+        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2))?;
+        stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+        stream.write_all(b"GET /api/health HTTP/1.0\r\nHost: localhost\r\n\r\n")?;
+        let mut status_line = [0u8; 12];
+        stream.read_exact(&mut status_line)?;
+        Ok(status_line.ends_with(b" 200"))
+    };
+    check().unwrap_or(false)
 }
 
 #[derive(Serialize, sqlx::FromRow)]

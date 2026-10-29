@@ -30,8 +30,13 @@ COPY --from=builder /app/target/release/backend /app/backend
 COPY --from=frontend /app/dist /app/static
 # 讓第一次掛上的 named volume 繼承 nonroot 的擁有者
 COPY --from=builder --chown=65532:65532 /out/data /data
+ARG GIT_SHA=unknown
 ENV DATABASE_URL=sqlite:///data/app.db \
     STATIC_DIR=/app/static \
-    PORT=8080
+    PORT=8080 \
+    GIT_SHA=$GIT_SHA
 EXPOSE 8080
+# docker-rollout 等這個變成 healthy 才移除舊容器；Traefik 也只把流量送給 healthy 的容器
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["/app/backend", "healthcheck"]
 ENTRYPOINT ["/app/backend"]

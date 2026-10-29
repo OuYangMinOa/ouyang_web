@@ -5,7 +5,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
-use backend::{AppState, router};
+use backend::{AppState, healthcheck, router};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::sqlite::SqlitePoolOptions;
@@ -15,7 +15,8 @@ async fn app() -> Router {
     // 記憶體資料庫每條連線都是獨立的一份，所以只開一條
     let pool = SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
-    router(AppState { pool, app_env: "test".into() }, Path::new("does-not-exist"))
+    let state = AppState { pool, app_env: "test".into(), commit: "test-sha".into() };
+    router(state, Path::new("does-not-exist"))
 }
 
 async fn send(app: &Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -39,6 +40,21 @@ async fn health_reports_ok() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "ok");
     assert_eq!(body["env"], "test");
+    assert_eq!(body["commit"], "test-sha");
+}
+
+#[tokio::test]
+async fn healthcheck_command_hits_running_server() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(axum::serve(listener, app().await).into_future());
+
+    let healthy = tokio::task::spawn_blocking(move || healthcheck(port)).await.unwrap();
+    assert!(healthy);
+
+    // 沒有服務在聽的 port 要回報失敗
+    let unused = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    assert!(!tokio::task::spawn_blocking(move || healthcheck(unused)).await.unwrap());
 }
 
 #[tokio::test]

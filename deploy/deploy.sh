@@ -3,18 +3,44 @@
 # 需要環境變數 GHCR_USER / GHCR_TOKEN（由 GitHub Actions 的 GITHUB_TOKEN 帶入，只在這次部署期間有效）
 set -euo pipefail
 
+ROLLOUT_VERSION=v0.14
+ROLLOUT_SHA256=cdeaba6ae9eee3b0b606286e585bbda6787283d801a6ad6d9b9d2bc347fda05b
+NETWORK=ouyang-web
+
 env_name=$1
-export IMAGE=$2
+image=$2
 cd "$(dirname "$0")"
+
+# compose 和 docker rollout 都會自動讀同目錄的 .env；之後在伺服器上手動操作也只要 cd 進來就好
+{
+  cat "$env_name.env"
+  echo "COMPOSE_PROJECT_NAME=ouyang-web-$env_name"
+  echo "IMAGE=$image"
+} > .env
+
+plugin=~/.docker/cli-plugins/docker-rollout
+if ! echo "$ROLLOUT_SHA256  $plugin" | sha256sum --check --status 2>/dev/null; then
+  echo "==> Installing docker-rollout $ROLLOUT_VERSION"
+  mkdir -p "$(dirname "$plugin")"
+  curl -fsSL "https://raw.githubusercontent.com/wowu/docker-rollout/$ROLLOUT_VERSION/docker-rollout" -o "$plugin.tmp"
+  echo "$ROLLOUT_SHA256  $plugin.tmp" | sha256sum --check --status
+  chmod +x "$plugin.tmp"
+  mv "$plugin.tmp" "$plugin"
+fi
 
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 trap 'docker logout ghcr.io >/dev/null' EXIT
 
-compose=(docker compose -p "ouyang-web-$env_name" --env-file "$env_name.env")
-"${compose[@]}" pull
-"${compose[@]}" up -d --remove-orphans
+docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK"
 
-port=$(grep '^HOST_PORT=' "$env_name.env" | cut -d= -f2)
+docker compose pull app
+# 先啟動新容器、等它 healthy，再停掉舊容器；多等幾秒讓 Traefik 把新容器加進負載平衡
+docker rollout --timeout 60 --wait-after-healthy 3 app
+
+# Traefik 放在 app 之後：從舊版（app 直接綁 port）升級時，舊容器要先被移除才空得出 port
+docker compose -p ouyang-web-traefik -f traefik/compose.yaml up -d --wait
+
+port=$(grep '^PUBLIC_PORT=' "$env_name.env" | cut -d= -f2)
 for _ in $(seq 1 15); do
   if curl -fsS "http://127.0.0.1:$port/api/health"; then
     echo
@@ -25,5 +51,5 @@ for _ in $(seq 1 15); do
 done
 
 echo "health check failed" >&2
-"${compose[@]}" logs --tail 50
+docker compose logs --tail 50 app
 exit 1

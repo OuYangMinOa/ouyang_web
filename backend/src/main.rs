@@ -1,11 +1,16 @@
 use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, time::Duration};
 
-use backend::{AppState, router};
+use backend::{AppState, healthcheck, router};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let port = env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);
+    if env::args().nth(1).as_deref() == Some("healthcheck") {
+        std::process::exit(if healthcheck(port) { 0 } else { 1 });
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
@@ -13,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://data/app.db".into());
     let static_dir = PathBuf::from(env::var("STATIC_DIR").unwrap_or_else(|_| "../frontend/dist".into()));
     let app_env = env::var("APP_ENV").unwrap_or_else(|_| "dev".into());
-    let port = env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);
+    let commit = env::var("GIT_SHA").unwrap_or_else(|_| "local".into());
 
     let options = SqliteConnectOptions::from_str(&database_url)?
         .create_if_missing(true)
@@ -27,9 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = SqlitePoolOptions::new().max_connections(5).connect_with(options).await?;
     sqlx::migrate!().run(&pool).await?;
 
-    let app = router(AppState { pool: pool.clone(), app_env: app_env.clone() }, &static_dir);
+    let state = AppState { pool: pool.clone(), app_env: app_env.clone(), commit: commit.clone() };
+    let app = router(state, &static_dir);
     let listener = tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;
-    tracing::info!(%app_env, port, static_dir = %static_dir.display(), "listening");
+    tracing::info!(%app_env, %commit, port, static_dir = %static_dir.display(), "listening");
 
     axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
     pool.close().await;
