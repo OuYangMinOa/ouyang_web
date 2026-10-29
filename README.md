@@ -78,6 +78,31 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 
 > 目前 staging / prod 都還是 HTTP，密碼和 cookie 在網路上是明文傳送。接上 HTTPS 前不要在公共網路登入重要帳號；接上之後在 `<env>.env` 加 `COOKIE_SECURE=true`。
 
+## 小遊戲線上對戰
+
+後端只負責轉送訊息，不懂遊戲規則；規則由兩端各自執行（`frontend/src/games/shared/useRoom.ts`、`backend/src/games.rs`）。不需要登入。
+
+```
+POST /api/games/rooms  {"game":"gomoku"}  →  201 {"code":"ABCDE"}      game：gomoku / xiangqi / chess / reversi
+GET  /api/games/rooms/{code}/ws?game=<id>&player=<id>                  升級成 WebSocket
+
+client → server  {type:"msg", data}
+server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
+                 {type:"peer", online}
+                 {type:"msg", seat, data}
+                 {type:"error", code, message}   之後伺服器關閉連線
+```
+
+- 每個房間兩個座位。`player` 是用戶端自己產生的 id，重連時用來拿回同一個座位（舊連線會被關掉），重連後會收到完整歷史。
+- 任何一方送出的訊息，伺服器加上 seat 後依序存進歷史並廣播給兩邊（包含送出者），所以兩邊看到的順序完全一樣。
+- 連線一律先升級，有問題再送 `error` 後關閉（瀏覽器讀不到升級失敗的 HTTP 狀態）：`not_found`、`game_mismatch`、`full`、`bad_request`，
+  以及送太快（每秒超過 20 則）的 `rate_limited`、太大（data 超過 4KB）的 `too_large`、歷史超過 2000 筆的 `history_full`。
+- 伺服器每 25 秒送一次 ping；60 秒沒收到任何東西就當作斷線。
+- 沒有人連線超過 30 分鐘、或建立超過 24 小時的房間，會在下次有人建立房間時清掉。房間最多 1000 個，超過回 503。
+
+> 房間只存在記憶體，重啟或部署換版後就會消失。換版的幾秒內新舊兩個容器同時存在，建立房間和連線可能落在不同容器而找不到房間；
+> 這種情況使用者重新建立房間即可。
+
 ## 部署
 
 | 環境 | 觸發 | Image tag | 伺服器 port |
