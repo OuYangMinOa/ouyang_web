@@ -1,0 +1,140 @@
+.reversi-board {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  /* 避免點兩下放大、長按選字與點擊時的灰色閃爍 */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.reversi-board.interactive {
+  cursor: pointer;
+}
+
+.reversi-bg {
+  fill: var(--board);
+}
+.reversi-grid {
+  stroke: var(--board-line);
+  stroke-width: 0.03;
+}
+.reversi-dot {
+  fill: var(--board-line);
+}
+.reversi-hint {
+  fill: var(--hint);
+  pointer-events: none;
+}
+
+.reversi-disc {
+  stroke: var(--stone-edge);
+  stroke-width: 0.03;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.reversi-disc.black {
+  fill: var(--stone-black);
+}
+.reversi-disc.white {
+  fill: var(--stone-white);
+}
+.reversi-disc.placed {
+  animation: reversi-drop 0.18s ease-out;
+}
+/* 翻面：原本的顏色縮成一條線，再以新的顏色展開 */
+.reversi-disc.flipped.black {
+  animation: reversi-to-black 0.4s ease-in-out;
+}
+.reversi-disc.flipped.white {
+  animation: reversi-to-white 0.4s ease-in-out;
+}
+.reversi-last {
+  fill: var(--danger);
+  pointer-events: none;
+}
+
+.reversi-score {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.reversi-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.reversi-count.turn {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.reversi-chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--stone-edge);
+}
+.reversi-chip.black {
+  background: var(--stone-black);
+}
+.reversi-chip.white {
+  background: var(--stone-white);
+}
+
+@keyframes reversi-drop {
+  from {
+    transform: scale(1.25);
+    opacity: 0.4;
+  }
+}
+@keyframes reversi-to-black {
+  0% {
+    fill: var(--stone-white);
+    transform: scaleX(1);
+  }
+  49% {
+    fill: var(--stone-white);
+    transform: scaleX(0.05);
+  }
+  51% {
+    fill: var(--stone-black);
+    transform: scaleX(0.05);
+  }
+  100% {
+    fill: var(--stone-black);
+    transform: scaleX(1);
+  }
+}
+@keyframes reversi-to-white {
+  0% {
+    fill: var(--stone-black);
+    transform: scaleX(1);
+  }
+  49% {
+    fill: var(--stone-black);
+    transform: scaleX(0.05);
+  }
+  51% {
+    fill: var(--stone-white);
+    transform: scaleX(0.05);
+  }
+  100% {
+    fill: var(--stone-white);
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reversi-disc.placed,
+  .reversi-disc.flipped {
+    animation: none;
+  }
+}
