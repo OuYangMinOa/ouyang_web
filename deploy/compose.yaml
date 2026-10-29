@@ -7,6 +7,8 @@ services:
     environment:
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       RUST_LOG: ${RUST_LOG:-info}
+      # 接上 HTTPS 之後在 <env>.env 設 COOKIE_SECURE=true，登入 cookie 就只會走 HTTPS
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     volumes:
       - data:/data
     networks:

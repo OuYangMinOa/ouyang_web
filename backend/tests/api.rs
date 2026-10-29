@@ -1,77 +1,39 @@
-use std::{
-    path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-};
+mod common;
 
-use axum::{
-    Router,
-    body::Body,
-    http::{Request, StatusCode, header},
-};
-use backend::{AppState, healthcheck, router};
-use http_body_util::BodyExt;
-use serde_json::{Value, json};
-use sqlx::sqlite::SqlitePoolOptions;
-use tower::ServiceExt;
+use std::sync::atomic::Ordering;
 
-async fn app() -> Router {
-    app_with_draining(Arc::new(AtomicBool::new(false))).await
-}
-
-async fn app_with_draining(draining: Arc<AtomicBool>) -> Router {
-    // 記憶體資料庫每條連線都是獨立的一份，所以只開一條
-    let pool = SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    let state = AppState { pool, app_env: "test".into(), commit: "test-sha".into(), draining };
-    router(state, Path::new("does-not-exist"))
-}
-
-async fn send(app: &Router, request: Request<Body>) -> (StatusCode, Value) {
-    let response = app.clone().oneshot(request).await.unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
-}
-
-fn post_message(content: &str) -> Request<Body> {
-    Request::post("/api/messages")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({ "content": content }).to_string()))
-        .unwrap()
-}
+use axum::http::StatusCode;
+use backend::healthcheck;
+use common::app;
+use serde_json::json;
 
 #[tokio::test]
 async fn health_reports_ok() {
     let app = app().await;
-    let (status, body) = send(&app, Request::get("/api/health").body(Body::empty()).unwrap()).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["status"], "ok");
-    assert_eq!(body["env"], "test");
-    assert_eq!(body["commit"], "test-sha");
+    let reply = app.get("/api/health", None).await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.body["status"], "ok");
+    assert_eq!(reply.body["env"], "test");
+    assert_eq!(reply.body["commit"], "test-sha");
 }
 
 #[tokio::test]
 async fn draining_fails_health_but_keeps_serving() {
-    let draining = Arc::new(AtomicBool::new(false));
-    let app = app_with_draining(draining.clone()).await;
-    draining.store(true, Ordering::Relaxed);
+    let app = app().await;
+    app.state.draining.store(true, Ordering::Relaxed);
 
-    let (status, body) = send(&app, Request::get("/api/health").body(Body::empty()).unwrap()).await;
-    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(body["status"], "draining");
+    let reply = app.get("/api/health", None).await;
+    assert_eq!(reply.status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(reply.body["status"], "draining");
 
-    let (status, _) = send(&app, Request::get("/api/messages").body(Body::empty()).unwrap()).await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(app.get("/api/messages", None).await.status, StatusCode::OK);
 }
 
 #[tokio::test]
 async fn healthcheck_command_hits_running_server() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(axum::serve(listener, app().await).into_future());
+    tokio::spawn(axum::serve(listener, app().await.router).into_future());
 
     let healthy = tokio::task::spawn_blocking(move || healthcheck(port)).await.unwrap();
     assert!(healthy);
@@ -84,29 +46,29 @@ async fn healthcheck_command_hits_running_server() {
 #[tokio::test]
 async fn created_messages_are_listed_newest_first() {
     let app = app().await;
-    let (status, created) = send(&app, post_message("  hello  ")).await;
-    assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(created["content"], "hello");
-    send(&app, post_message("world")).await;
+    let created = app.call("POST", "/api/messages", None, Some(json!({ "content": "  hello  " }))).await;
+    assert_eq!(created.status, StatusCode::CREATED);
+    assert_eq!(created.body["content"], "hello");
+    app.call("POST", "/api/messages", None, Some(json!({ "content": "world" }))).await;
 
-    let (status, list) = send(&app, Request::get("/api/messages").body(Body::empty()).unwrap()).await;
-    assert_eq!(status, StatusCode::OK);
-    let contents: Vec<_> = list.as_array().unwrap().iter().map(|m| m["content"].clone()).collect();
+    let list = app.get("/api/messages", None).await;
+    assert_eq!(list.status, StatusCode::OK);
+    let contents: Vec<_> = list.body.as_array().unwrap().iter().map(|m| m["content"].clone()).collect();
     assert_eq!(contents, [json!("world"), json!("hello")]);
 }
 
 #[tokio::test]
 async fn blank_message_is_rejected() {
     let app = app().await;
-    let (status, body) = send(&app, post_message("   ")).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body["error"].is_string());
+    let reply = app.call("POST", "/api/messages", None, Some(json!({ "content": "   " }))).await;
+    assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+    assert!(reply.body["error"].is_string());
 }
 
 #[tokio::test]
 async fn unknown_api_route_is_json_404() {
     let app = app().await;
-    let (status, body) = send(&app, Request::get("/api/nope").body(Body::empty()).unwrap()).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body["error"], "not found");
+    let reply = app.get("/api/nope", None).await;
+    assert_eq!(reply.status, StatusCode::NOT_FOUND);
+    assert_eq!(reply.body["error"], "not found");
 }

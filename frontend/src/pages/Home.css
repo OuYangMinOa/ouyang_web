@@ -1,0 +1,750 @@
+/* 首頁「墨與陽」：3D 粒子太陽 + 傾斜卡片 + 便條留言牆。顏色全部來自 index.css 的主題變數。 */
+
+/* 首頁要滿版，其他頁面維持 App.css 的置中寬度 */
+main:has(.home) {
+  width: 100%;
+  margin: 0;
+}
+
+.home {
+  overflow-x: clip;
+}
+
+.home-wrap {
+  width: min(1120px, 100% - 32px);
+  margin: 0 auto;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 20px;
+  font: 500 12px/1 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.kicker span {
+  color: var(--accent);
+}
+.kicker span::after {
+  content: '';
+  display: inline-block;
+  width: 28px;
+  height: 1px;
+  margin-left: 10px;
+  vertical-align: middle;
+  background: currentColor;
+}
+
+/* ---- 01 Hero ---- */
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: calc(100svh - 70px);
+}
+
+/* 太陽後面的光暈 */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: radial-gradient(55% 60% at 74% 50%, var(--glow), transparent 70%);
+}
+
+/* 紙張顆粒 */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  filter: var(--grain-filter);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: 24px;
+  padding: 40px 0;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-title {
+  margin: 0;
+  font: 900 clamp(44px, 6.2vw, 88px) / 1.1 var(--serif);
+  letter-spacing: -0.01em;
+  color: var(--text-h);
+}
+.hero-title .line {
+  display: block;
+  perspective: 600px;
+}
+.hero-title em {
+  position: relative;
+  display: inline-block;
+  font-style: normal;
+  color: var(--accent);
+}
+/* 「動」底下一筆刷痕 */
+.hero-title em::after {
+  content: '';
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  bottom: 0.08em;
+  height: 0.16em;
+  z-index: -1;
+  border-radius: 0.1em;
+  background: var(--accent);
+  opacity: 0.22;
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: brush 0.7s 1.3s cubic-bezier(0.7, 0, 0.2, 1) forwards;
+}
+
+.rise {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.45em) rotateX(-75deg);
+  transform-origin: 50% 100%;
+  animation: rise 0.8s calc(0.2s + var(--i) * 55ms) cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* 印章 */
+.seal {
+  position: absolute;
+  top: 6px;
+  right: 4%;
+  padding: 10px 7px;
+  writing-mode: vertical-rl;
+  font: 900 17px/1 var(--serif);
+  letter-spacing: 0.12em;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 5px;
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    inset 0 0 0 3.5px var(--bg);
+  opacity: 0;
+  transform: rotate(-8deg);
+  animation: stamp 0.45s 1.15s cubic-bezier(0.3, 1.6, 0.5, 1) forwards;
+}
+
+.hero-lead {
+  max-width: 30em;
+  margin: 28px 0 0;
+  font-size: 17px;
+  animation: fade-up 0.8s 0.85s both;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+  animation: fade-up 0.8s 1s both;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 24px;
+  border-radius: 999px;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
+}
+.btn:hover {
+  transform: translateY(-2px);
+}
+.btn.primary {
+  background: var(--text-h);
+  color: var(--bg);
+}
+.btn.primary:hover {
+  box-shadow: 0 14px 30px -12px var(--accent);
+}
+.btn.ghost {
+  border: 1px solid var(--border);
+  color: var(--text-h);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  backdrop-filter: blur(6px);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.hero-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 28px 0 0;
+  font: 12px var(--mono);
+  animation: fade-up 0.8s 1.15s both;
+}
+
+.pulse {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 2s infinite;
+}
+
+/* 3D 舞台 */
+.sun-stage {
+  position: relative;
+  height: min(76svh, 700px);
+  min-height: 380px;
+  perspective: 900px;
+}
+
+/* 繞著太陽的軌道環 */
+.sun-stage::before,
+.sun-stage::after {
+  content: '';
+  position: absolute;
+  inset: 16% 4%;
+  border-radius: 50%;
+  border: 1px dashed var(--border);
+  transform: rotateX(74deg) rotateZ(0deg);
+  animation: orbit 60s linear infinite;
+  pointer-events: none;
+}
+.sun-stage::after {
+  inset: 6% -6%;
+  border-style: solid;
+  opacity: 0.6;
+  animation-duration: 90s;
+  animation-direction: reverse;
+}
+
+.sun-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: grab;
+  /* 手機上垂直滑動照常捲動頁面，水平拖曳才撥粒子 */
+  touch-action: pan-y;
+  opacity: 1;
+  transition: opacity 1.2s;
+}
+.sun-canvas:active {
+  cursor: grabbing;
+}
+.sun-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.sun-stage.is-loading .sun-canvas {
+  opacity: 0;
+}
+
+.sun-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 900 min(56vw, 340px) / 1 var(--serif);
+  color: var(--accent);
+  text-shadow: 0 0 60px var(--glow);
+}
+
+.sun-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font: 11px var(--mono);
+  letter-spacing: 0.16em;
+  pointer-events: none;
+}
+.sun-toggle {
+  pointer-events: auto;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--text-h);
+  font: 13px var(--sans);
+  letter-spacing: 0;
+}
+
+/* ---- 共用段落 ---- */
+
+.home-section {
+  padding: clamp(64px, 10vw, 120px) 0;
+  border-top: 1px solid var(--border);
+}
+
+.section-head {
+  margin-bottom: 40px;
+}
+.section-head h2 {
+  margin: 0;
+  font: 900 clamp(34px, 4.6vw, 56px) / 1.1 var(--serif);
+  color: var(--text-h);
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.8s,
+    transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---- 02 作品：3D 傾斜卡片 ---- */
+
+.works {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.works > .reveal:nth-child(2) {
+  transition-delay: 0.08s;
+}
+.works > .reveal:nth-child(3) {
+  transition-delay: 0.16s;
+}
+.works > .reveal:nth-child(4) {
+  transition-delay: 0.24s;
+}
+
+.tilt {
+  height: 100%;
+  perspective: 1000px;
+}
+
+.tilt-body {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 250px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition:
+    transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.3s;
+}
+.tilt:hover .tilt-body {
+  transition:
+    transform 0.1s linear,
+    box-shadow 0.3s;
+  box-shadow: 0 34px 60px -34px rgb(0 0 0 / 0.45);
+}
+
+.depth-1 {
+  transform: translateZ(18px);
+}
+.depth-2 {
+  transform: translateZ(36px);
+}
+.depth-3 {
+  transform: translateZ(70px);
+}
+
+.tilt-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgb(255 255 255 / 0.32), transparent 55%);
+  mix-blend-mode: soft-light;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.tilt:hover .tilt-glare {
+  opacity: 1;
+}
+
+.work-glyph {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  font: 900 104px/1 var(--serif);
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--accent);
+  opacity: 0.5;
+  transition:
+    opacity 0.3s,
+    color 0.3s;
+  pointer-events: none;
+}
+.tilt:hover .work-glyph {
+  opacity: 1;
+  color: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.work-index {
+  font: 500 12px var(--mono);
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+.work h3 {
+  margin: 4px 0 0;
+  padding-right: 96px;
+  font: 900 26px/1.25 var(--serif);
+  color: var(--text-h);
+}
+
+.work p {
+  flex: 1;
+  /* 讓開右上角的大字 */
+  margin: 0 112px 0 0;
+}
+
+.work-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font: 500 12px var(--mono);
+  color: var(--text-h);
+}
+.tag.live::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+}
+
+.work-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+.work-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.work.soon .tilt-body {
+  border-style: dashed;
+  background: transparent;
+}
+.work.soon .work-glyph {
+  animation: wobble 3.2s ease-in-out infinite;
+}
+
+/* ---- 03 留言牆：便條紙 ---- */
+
+.note-form {
+  display: flex;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.notes-empty {
+  margin-top: 24px;
+}
+
+.notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  align-items: start;
+  gap: 26px 20px;
+  margin: 40px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.note {
+  position: relative;
+  padding: 20px 18px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px 14px 4px 14px;
+  background: var(--surface);
+  box-shadow: 0 14px 26px -20px rgb(0 0 0 / 0.5);
+  transform: rotate(var(--tilt));
+  transition:
+    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.35s;
+}
+/* 紙膠帶 */
+.note::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 58px;
+  height: 18px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  transform: translateX(-50%) rotate(-3deg);
+}
+.note:hover {
+  transform: rotate(0deg) translateY(-4px) scale(1.02);
+  box-shadow: 0 22px 34px -22px rgb(0 0 0 / 0.55);
+}
+.note p {
+  margin: 0 0 12px;
+  color: var(--text-h);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.note time {
+  font: 11px var(--mono);
+}
+.note.fresh {
+  animation: drop 0.6s cubic-bezier(0.2, 0.8, 0.3, 1.25);
+}
+
+/* ---- 04 狀態列 ---- */
+
+.status {
+  padding: 36px 0 56px;
+}
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+.status .kicker {
+  margin: 0;
+}
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 0;
+  font: 12px var(--mono);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.dot.ok {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+}
+.dot.bad {
+  background: var(--danger);
+}
+.sep {
+  opacity: 0.4;
+}
+
+/* ---- 動畫 ---- */
+
+@keyframes rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes brush {
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.9) rotate(-24deg);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-8deg);
+    filter: none;
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 11px transparent;
+  }
+}
+@keyframes orbit {
+  to {
+    transform: rotateX(74deg) rotateZ(360deg);
+  }
+}
+@keyframes wobble {
+  50% {
+    transform: translateZ(70px) rotate(-8deg) translateY(-4px);
+  }
+}
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateY(-36px) rotate(-14deg) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .hero-lead,
+  .hero-actions,
+  .hero-hint,
+  .note.fresh,
+  .work.soon .work-glyph,
+  .pulse,
+  .sun-stage::before,
+  .sun-stage::after {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .sun-stage::before,
+  .sun-stage::after {
+    transform: rotateX(74deg);
+  }
+  .sun-stage::after {
+    opacity: 0.6;
+  }
+  .hero-title em::after {
+    animation: none;
+    transform: none;
+  }
+  .seal {
+    animation: none;
+    opacity: 1;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ---- 手機 ---- */
+
+@media (max-width: 760px) {
+  .hero {
+    min-height: 0;
+  }
+
+  /* 太陽放上面，文字接在下面 */
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 8px 0 48px;
+  }
+  .sun-stage {
+    order: -1;
+    height: 50svh;
+    min-height: 300px;
+    max-height: 460px;
+  }
+  .hero::before {
+    background: radial-gradient(80% 40% at 50% 24%, var(--glow), transparent 70%);
+  }
+
+  .hero-copy {
+    padding-top: 28px;
+  }
+  .hero-title {
+    font-size: clamp(38px, 11vw, 56px);
+  }
+  .seal {
+    top: 62px;
+    right: 0;
+    font-size: 14px;
+  }
+  .hero-lead {
+    font-size: 16px;
+  }
+  .hero-actions .btn {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+
+  .works {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tilt-body {
+    min-height: 0;
+    padding: 22px;
+  }
+  .work-glyph {
+    font-size: 84px;
+  }
+  .work h3 {
+    font-size: 22px;
+    padding-right: 80px;
+  }
+  .work p {
+    margin-right: 56px;
+  }
+
+  .note-form button {
+    flex-shrink: 0;
+  }
+  .notes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .status-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

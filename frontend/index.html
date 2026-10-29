@@ -1,10 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ouyang_web</title>
+    <meta name="description" content="歐陽的個人平台：Discord 機器人、小工具與陸續上線的 APP。" />
+    <!-- Google Fonts 會依 unicode-range 分片，中文字型只下載頁面上用到的字 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;900&display=swap"
+    />
+    <!-- 在 React 載入前套用使用者選的主題，避免深色模式下先閃一下亮色（邏輯同 src/theme.ts） -->
+    <script>
+      try {
+        var theme = localStorage.getItem('theme')
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

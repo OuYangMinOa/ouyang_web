@@ -1,78 +1,115 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
+import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate } from 'react-router'
+import { api, PERMISSIONS } from './api'
+import { AuthProvider, RequireAuth, useAuth } from './auth'
+import Account from './pages/Account'
+import Admin from './pages/Admin'
+import Home from './pages/Home'
+import Login from './pages/Login'
+import { getThemePreference, setThemePreference, type ThemePreference } from './theme'
 import './App.css'
 
 type Health = { status: string; env: string; version: string; db: boolean }
-type Message = { id: number; content: string; created_at: string }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  })
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.error ?? res.statusText)
-  return body as T
-}
+const THEMES: { value: ThemePreference; icon: string; label: string }[] = [
+  { value: 'system', icon: '◐', label: '跟隨系統' },
+  { value: 'light', icon: '☀', label: '亮色' },
+  { value: 'dark', icon: '☾', label: '深色' },
+]
 
-function App() {
-  const [health, setHealth] = useState<Health | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState<string | null>(null)
+/** 依序切換：跟隨系統 → 亮色 → 深色 */
+function ThemeToggle() {
+  const [preference, setPreference] = useState(getThemePreference)
+  const current = THEMES.find((t) => t.value === preference) ?? THEMES[0]
 
-  useEffect(() => {
-    api<Health>('/health').then(setHealth).catch((e: Error) => setError(e.message))
-    api<Message[]>('/messages').then(setMessages).catch((e: Error) => setError(e.message))
-  }, [])
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    try {
-      const created = await api<Message>('/messages', {
-        method: 'POST',
-        body: JSON.stringify({ content: draft }),
-      })
-      setMessages((prev) => [created, ...prev])
-      setDraft('')
-      setError(null)
-    } catch (e) {
-      setError((e as Error).message)
-    }
+  function cycle() {
+    const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length].value
+    setThemePreference(next)
+    setPreference(next)
   }
 
   return (
-    <main>
-      <header>
-        <h1>ouyang_web</h1>
-        {health && (
-          <span className={`badge ${health.status === 'ok' ? 'ok' : 'bad'}`}>
-            {health.env} · v{health.version} · db {health.db ? 'ok' : 'down'}
-          </span>
+    <button type="button" className="theme-toggle" onClick={cycle} title={`主題：${current.label}（點擊切換）`}>
+      <span aria-hidden="true">{current.icon}</span> <span className="theme-label">{current.label}</span>
+    </button>
+  )
+}
+
+function Header() {
+  const { user, can, logout } = useAuth()
+  const navigate = useNavigate()
+  const [health, setHealth] = useState<Health | null>(null)
+
+  useEffect(() => {
+    api<Health>('/health').then(setHealth).catch(() => setHealth(null))
+  }, [])
+
+  async function signOut() {
+    await logout()
+    navigate('/')
+  }
+
+  return (
+    <header className="site-header">
+      <Link to="/" className="brand">
+        ouyang_web
+      </Link>
+      {health && (
+        <span className={`badge ${health.status === 'ok' ? 'ok' : 'bad'}`}>
+          {health.env} · v{health.version}
+        </span>
+      )}
+      <ThemeToggle />
+      <nav>
+        <NavLink to="/" end>
+          首頁
+        </NavLink>
+        {can(PERMISSIONS.adminUsers) && <NavLink to="/admin">系統管理</NavLink>}
+        {user ? (
+          <>
+            <NavLink to="/account">{user.username}</NavLink>
+            <button type="button" className="link" onClick={signOut}>
+              登出
+            </button>
+          </>
+        ) : (
+          <NavLink to="/login">登入</NavLink>
         )}
-      </header>
+      </nav>
+    </header>
+  )
+}
 
-      <form onSubmit={submit}>
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="留言…"
-          maxLength={500}
-        />
-        <button type="submit" disabled={!draft.trim()}>
-          送出
-        </button>
-      </form>
-      {error && <p className="error">{error}</p>}
-
-      <ul>
-        {messages.map((m) => (
-          <li key={m.id}>
-            <span>{m.content}</span>
-            <time>{new Date(m.created_at).toLocaleString()}</time>
-          </li>
-        ))}
-      </ul>
-    </main>
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Header />
+        <main>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/account"
+              element={
+                <RequireAuth>
+                  <Account />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <RequireAuth permission={PERMISSIONS.adminUsers}>
+                  <Admin />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<p className="muted">找不到這個頁面。</p>} />
+          </Routes>
+        </main>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }
 
