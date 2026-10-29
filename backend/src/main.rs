@@ -1,4 +1,14 @@
-use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, time::Duration};
+use std::{
+    env,
+    net::SocketAddr,
+    path::PathBuf,
+    str::FromStr,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 use backend::{AppState, healthcheck, router};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
@@ -32,18 +42,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = SqlitePoolOptions::new().max_connections(5).connect_with(options).await?;
     sqlx::migrate!().run(&pool).await?;
 
-    let state = AppState { pool: pool.clone(), app_env: app_env.clone(), commit: commit.clone() };
+    let drain = Duration::from_secs(env::var("DRAIN_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(5));
+    let draining = Arc::new(AtomicBool::new(false));
+    let state = AppState {
+        pool: pool.clone(),
+        app_env: app_env.clone(),
+        commit: commit.clone(),
+        draining: draining.clone(),
+    };
     let app = router(state, &static_dir);
     let listener = tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;
     tracing::info!(%app_env, %commit, port, static_dir = %static_dir.display(), "listening");
 
-    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
+    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal(draining, drain)).await?;
     pool.close().await;
     Ok(())
 }
 
-/// docker stop 會送 SIGTERM，收到後讓進行中的請求跑完再關閉。
-async fn shutdown_signal() {
+/// docker stop 會送 SIGTERM：先進入 draining 繼續服務 `drain` 這段時間，
+/// 等 Traefik 的 health check 把這個容器移出負載平衡後，才停止接新連線並讓進行中的請求跑完。
+/// 本機 Ctrl-C 則直接關閉。
+async fn shutdown_signal(draining: Arc<AtomicBool>, drain: Duration) {
     let ctrl_c = async {
         tokio::signal::ctrl_c().await.expect("failed to listen for ctrl-c");
     };
@@ -60,7 +79,11 @@ async fn shutdown_signal() {
 
     tokio::select! {
         _ = ctrl_c => {},
-        _ = terminate => {},
+        _ = terminate => {
+            draining.store(true, Ordering::Relaxed);
+            tracing::info!(secs = drain.as_secs(), "SIGTERM received, draining");
+            tokio::time::sleep(drain).await;
+        },
     }
     tracing::info!("shutting down");
 }

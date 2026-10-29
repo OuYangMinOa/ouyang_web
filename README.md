@@ -56,7 +56,9 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 ```
 
 `deploy.sh` 用 `docker rollout` 換版：先啟動新容器 → 等 healthcheck 通過 → 再等 3 秒讓 Traefik 接上 → 停掉舊容器。
-Traefik 只把流量送給 healthy 的容器，換版瞬間的連線錯誤由 retry middleware 重送。
+
+舊容器收到 SIGTERM 後不會馬上關：先讓 `/api/health` 回 503（draining），其他請求照常處理 5 秒（`DRAIN_SECS`），
+Traefik 每秒主動檢查 health，看到 503 就把它移出負載平衡，之後才真正停止。換版瞬間的連線錯誤另由 retry middleware 重送。
 
 **migration 必須跟上一版相容**：換版期間新舊兩版會同時跑在同一個 SQLite 上。
 例如要改欄位名稱，分兩次部署：先加新欄位並讓程式兩邊都寫，下一版再移除舊欄位。

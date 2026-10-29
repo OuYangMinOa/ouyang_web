@@ -1,4 +1,10 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 use axum::{
     Router,
@@ -12,10 +18,14 @@ use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
 
 async fn app() -> Router {
+    app_with_draining(Arc::new(AtomicBool::new(false))).await
+}
+
+async fn app_with_draining(draining: Arc<AtomicBool>) -> Router {
     // 記憶體資料庫每條連線都是獨立的一份，所以只開一條
     let pool = SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
-    let state = AppState { pool, app_env: "test".into(), commit: "test-sha".into() };
+    let state = AppState { pool, app_env: "test".into(), commit: "test-sha".into(), draining };
     router(state, Path::new("does-not-exist"))
 }
 
@@ -41,6 +51,20 @@ async fn health_reports_ok() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["env"], "test");
     assert_eq!(body["commit"], "test-sha");
+}
+
+#[tokio::test]
+async fn draining_fails_health_but_keeps_serving() {
+    let draining = Arc::new(AtomicBool::new(false));
+    let app = app_with_draining(draining.clone()).await;
+    draining.store(true, Ordering::Relaxed);
+
+    let (status, body) = send(&app, Request::get("/api/health").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["status"], "draining");
+
+    let (status, _) = send(&app, Request::get("/api/messages").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
 }
 
 #[tokio::test]

@@ -12,6 +12,8 @@ services:
     networks:
       - ouyang-web
     mem_limit: ${MEM_LIMIT:-256m}
+    # 收到 SIGTERM 後會先 drain 5 秒（DRAIN_SECS）再關閉，要留足時間避免被 SIGKILL
+    stop_grace_period: 20s
     labels:
       - traefik.enable=true
       # router / entrypoint 都以環境命名（staging → :8102，prod → :443，定義在 traefik/compose.yaml）
@@ -19,6 +21,10 @@ services:
       - traefik.http.routers.${APP_ENV}.rule=PathPrefix(`/`)
       - traefik.http.routers.${APP_ENV}.middlewares=${APP_ENV}-retry
       - traefik.http.services.${APP_ENV}.loadbalancer.server.port=8080
+      # Traefik 每秒主動檢查；舊容器 drain 時 health 回 503，會在停止前就被移出負載平衡
+      - traefik.http.services.${APP_ENV}.loadbalancer.healthcheck.path=/api/health
+      - traefik.http.services.${APP_ENV}.loadbalancer.healthcheck.interval=1s
+      - traefik.http.services.${APP_ENV}.loadbalancer.healthcheck.timeout=1s
       # 換版瞬間連到正在關閉的舊容器時，改送到另一個容器重試
       - traefik.http.middlewares.${APP_ENV}-retry.retry.attempts=3
       - traefik.http.middlewares.${APP_ENV}-retry.retry.initialinterval=100ms

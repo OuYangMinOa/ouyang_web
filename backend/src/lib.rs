@@ -2,6 +2,10 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
     path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -28,6 +32,8 @@ pub struct AppState {
     pub app_env: String,
     /// 建置時的 git commit，用來確認目前是哪一版在接流量
     pub commit: String,
+    /// 收到 SIGTERM 後設為 true：health 回 503 讓 Traefik 移除這個容器，其他請求照常處理
+    pub draining: Arc<AtomicBool>,
 }
 
 /// `/api/*` 走 JSON API，其他路徑交給 React 的靜態檔（找不到就回 index.html 讓前端路由處理）。
@@ -48,9 +54,14 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
 
 async fn health(State(state): State<AppState>) -> Response {
     let db_ok = sqlx::query("SELECT 1").execute(&state.pool).await.is_ok();
-    let status = if db_ok { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE };
+    let draining = state.draining.load(Ordering::Relaxed);
+    let (status, label) = match (draining, db_ok) {
+        (true, _) => (StatusCode::SERVICE_UNAVAILABLE, "draining"),
+        (false, false) => (StatusCode::SERVICE_UNAVAILABLE, "degraded"),
+        (false, true) => (StatusCode::OK, "ok"),
+    };
     let body = json!({
-        "status": if db_ok { "ok" } else { "degraded" },
+        "status": label,
         "env": state.app_env,
         "version": env!("CARGO_PKG_VERSION"),
         "commit": state.commit,
