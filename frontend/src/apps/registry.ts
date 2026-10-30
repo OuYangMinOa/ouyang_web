@@ -83,6 +83,23 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'music',
+    name: '音樂',
+    icon: '🎵',
+    glyph: '樂',
+    blurb: 'Discord 機器人 Xiao-Xia 收的音樂和音效，線上直接播。可以搜尋、隨機播放、循環，喜歡的加進收藏。',
+    tag: '播放器',
+    live: true,
+    nav: [
+      {
+        items: [
+          { to: '/music', label: '全部音樂', icon: '♫' },
+          { to: '/music/favorites', label: '我的收藏', icon: '★' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     name: '系統管理',
     icon: '🛠️',

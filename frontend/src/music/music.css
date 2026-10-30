@@ -1,0 +1,345 @@
+/* ---- 音樂 ---- */
+
+.music {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.music-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 16px;
+}
+.music-head h1 {
+  margin: 0;
+}
+
+.music svg {
+  flex-shrink: 0;
+}
+
+/* 搜尋、排序、播放全部；窄螢幕時搜尋獨佔一行 */
+.music-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.music-toolbar input[type='search'] {
+  flex: 1 1 220px;
+}
+.music-toolbar select {
+  flex: 0 0 auto;
+}
+.music-toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+.music-toolbar-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.music-toolbar-actions svg {
+  width: 18px;
+  height: 18px;
+}
+@container (max-width: 520px) {
+  .music-toolbar input[type='search'] {
+    flex-basis: 100%;
+  }
+  .music-toolbar select,
+  .music-toolbar-actions {
+    flex: 1 1 0;
+  }
+  .music-toolbar-actions button {
+    flex: 1;
+    padding: 8px 10px;
+  }
+}
+
+.music-empty {
+  padding: 24px 0;
+}
+
+/* ---- 曲目清單 ---- */
+
+.music-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.music-track {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.music-track-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-h);
+  text-align: left;
+}
+.music-track-main:hover {
+  background: var(--surface);
+}
+.music-track.current .music-track-main {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* 序號；滑過或目前這首（暫停中）換成播放鍵，正在播換成跳動的音量條 */
+.music-track-state {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  color: var(--text);
+  font: 13px var(--mono);
+}
+.music-track-play {
+  display: none;
+  color: var(--accent);
+}
+.music-track-play svg {
+  width: 20px;
+  height: 20px;
+}
+.music-track-main:is(:hover, :focus-visible) .music-track-no,
+.music-track.current .music-track-no {
+  display: none;
+}
+.music-track-main:is(:hover, :focus-visible) .music-track-play,
+.music-track.current .music-track-play {
+  display: grid;
+}
+
+.music-track-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip.music-new {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--accent);
+  border-color: currentColor;
+  font-weight: 400;
+}
+
+.music-track-date {
+  flex-shrink: 0;
+  color: var(--text);
+  font: 13px var(--mono);
+  font-weight: 400;
+}
+@container (max-width: 520px) {
+  .music-track-date {
+    display: none;
+  }
+}
+
+button.music-fav {
+  flex-shrink: 0;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+}
+button.music-fav:hover {
+  color: var(--text-h);
+}
+button.music-fav.on {
+  color: var(--accent);
+}
+
+.music-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  color: var(--accent);
+}
+.music-bars span {
+  width: 3px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: bottom;
+  transform: scaleY(0.6);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .music-bars span {
+    animation: music-bounce 0.9s ease-in-out infinite alternate;
+  }
+  .music-bars span:nth-child(2) {
+    animation-delay: -0.3s;
+  }
+  .music-bars span:nth-child(3) {
+    animation-delay: -0.6s;
+  }
+}
+@keyframes music-bounce {
+  from {
+    transform: scaleY(0.25);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* ---- 播放列：黏在畫面底部，清單捲到最後時回到原位 ---- */
+
+.music-bar {
+  position: sticky;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas:
+    'now controls volume'
+    'seek seek seek';
+  align-items: center;
+  gap: 4px 16px;
+  margin-top: 24px;
+  padding: 12px 16px 8px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.music-now {
+  grid-area: now;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.music-now-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-h);
+  font-weight: 600;
+}
+.music-now-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.music-bar input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.music-bar input[type='range']:disabled {
+  cursor: default;
+}
+
+.music-seek {
+  grid-area: seek;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.music-time {
+  min-width: 3em;
+  color: var(--text);
+  font: 12px var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.music-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+button.music-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+}
+button.music-icon:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--text-h);
+}
+button.music-icon.on {
+  color: var(--accent);
+}
+
+button.music-play {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+}
+.music-play svg {
+  width: 28px;
+  height: 28px;
+}
+
+.music-volume {
+  grid-area: volume;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.music-volume input[type='range'] {
+  max-width: 120px;
+}
+
+/* 窄的時候疊成三行：曲名、進度、按鈕；手機用實體鍵調音量（iOS 也不給網頁改），音量條拿掉 */
+@container (max-width: 600px) {
+  .music-bar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'now'
+      'seek'
+      'controls';
+    padding: 10px 12px 8px;
+  }
+  .music-now {
+    text-align: center;
+  }
+  .music-volume {
+    display: none;
+  }
+}
