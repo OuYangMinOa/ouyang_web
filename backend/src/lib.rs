@@ -2,11 +2,12 @@ pub mod admin;
 pub mod auth;
 pub mod calendar;
 pub mod games;
+pub mod music;
 
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -44,6 +45,8 @@ pub struct AppState {
     pub login_limiter: Arc<auth::LoginLimiter>,
     /// 小遊戲線上對戰中有人連線的房間（房間本身存在資料庫）
     pub rooms: Arc<games::Rooms>,
+    /// 音樂資料夾（唯讀），見 music.rs
+    pub music_dir: PathBuf,
 }
 
 impl AppState {
@@ -56,6 +59,7 @@ impl AppState {
             cookie_secure: false,
             login_limiter: Arc::default(),
             rooms: Arc::default(),
+            music_dir: PathBuf::from("data/music"),
         }
     }
 }
@@ -76,6 +80,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/calendar/events/{id}", put(calendar::update_event).delete(calendar::delete_event))
         .route("/games/rooms", post(games::create_room))
         .route("/games/rooms/{code}/ws", get(games::connect))
+        .route("/music", get(music::list_tracks))
+        .route("/music/files/{name}", get(music::track_file))
         .fallback(api_not_found);
 
     // 打包時已經把較大的檔案另存一份 .gz（Dockerfile），瀏覽器支援 gzip 就直接送那份

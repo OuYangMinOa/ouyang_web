@@ -151,6 +151,20 @@ DELETE /api/calendar/events/{id}
 - **ASCII 藝術字**：figlet 的 `.flf` 字型當成靜態檔輸出，選到才 fetch。
 - **Emoji 選擇器**：資料來自 `emojibase-data`（繁中＋英文）。**編碼與雜湊**：雜湊用 `hash-wasm`。
 
+## 音樂
+
+`/music`：播放伺服器上一個資料夾裡的音樂，`/music/favorites` 是收藏。檔案由 Discord bot（Xiao-Xia）放進
+`~/Xiao-Xia/data/attachments/572417837537296396`，`compose.yaml` 把它唯讀掛到容器的 `/music`（路徑寫在 `<env>.env` 的 `MUSIC_HOST_DIR`，staging 和 prod 共用同一個資料夾）。
+
+```
+GET /api/music                 [{ name, size, modified }]   modified 是 Unix 毫秒；每次都重新讀資料夾，bot 新增的檔案馬上看得到
+GET /api/music/files/{name}    檔案本身，支援 Range（拖曳進度）
+```
+
+- 只認最上層、不是隱藏檔、副檔名是 mp3 / m4a / aac / ogg / oga / opus / wav / flac / webm 的檔案，其他一律 404。
+- 本機開發用 `MUSIC_DIR` 指定資料夾，沒設就讀 `backend/data/music`，不存在就是空清單。
+- 收藏、音量、隨機和循環設定存在瀏覽器的 localStorage，不跟帳號走。播放器放在 APP 的外層，切換「全部」「收藏」不會中斷，離開音樂 APP 才會停。
+
 ## 部署
 
 | 環境 | 觸發 | Image tag | 伺服器 port |

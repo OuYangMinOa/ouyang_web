@@ -11,6 +11,8 @@ import MyEventsPage from './calendar/MyEventsPage'
 import { useMenu } from './components/useMenu'
 import GamePage from './games/GamePage'
 import GamesHub from './games/GamesHub'
+import MusicApp from './music/MusicApp'
+import MusicLibrary from './music/MusicLibrary'
 import Account from './pages/Account'
 import AdminRoles from './pages/admin/Roles'
 import AdminUsers from './pages/admin/Users'
@@ -149,6 +151,13 @@ function App() {
             <Route path="/tools" element={<AppLayout />}>
               <Route index element={<ToolsHub />} />
               <Route path=":id" element={<ToolPage />} />
+            </Route>
+            <Route path="/music" element={<AppLayout />}>
+              {/* 播放器放在外層，切換頁面時音樂不會停 */}
+              <Route element={<MusicApp />}>
+                <Route index element={<MusicLibrary />} />
+                <Route path="favorites" element={<MusicLibrary favoritesOnly />} />
+              </Route>
             </Route>
             <Route path="/login" element={<Login />} />
             <Route

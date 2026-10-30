@@ -9,8 +9,11 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
       # 接上 HTTPS 之後在 <env>.env 設 COOKIE_SECURE=true，登入 cookie 就只會走 HTTPS
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MUSIC_DIR: /music
     volumes:
       - data:/data
+      # 音樂 APP 的檔案由 Discord bot（Xiao-Xia）放進這個資料夾，容器只讀不寫
+      - ${MUSIC_HOST_DIR:?MUSIC_HOST_DIR is required}:/music:ro
     networks:
       - ouyang-web
     mem_limit: ${MEM_LIMIT:-256m}

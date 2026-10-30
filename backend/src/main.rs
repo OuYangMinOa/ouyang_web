@@ -44,6 +44,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut state = AppState::new(pool.clone(), app_env.clone(), commit.clone());
     state.cookie_secure = env::var("COOKIE_SECURE").is_ok_and(|v| v == "true");
+    if let Ok(dir) = env::var("MUSIC_DIR") {
+        state.music_dir = dir.into();
+    }
     let draining = state.draining.clone();
     let app = router(state, &static_dir);
     let listener = tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;

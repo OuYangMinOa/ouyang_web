@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use axum::{
     Router,
@@ -35,6 +35,13 @@ pub async fn app() -> TestApp {
 /// 共用同一個資料庫的另一個 app，用來模擬重啟後或換版時的另一個容器
 pub fn app_on(pool: SqlitePool) -> TestApp {
     let state = AppState::new(pool, "test", "test-sha");
+    TestApp { router: router(state.clone(), Path::new("does-not-exist")), state }
+}
+
+/// 音樂資料夾指到 `music_dir` 的 app
+pub async fn app_with_music(music_dir: PathBuf) -> TestApp {
+    let mut state = app().await.state;
+    state.music_dir = music_dir;
     TestApp { router: router(state.clone(), Path::new("does-not-exist")), state }
 }
 
