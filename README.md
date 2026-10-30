@@ -92,11 +92,11 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 
 ## 小遊戲線上對戰
 
-後端只負責轉送訊息，不懂遊戲規則；規則由兩端各自執行（`frontend/src/games/shared/useRoom.ts`、`backend/src/games.rs`）。不需要登入。
+後端只負責轉送訊息，不懂遊戲規則；規則由兩端各自執行（`frontend/src/games/shared/useRoom.ts`、`backend/src/games.rs`）。不需要登入，但登入後會用帳號認座位。
 
 ```
 POST /api/games/rooms  {"game":"gomoku"}  →  201 {"code":"ABCDE"}      game：gomoku / xiangqi / chess / reversi
-GET  /api/games/rooms/{code}/ws?game=<id>&player=<id>                  升級成 WebSocket
+GET  /api/games/rooms/{code}/ws?game=<id>&player=<id>                  升級成 WebSocket（登入時 player 可省略）
 
 client → server  {type:"msg", data}
 server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
@@ -105,15 +105,18 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
                  {type:"error", code, message}   之後伺服器關閉連線
 ```
 
-- 每個房間兩個座位。`player` 是用戶端自己產生的 id，重連時用來拿回同一個座位（舊連線會被關掉），重連後會收到完整歷史。
+- 每個房間兩個座位，重連時用 player 拿回同一個座位，並收到完整歷史。**登入的人一律用帳號（`user:<id>`）**，換分頁或裝置都拿得回座位；
+  訪客才用 query 的 `player`（前端每個分頁產生一個，存在 sessionStorage），伺服器存成 `guest:<player>`，所以冒用不到帳號的座位。
+  之後新增的多人遊戲也要沿用這個規則。
+- 同一個 player 從別處連進來時，舊連線會收到 `replaced` 錯誤後被關掉，前端不再自動重連（避免兩個分頁互踢），改顯示「在這裡繼續」。
 - 任何一方送出的訊息，伺服器加上 seat 後依序存進歷史並廣播給兩邊（包含送出者），所以兩邊看到的順序完全一樣。
-- 連線一律先升級，有問題再送 `error` 後關閉（瀏覽器讀不到升級失敗的 HTTP 狀態）：`not_found`、`game_mismatch`、`full`、`bad_request`，
+- 連線一律先升級，有問題再送 `error` 後關閉（瀏覽器讀不到升級失敗的 HTTP 狀態）：`not_found`、`game_mismatch`、`full`、`bad_request`、`replaced`、`internal`，
   以及送太快（每秒超過 20 則）的 `rate_limited`、太大（data 超過 4KB）的 `too_large`、歷史超過 2000 筆的 `history_full`。
 - 伺服器每 25 秒送一次 ping；60 秒沒收到任何東西就當作斷線。
-- 沒有人連線超過 30 分鐘、或建立超過 24 小時的房間，會在下次有人建立房間時清掉。房間最多 1000 個，超過回 503。
-
-> 房間只存在記憶體，重啟或部署換版後就會消失。換版的幾秒內新舊兩個容器同時存在，建立房間和連線可能落在不同容器而找不到房間；
-> 這種情況使用者重新建立房間即可。
+- 沒有人連線超過 30 分鐘、或建立超過 24 小時的房間就失效，並在下次有人建立房間時從資料庫刪掉。房間最多 1000 個，超過回 503。
+- 房間、座位和歷史存在資料庫（`game_rooms`、`game_events`），記憶體只放有人連線中的房間。重啟或換版後，前端自動重連就能接著下。
+- 換版的幾秒內新舊容器可能各有同一個房間的連線：座位用條件式 UPDATE 搶，事件用 `(room_code, seq)` 主鍵擋重複序號。
+  寫入時序號撞到，就關掉那個容器裡這個房間的連線，前端重連後從資料庫重新載入，送出的那一步要重下。
 
 ## 部署
 

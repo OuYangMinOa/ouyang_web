@@ -218,7 +218,10 @@ export default function Chess() {
     status = `${outcome.title}（${outcome.detail}）`
     tone = outcome.tone
   } else if (mode === 'online' && !room.code) status = '建立房間，或輸入代碼加入朋友的房間'
-  else if (mode === 'online' && !room.connected) status = '連線中…'
+  else if (mode === 'online' && room.error) {
+    status = room.error
+    tone = 'danger'
+  } else if (mode === 'online' && !room.connected) status = '連線中…'
   else if (mode === 'online' && !room.peerOnline) status = '等待對手…'
   else {
     if (aiTurn) status = '電腦思考中…'

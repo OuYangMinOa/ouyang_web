@@ -218,6 +218,9 @@ export default function Xiangqi() {
     }
   } else if (mode === 'online' && !room.code) {
     status = '建立房間或輸入代碼加入'
+  } else if (mode === 'online' && room.error) {
+    status = room.error
+    tone = 'danger'
   } else if (mode === 'online' && !onlineReady) {
     status = room.connected ? '等待對手連線…' : '連線中…'
   } else {

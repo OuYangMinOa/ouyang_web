@@ -132,6 +132,9 @@ export default function Reversi() {
     tone = w === null ? undefined : mode === 'local' || mine(w) ? 'ok' : 'danger'
   } else if (mode === 'online' && !room.code) {
     status = '建立或加入房間開始對戰'
+  } else if (mode === 'online' && room.error) {
+    status = room.error
+    tone = 'danger'
   } else if (mode === 'online' && (!room.connected || !room.peerOnline)) {
     status = room.connected ? '等待對手…' : '連線中…'
   } else {

@@ -17,7 +17,7 @@ use argon2::{
 };
 use axum::{
     Json,
-    extract::{FromRequestParts, State},
+    extract::{FromRequestParts, OptionalFromRequestParts, State},
     http::{HeaderMap, StatusCode, header, request::Parts},
     response::{IntoResponse, Response},
 };
@@ -83,6 +83,19 @@ impl FromRequestParts<AppState> for CurrentUser {
     }
 }
 
+/// 登入與否都可以用的 handler 拿 `Option<CurrentUser>`：沒登入是 None，資料庫錯誤才會失敗。
+impl OptionalFromRequestParts<AppState> for CurrentUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Option<Self>, AppError> {
+        match <Self as FromRequestParts<AppState>>::from_request_parts(parts, state).await {
+            Ok(user) => Ok(Some(user)),
+            Err(AppError::Unauthorized(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+}
+
 /// 要求登入且擁有權限 `P`，例如 `Require(user, _): Require<AdminUsers>`。
 pub struct Require<P>(pub CurrentUser, pub PhantomData<P>);
 
@@ -90,7 +103,7 @@ impl<P: Permission + Send + Sync> FromRequestParts<AppState> for Require<P> {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
-        let user = CurrentUser::from_request_parts(parts, state).await?;
+        let user = <CurrentUser as FromRequestParts<AppState>>::from_request_parts(parts, state).await?;
         if !user.has(P::NAME) {
             return Err(AppError::Forbidden);
         }

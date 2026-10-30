@@ -41,7 +41,7 @@ pub struct AppState {
     /// 有 HTTPS 之後要設成 true，session cookie 才只會經由 HTTPS 傳送
     pub cookie_secure: bool,
     pub login_limiter: Arc<auth::LoginLimiter>,
-    /// 小遊戲線上對戰的房間（只存在記憶體）
+    /// 小遊戲線上對戰中有人連線的房間（房間本身存在資料庫）
     pub rooms: Arc<games::Rooms>,
 }
 

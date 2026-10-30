@@ -177,6 +177,9 @@
   flex-direction: column;
   gap: 10px;
 }
+.online-panel a {
+  color: var(--accent);
+}
 .room-code {
   display: flex;
   align-items: baseline;

@@ -1,5 +1,23 @@
 import { useState, type FormEvent } from 'react'
+import { Link, useLocation } from 'react-router'
+import { useAuth } from '../../auth'
 import type { Room, Seat } from './useRoom'
+
+/** 訪客的座位只認這個分頁，提醒可以登入（登入後回到同一個房間） */
+function LoginHint() {
+  const { user, loading } = useAuth()
+  const location = useLocation()
+  if (user || loading) return null
+  return (
+    <p className="muted">
+      目前是訪客，換分頁或裝置就回不到這一局。
+      <Link to="/login" state={{ from: location.pathname + location.search }}>
+        登入
+      </Link>
+      後會用帳號認座位。
+    </p>
+  )
+}
 
 /**
  * 線上模式的房間面板：建立／加入房間、顯示代碼與邀請連結、連線狀態。
@@ -54,6 +72,7 @@ export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: 
           </button>
         </form>
         {room.error && <p className="error">{room.error}</p>}
+        <LoginHint />
       </div>
     )
   }
@@ -78,6 +97,16 @@ export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: 
         </p>
       )}
       <div className="game-toolbar">
+        {room.errorCode === 'replaced' && (
+          <button type="button" onClick={room.reconnect}>
+            在這裡繼續
+          </button>
+        )}
+        {room.errorCode === 'not_found' && (
+          <button type="button" onClick={room.create} disabled={room.busy}>
+            建立新房間
+          </button>
+        )}
         <button type="button" className="secondary" onClick={share}>
           {copied ? '已複製連結' : '邀請對手'}
         </button>
@@ -85,6 +114,7 @@ export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: 
           離開房間
         </button>
       </div>
+      <LoginHint />
     </div>
   )
 }
