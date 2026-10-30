@@ -130,7 +130,7 @@ function About() {
               <span>Software Engineer</span>
             </p>
             <p>
-              中央大學物理所畢業，現在是軟體工程師。從物理走進程式，喜歡把複雜的問題拆開，再組成真的能用的東西。
+              中央大學物理研究所畢業，現在是軟體工程師。從物理走進程式，喜歡把複雜的問題拆開，再組成真的能用的東西。
             </p>
             <ul className="about-skills" aria-label="擅長">
               {SKILLS.map((skill) => (
