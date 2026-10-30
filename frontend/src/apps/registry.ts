@@ -44,6 +44,24 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'calendar',
+    name: '日曆',
+    icon: '📅',
+    glyph: '曆',
+    blurb: '農曆、節氣、國定假日與補假一目了然。登入後可以記下自己的事項，跨多天、每週每月每年或農曆重複都行。',
+    tag: '農曆 · 節氣',
+    live: true,
+    nav: [
+      {
+        items: [
+          { to: '/calendar', label: '月曆', icon: '▦' },
+          { to: '/calendar/holidays', label: '節日與節氣', icon: '🏮' },
+          { to: '/calendar/events', label: '我的事項', icon: '📝' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     name: '系統管理',
     icon: '🛠️',

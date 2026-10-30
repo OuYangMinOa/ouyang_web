@@ -269,7 +269,9 @@ label {
   gap: 6px;
 }
 
-input:not([type='checkbox']) {
+input:not([type='checkbox']),
+select,
+textarea {
   flex: 1;
   min-width: 0;
   font: inherit;
@@ -346,6 +348,8 @@ button.link {
 }
 
 input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
