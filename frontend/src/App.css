@@ -2,40 +2,201 @@ main {
   width: min(960px, 100% - 32px);
   margin: 32px auto 64px;
 }
+/* APP 頁面有側邊欄，跟頁首一樣寬 */
+main:has(.app-layout) {
+  width: min(1240px, 100% - 32px);
+}
 
-/* ---- 頁首 ---- */
+/* ---- 頁首：品牌、切換 APP、（手機）APP 選單、主題、帳號 ---- */
 
 .site-header {
+  /* 手機版的下拉選單以頁首為基準展開，也要蓋在遊戲畫面上 */
+  position: relative;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  width: min(960px, 100% - 32px);
+  gap: 8px;
+  width: min(1240px, 100% - 32px);
   margin: 0 auto;
-  padding: 16px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .brand {
+  margin-right: 8px;
   font: 900 19px var(--serif);
   color: var(--text-h);
   text-decoration: none;
+  white-space: nowrap;
 }
 
-.site-header nav {
+.header-end {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   margin-left: auto;
 }
 
-.site-header nav a {
-  color: var(--text);
+.header-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 8px;
+  color: var(--text-h);
   text-decoration: none;
 }
-.site-header nav a.active {
+
+/* ---- 下拉選單 ---- */
+
+.menu {
+  position: relative;
+}
+
+button.menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
   color: var(--text-h);
+  white-space: nowrap;
+}
+button.menu-button:hover,
+button.menu-button[aria-expanded='true'] {
+  background: var(--surface);
+}
+
+.menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 240px;
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.menu-panel.end {
+  left: auto;
+  right: 0;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-h);
+  text-align: left;
+  text-decoration: none;
+}
+.menu-item:hover {
+  background: var(--bg);
+}
+
+/* 切換 APP */
+.launcher-panel {
+  width: 320px;
+}
+.launcher-panel input {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.app-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 4px;
+}
+.app-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 4px;
+  border-radius: 10px;
+  color: var(--text-h);
+  font-size: 14px;
+  text-align: center;
+  text-decoration: none;
+}
+.app-tile:hover {
+  background: var(--bg);
+}
+.app-tile.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.app-tile-icon {
+  font-size: 28px;
+  line-height: 1.2;
+}
+.launcher-empty {
+  padding: 12px;
+}
+
+/* 手機版的「小遊戲 › 五子棋 ▾」，桌機有側邊欄就不需要 */
+.app-menu {
+  display: none;
+}
+.crumb {
+  max-width: 100%;
+}
+.crumb-app,
+.crumb-sep,
+.caret {
+  flex-shrink: 0;
+  color: var(--text);
+}
+.crumb-page {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 600;
+}
+.caret {
+  font-size: 12px;
+}
+
+/* 帳號 */
+button.user-button {
+  padding: 6px 12px 6px 6px;
+}
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.user-panel-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.user-panel-head strong {
+  color: var(--text-h);
 }
 
 .badge {
@@ -154,8 +315,8 @@ button.link {
 }
 
 .theme-toggle {
-  min-height: 32px;
-  padding: 2px 10px;
+  min-width: 40px;
+  padding: 2px 12px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: transparent;
@@ -269,6 +430,7 @@ td .edit {
 }
 
 .roles {
+  margin-top: 16px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 16px;
@@ -303,6 +465,55 @@ time {
   font-size: 13px;
 }
 
+/* ---- 平板與手機：側邊欄收進頁首，頁首維持一行 ---- */
+
+@media (max-width: 900px) {
+  /* 在 APP 裡時品牌讓位給 APP 選單，回首頁走「⊞」 */
+  .site-header.in-app .brand {
+    display: none;
+  }
+  .app-menu {
+    display: block;
+    min-width: 0;
+  }
+
+  /* 只留圖示；文字仍給螢幕閱讀器讀 */
+  .launcher-label,
+  .user-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .theme-label {
+    display: none;
+  }
+  .launcher button.menu-button,
+  .theme-toggle {
+    justify-content: center;
+    padding: 0;
+  }
+  button.user-button {
+    padding: 6px;
+  }
+
+  /* 選單改成跟頁首一樣寬，從頁首底下展開 */
+  .menu {
+    position: static;
+  }
+  .menu-panel,
+  .menu-panel.end {
+    top: 100%;
+    left: 0;
+    right: 0;
+    width: auto;
+    min-width: 0;
+    border-radius: 0 0 12px 12px;
+  }
+}
+
 /* ---- 手機（窄螢幕） ---- */
 
 @media (max-width: 640px) {
@@ -313,26 +524,6 @@ time {
   h1 {
     font-size: 24px;
     margin-bottom: 16px;
-  }
-
-  /* 第一行：品牌、版本、主題；第二行：導覽連結（太多時可以左右滑） */
-  .site-header {
-    gap: 8px 12px;
-    padding: 12px 0;
-  }
-  .site-header nav {
-    order: 1;
-    width: 100%;
-    margin-left: 0;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-  .theme-toggle {
-    margin-left: auto;
-  }
-  /* 窄螢幕只留圖示，頁首才能維持兩行 */
-  .theme-label {
-    display: none;
   }
 
   .card {

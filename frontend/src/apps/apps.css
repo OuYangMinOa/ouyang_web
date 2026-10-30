@@ -1,0 +1,158 @@
+/* ---- APP 版面：左邊側邊欄（可收合成只剩圖示），右邊內容 ---- */
+
+.app-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.app-layout.collapsed {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .app-layout {
+    transition: grid-template-columns 0.2s ease;
+  }
+}
+
+/* 內容區當作容器，遊戲版面依「剩下多寬」排列，不受側邊欄開關影響 */
+.app-content {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(100dvh - 32px);
+  overflow: hidden auto;
+}
+
+.app-sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.app-sidebar-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--text-h);
+  font-weight: 700;
+  text-decoration: none;
+}
+.sidebar-toggle {
+  flex-shrink: 0;
+  width: 40px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+}
+.sidebar-toggle:hover {
+  background: var(--surface);
+  color: var(--text-h);
+}
+
+/* ---- APP 頁面清單（側邊欄與手機選單共用） ---- */
+
+.app-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.app-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.app-nav-label {
+  margin: 0 0 4px;
+  padding: 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+.app-nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--text-h);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.app-nav-link:hover {
+  background: var(--surface);
+}
+.menu-panel .app-nav-link:hover {
+  background: var(--bg);
+}
+.app-nav-link.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.app-nav-icon {
+  flex: 0 0 24px;
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+}
+.app-nav-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 收合：只留圖示，滑過顯示名稱（title），文字仍給螢幕閱讀器讀 */
+.collapsed .app-sidebar-head {
+  flex-direction: column;
+}
+.collapsed .app-sidebar-title {
+  flex: none;
+  width: 100%;
+  padding: 0;
+  justify-content: center;
+}
+.collapsed .app-nav-link {
+  justify-content: center;
+  padding: 0;
+}
+.collapsed .app-nav-text,
+.collapsed .app-nav-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.collapsed .app-nav-group + .app-nav-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* 平板與手機：側邊欄改由頁首的 APP 選單取代 */
+@media (max-width: 900px) {
+  .app-layout {
+    display: block;
+  }
+  .app-sidebar {
+    display: none;
+  }
+}

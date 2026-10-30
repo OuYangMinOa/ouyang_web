@@ -188,7 +188,8 @@
   color: var(--text-h);
 }
 
-@media (max-width: 800px) {
+/* 依內容區寬度（扣掉側邊欄）判斷，不是視窗寬度 */
+@container (max-width: 680px) {
   .game-layout {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;

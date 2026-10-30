@@ -1,22 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api, errorMessage } from '../api'
-import { useAuth } from '../auth'
-
-type AdminUser = {
-  id: number
-  username: string
-  disabled: boolean
-  created_at: string
-  last_login_at: string | null
-  roles: string[]
-}
-
-type Role = {
-  id: number
-  name: string
-  description: string
-  permissions: { name: string; description: string }[]
-}
+import { api, errorMessage } from '../../api'
+import { useAuth } from '../../auth'
+import type { AdminUser, Role } from './types'
 
 function formatTime(value: string | null) {
   return value ? new Date(value).toLocaleString() : '—'
@@ -146,7 +131,7 @@ function EditUser({
   )
 }
 
-export default function Admin() {
+export default function AdminUsers() {
   const { user: me } = useAuth()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [roles, setRoles] = useState<Role[]>([])
@@ -181,99 +166,74 @@ export default function Admin() {
 
   return (
     <>
-      <h1>系統管理</h1>
-
-      <section>
-        <h2>使用者</h2>
-        {error && <p className="error">{error}</p>}
-        <div className="table-wrap">
-          <table className="responsive">
-            <thead>
-              <tr>
-                <th>帳號</th>
-                <th>角色</th>
-                <th>狀態</th>
-                <th>最後登入</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => {
-                const isSelf = user.id === me?.id
-                return (
-                  <tr key={user.id} className={user.disabled ? 'disabled' : undefined}>
-                    <td data-label="帳號" className="primary">
-                      <span className="username">{user.username}</span>
-                      {isSelf && <span className="chip subtle">你</span>}
-                    </td>
-                    <td data-label="角色">
-                      {editing === user.id ? (
-                        <EditUser
-                          user={user}
-                          roles={roles}
-                          isSelf={isSelf}
-                          onSave={(patch) => update(user.id, patch)}
-                          onCancel={() => setEditing(null)}
-                        />
-                      ) : user.roles.length ? (
-                        user.roles.map((r) => (
-                          <span key={r} className="chip">
-                            {roleLabel(r)}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="muted">無</span>
-                      )}
-                    </td>
-                    <td data-label="狀態">{user.disabled ? <span className="error">已停用</span> : '啟用中'}</td>
-                    <td data-label="最後登入">
-                      <time>{formatTime(user.last_login_at)}</time>
-                    </td>
-                    <td className="actions">
-                      {editing !== user.id && (
-                        <button type="button" className="secondary" onClick={() => setEditing(user.id)}>
-                          編輯
-                        </button>
-                      )}
-                      {!isSelf && (
-                        <button
-                          type="button"
-                          className={user.disabled ? 'secondary' : 'danger'}
-                          onClick={() => update(user.id, { disabled: !user.disabled })}
-                        >
-                          {user.disabled ? '啟用' : '停用'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-        <CreateUser roles={roles} onCreated={(user) => setUsers((prev) => [...prev, user])} />
-      </section>
-
-      <section>
-        <h2>角色與權限</h2>
-        <p className="muted">權限由程式定義，新的 APP 上線時會在資料庫 migration 裡加入自己的權限並指派給角色。</p>
-        <div className="roles">
-          {roles.map((role) => (
-            <div key={role.id} className="card">
-              <h3>
-                {role.description || role.name} <code>{role.name}</code>
-              </h3>
-              <ul>
-                {role.permissions.map((p) => (
-                  <li key={p.name}>
-                    <code>{p.name}</code> {p.description}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </section>
+      <h1>使用者</h1>
+      {error && <p className="error">{error}</p>}
+      <div className="table-wrap">
+        <table className="responsive">
+          <thead>
+            <tr>
+              <th>帳號</th>
+              <th>角色</th>
+              <th>狀態</th>
+              <th>最後登入</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => {
+              const isSelf = user.id === me?.id
+              return (
+                <tr key={user.id} className={user.disabled ? 'disabled' : undefined}>
+                  <td data-label="帳號" className="primary">
+                    <span className="username">{user.username}</span>
+                    {isSelf && <span className="chip subtle">你</span>}
+                  </td>
+                  <td data-label="角色">
+                    {editing === user.id ? (
+                      <EditUser
+                        user={user}
+                        roles={roles}
+                        isSelf={isSelf}
+                        onSave={(patch) => update(user.id, patch)}
+                        onCancel={() => setEditing(null)}
+                      />
+                    ) : user.roles.length ? (
+                      user.roles.map((r) => (
+                        <span key={r} className="chip">
+                          {roleLabel(r)}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="muted">無</span>
+                    )}
+                  </td>
+                  <td data-label="狀態">{user.disabled ? <span className="error">已停用</span> : '啟用中'}</td>
+                  <td data-label="最後登入">
+                    <time>{formatTime(user.last_login_at)}</time>
+                  </td>
+                  <td className="actions">
+                    {editing !== user.id && (
+                      <button type="button" className="secondary" onClick={() => setEditing(user.id)}>
+                        編輯
+                      </button>
+                    )}
+                    {!isSelf && (
+                      <button
+                        type="button"
+                        className={user.disabled ? 'secondary' : 'danger'}
+                        onClick={() => update(user.id, { disabled: !user.disabled })}
+                      >
+                        {user.disabled ? '啟用' : '停用'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <CreateUser roles={roles} onCreated={(user) => setUsers((prev) => [...prev, user])} />
     </>
   )
 }

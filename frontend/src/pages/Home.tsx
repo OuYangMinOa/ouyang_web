@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { api, errorMessage, PERMISSIONS } from '../api'
+import { appPath, visibleApps } from '../apps/registry'
 import { useAuth } from '../auth'
 import SunStage from '../components/SunStage'
 import TiltCard from '../components/TiltCard'
@@ -117,7 +118,6 @@ type Work = {
 
 function Works() {
   const { can } = useAuth()
-  const isAdmin = can(PERMISSIONS.adminUsers)
   const works: Work[] = [
     {
       glyph: '俠',
@@ -133,21 +133,15 @@ function Works() {
       tag: '就在下面',
       link: { to: '#guestbook', label: '去留言' },
     },
-    {
-      glyph: '管',
-      title: '系統管理',
-      body: '帳號、角色與權限。之後每個 APP 的權限都從這裡發。',
-      tag: isAdmin ? '已授權' : '需要權限',
-      link: isAdmin ? { to: '/admin', label: '進入' } : { to: '/login', label: '登入' },
-    },
-    {
-      glyph: '戲',
-      title: '小遊戲',
-      body: '貪食蛇、五子棋、象棋、西洋棋、黑白棋、1A2B、數獨、踩地雷。棋類可以跟電腦下，也能開房間線上對戰。',
-      tag: '8 款',
-      live: true,
-      link: { to: '/games', label: '去玩' },
-    },
+    // APP 卡片來自 apps/registry.ts，沒權限的不會出現
+    ...visibleApps(can).map((app) => ({
+      glyph: app.glyph,
+      title: app.name,
+      body: app.blurb,
+      tag: app.tag,
+      live: app.live,
+      link: { to: appPath(app), label: '進入' },
+    })),
   ]
 
   return (

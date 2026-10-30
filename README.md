@@ -43,7 +43,7 @@ alice                  admin（系統管理員）         admin.users
 - 停用帳號、重設密碼會讓該帳號所有裝置登出；自己改密碼只保留目前這個裝置。
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 
-頁面：`/login` 登入、`/account` 改密碼、`/admin` 系統管理（需要 `admin.users`）。
+頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 建立或救回管理員
 
@@ -75,6 +75,18 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
    async fn create_note(Require(user, _): Require<NotesWrite>, ...) { ... }
    ```
 3. 前端用 `useAuth().can('notes.write')` 決定要不要顯示，用 `<RequireAuth permission="notes.write">` 保護頁面。前端的判斷只是介面，真正的檢查在後端。
+
+### 新增 APP
+
+1. 在 `frontend/src/apps/registry.ts` 的 `APPS` 加一筆：`id`（網址前綴）、名稱、圖示、首頁卡片文字，以及 `nav`（側邊欄的頁面，可以分組）。需要權限才能用的 APP 設 `permission`，沒權限的人在切換面板和首頁都看不到。
+2. 在 `App.tsx` 把路由包在 `<AppLayout />` 底下（要權限就再包一層 `<RequireAuth>`）：
+   ```tsx
+   <Route path="/notes" element={<AppLayout />}>
+     <Route index element={<NotesList />} />
+     <Route path=":id" element={<NoteEditor />} />
+   </Route>
+   ```
+   桌機會有可收合的側邊欄，窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
 
 > 目前 staging / prod 都還是 HTTP，密碼和 cookie 在網路上是明文傳送。接上 HTTPS 前不要在公共網路登入重要帳號；接上之後在 `<env>.env` 加 `COOKIE_SECURE=true`。
 

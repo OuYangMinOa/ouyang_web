@@ -267,7 +267,8 @@
   border-top: 1px solid var(--border);
 }
 
-@media (max-width: 800px) {
+/* 跟 .game-layout 改成單欄的時機一致 */
+@container (max-width: 680px) {
   .chess-moves {
     max-height: 200px;
   }
