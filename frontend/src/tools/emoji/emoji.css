@@ -1,0 +1,360 @@
+/* ---- 小工具：Emoji 選擇器 ---- */
+
+.emj {
+  --emj-font: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  --emj-hover: color-mix(in srgb, var(--accent) 12%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.emj-glyph {
+  font-family: var(--emj-font);
+}
+
+.emj-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.emj-spin {
+  font: 24px/1 var(--emj-font);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .emj-spin {
+    animation: emj-bounce 0.8s ease-in-out infinite alternate;
+  }
+}
+@keyframes emj-bounce {
+  to {
+    transform: translateY(-4px);
+  }
+}
+
+/* ---- 搜尋、模式、膚色 ---- */
+
+.emj-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.emj-search {
+  flex: none;
+  width: 100%;
+}
+
+.emj-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.emj-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.emj-seg button {
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+}
+.emj-seg button[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.emj-tones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.emj-tones button {
+  box-sizing: border-box;
+  width: 40px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  font: 22px/1 var(--emj-font);
+}
+.emj-tones button:hover {
+  background: var(--emj-hover);
+}
+.emj-tones button[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--emj-hover);
+}
+
+/* ---- 黏在上方：組合框、分類標籤 ---- */
+
+.emj-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.emj-compose {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.emj-compose input {
+  flex: 1 1 120px;
+}
+.emj-compose button {
+  padding: 8px 12px;
+}
+.emj-icon-btn {
+  min-width: 40px;
+  padding: 0;
+}
+.emj-compose .emj-icon-btn {
+  padding: 0 8px;
+}
+
+/* 標籤太多時只在這一列裡橫向捲動，不會撐開頁面 */
+.emj-chips {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.emj-chips::-webkit-scrollbar {
+  display: none;
+}
+.emj-chips button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-h);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.emj-chips button:hover {
+  border-color: var(--accent);
+}
+.emj-chips button[aria-current='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+}
+.emj-chips .emj-glyph {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ---- emoji 格子 ---- */
+
+.emj-body {
+  min-width: 0;
+}
+
+.emj-section {
+  scroll-margin-top: var(--emj-bar-h, 0px);
+}
+/* 畫面外的分類不排版也不繪製，高度由元件估算 */
+.emj-lazy {
+  content-visibility: auto;
+}
+
+.emj-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* 高度 46px，跟元件裡的 HEADING 一致 */
+.emj-heading {
+  margin: 0;
+  padding: 16px 0 8px;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--text);
+}
+.emj-heading-row .emj-heading {
+  flex: 1;
+}
+button.emj-clear {
+  min-height: 40px;
+  margin-top: 8px;
+  padding: 0 8px;
+  font-size: 14px;
+}
+button.emj-clear:hover {
+  color: var(--danger);
+}
+
+.emj-count {
+  padding: 12px 0 8px;
+}
+
+/* 格子 44px、間距 2px，跟元件裡的 CELL、GAP 一致 */
+.emj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 2px;
+}
+.emj-cell {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  /* 系統不支援的組合字會拆成好幾個字，裁掉免得撐出格子 */
+  overflow: hidden;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-h);
+  font: 28px/1 var(--emj-font);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* 鍵盤移動時不要躲在上方工具列或下方詳細資訊底下 */
+  scroll-margin-top: calc(var(--emj-bar-h, 0px) + 8px);
+  scroll-margin-bottom: calc(var(--emj-detail-h, 0px) + 24px);
+}
+@media (hover: hover) {
+  .emj-cell:hover {
+    background: var(--emj-hover);
+  }
+}
+.emj-cell:focus-visible {
+  outline-offset: -2px;
+  background: var(--emj-hover);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .emj-cell {
+    transition: transform 0.1s;
+  }
+  .emj-cell:active {
+    transform: scale(0.88);
+  }
+}
+
+/* ---- 黏在下方：詳細資訊 ---- */
+
+.emj-detail {
+  position: sticky;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 5;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 14px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.emj-detail-glyph {
+  max-width: 2.2em;
+  font: 52px/1 var(--emj-font);
+  padding-top: 2px;
+  overflow-wrap: anywhere;
+}
+.emj-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.emj-detail-info strong {
+  color: var(--text-h);
+  font-size: 17px;
+}
+.emj-detail-info span {
+  font-size: 14px;
+}
+.emj-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+.emj-close {
+  font-size: 20px;
+  line-height: 1;
+}
+.emj-detail-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.emj-detail-actions button {
+  padding: 6px 12px;
+  font-size: 15px;
+}
+
+/* ---- 複製成功的提示 ---- */
+
+.emj-toast {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  z-index: 30;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+.emj-toast span {
+  display: block;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--text-h);
+  color: var(--bg);
+  box-shadow: var(--shadow);
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .emj-toast span {
+    animation: emj-pop 0.18s ease-out;
+  }
+}
+@keyframes emj-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@media (max-width: 640px) {
+  .emj-detail-glyph {
+    font-size: 44px;
+  }
+  .emj-detail-actions button {
+    flex: 1 1 auto;
+  }
+}

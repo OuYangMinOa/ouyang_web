@@ -1,5 +1,6 @@
 import { PERMISSIONS } from '../api'
 import { GAME_CATEGORIES, GAMES } from '../games/registry'
+import { TOOL_CATEGORIES, TOOLS } from '../tools/registry'
 
 export type AppNavItem = { to: string; label: string; icon: string }
 export type AppNavGroup = { label?: string; items: AppNavItem[] }
@@ -59,6 +60,26 @@ export const APPS: AppInfo[] = [
           { to: '/calendar/events', label: '我的事項', icon: '📝' },
         ],
       },
+    ],
+  },
+  {
+    id: 'tools',
+    name: '小工具',
+    icon: '🧰',
+    glyph: '具',
+    blurb: `${TOOLS.map((t) => t.name).join('、')}。全部在瀏覽器裡執行。`,
+    tag: `${TOOLS.length} 個`,
+    live: true,
+    nav: [
+      { items: [{ to: '/tools', label: '全部工具', icon: '▦' }] },
+      ...TOOL_CATEGORIES.map((category) => ({
+        label: category,
+        items: TOOLS.filter((t) => t.category === category).map((t) => ({
+          to: `/tools/${t.id}`,
+          label: t.name,
+          icon: t.icon,
+        })),
+      })),
     ],
   },
   {

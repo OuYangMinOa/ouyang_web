@@ -44,6 +44,9 @@ main:has(.app-layout) {
   padding: 0 8px;
   color: var(--text-h);
   text-decoration: none;
+  /* 頁面名稱很長時讓麵包屑縮短，不要把「登入」擠成直的 */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ---- 下拉選單 ---- */
