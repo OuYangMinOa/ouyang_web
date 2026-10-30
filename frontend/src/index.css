@@ -46,6 +46,19 @@
   --n7: #1c1a17;
   --n8: #6b645a;
 
+  /* 日曆：放假日、節氣、節日，以及個人事項的六種顏色 */
+  --holiday: #c81e1e;
+  --term: #2f7d4f;
+  --festival: #a16207;
+  --ev-orange: #c2410c;
+  --ev-blue: #2563eb;
+  --ev-green: #2f7d4f;
+  --ev-red: #be123c;
+  --ev-purple: #7c3aed;
+  --ev-teal: #0f766e;
+  /* 對話框後面的遮罩 */
+  --scrim: rgb(28 26 23 / 0.4);
+
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
   --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
@@ -100,6 +113,16 @@
     --n6: #2dd4bf;
     --n7: #f4ede2;
     --n8: #a39b8f;
+    --holiday: #ff6b6b;
+    --term: #5fd38d;
+    --festival: #fbbf24;
+    --ev-orange: #ff7a3d;
+    --ev-blue: #60a5fa;
+    --ev-green: #5fd38d;
+    --ev-red: #ff6b81;
+    --ev-purple: #c084fc;
+    --ev-teal: #2dd4bf;
+    --scrim: rgb(0 0 0 / 0.6);
     color-scheme: dark;
   }
 }
@@ -145,6 +168,16 @@
   --n6: #2dd4bf;
   --n7: #f4ede2;
   --n8: #a39b8f;
+  --holiday: #ff6b6b;
+  --term: #5fd38d;
+  --festival: #fbbf24;
+  --ev-orange: #ff7a3d;
+  --ev-blue: #60a5fa;
+  --ev-green: #5fd38d;
+  --ev-red: #ff6b81;
+  --ev-purple: #c084fc;
+  --ev-teal: #2dd4bf;
+  --scrim: rgb(0 0 0 / 0.6);
   color-scheme: dark;
 }
 

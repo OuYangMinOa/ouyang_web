@@ -5,6 +5,9 @@ import AppLauncher from './apps/AppLauncher'
 import AppLayout, { AppMenu } from './apps/AppLayout'
 import { findAppByPath } from './apps/registry'
 import { AuthProvider, RequireAuth, useAuth } from './auth'
+import CalendarPage from './calendar/CalendarPage'
+import HolidaysPage from './calendar/HolidaysPage'
+import MyEventsPage from './calendar/MyEventsPage'
 import { useMenu } from './components/useMenu'
 import GamePage from './games/GamePage'
 import GamesHub from './games/GamesHub'
@@ -128,6 +131,18 @@ function App() {
             <Route path="/games" element={<AppLayout />}>
               <Route index element={<GamesHub />} />
               <Route path=":id" element={<GamePage />} />
+            </Route>
+            <Route path="/calendar" element={<AppLayout />}>
+              <Route index element={<CalendarPage />} />
+              <Route path="holidays" element={<HolidaysPage />} />
+              <Route
+                path="events"
+                element={
+                  <RequireAuth>
+                    <MyEventsPage />
+                  </RequireAuth>
+                }
+              />
             </Route>
             <Route path="/login" element={<Login />} />
             <Route

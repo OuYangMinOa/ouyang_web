@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod auth;
+pub mod calendar;
 pub mod games;
 
 use std::{
@@ -18,7 +19,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -71,6 +72,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/users", get(admin::list_users).post(admin::create_user))
         .route("/admin/users/{id}", patch(admin::update_user))
         .route("/admin/roles", get(admin::list_roles))
+        .route("/calendar/events", get(calendar::list_events).post(calendar::create_event))
+        .route("/calendar/events/{id}", put(calendar::update_event).delete(calendar::delete_event))
         .route("/games/rooms", post(games::create_room))
         .route("/games/rooms/{code}/ws", get(games::connect))
         .fallback(api_not_found);

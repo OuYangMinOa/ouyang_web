@@ -115,7 +115,27 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
 > 房間只存在記憶體，重啟或部署換版後就會消失。換版的幾秒內新舊兩個容器同時存在，建立房間和連線可能落在不同容器而找不到房間；
 > 這種情況使用者重新建立房間即可。
 
-## 部署
+## 日曆
+
+`/calendar`：月曆（農曆、節氣、節日、放假日標紅）、`/calendar/holidays` 整年的節日與節氣、`/calendar/events` 我的事項。
+
+- 農曆用查表法（`frontend/src/calendar/lunar.ts`，1900–2100 年）。瀏覽器內建的 `Intl` 中國曆在朔日靠近午夜時會差一天（例如 2027 年春節），所以不用它。
+- 節氣用 Meeus 的太陽視黃經簡化公式推算（`solarTerms.ts`），以台灣時間為準。
+- 放假日依「紀念日及節日實施條例」推算，含補假與 2025 年修法新增的假日（`holidays.ts`）。人事行政總處每年公告的調整放假和補班不能推算，要逐年加到 `ADJUSTMENTS`。
+- 個人事項只要登入就能用，每個人只看得到自己的。後端（`backend/src/calendar.rs`）只存事項和重複規則，每一次落在哪天由前端展開（`events.ts`），因為農曆重複要換算農曆。
+
+```
+GET    /api/calendar/events          自己的所有事項
+POST   /api/calendar/events          新增
+PUT    /api/calendar/events/{id}     整筆取代（別人的事項回 404）
+DELETE /api/calendar/events/{id}
+
+{ title, note, color, start_date, end_date,       日期 YYYY-MM-DD，end_date 含當天
+  repeat, interval, weekdays, until, excluded }  repeat：none / daily / weekly / monthly / yearly / lunar_monthly / lunar_yearly
+```
+
+「只刪這一次」是把那次的開始日期加進 `excluded`。修改重複事項會套用到每一次。
+
 
 | 環境 | 觸發 | Image tag | 伺服器 port |
 |---|---|---|---|
