@@ -104,7 +104,7 @@ function Header() {
   return (
     <header className={`site-header ${app ? 'in-app' : ''}`}>
       <Link to="/" className="brand">
-        ouyang_web
+        歐陽天地
       </Link>
       <AppLauncher current={app} />
       {app && <AppMenu app={app} />}
