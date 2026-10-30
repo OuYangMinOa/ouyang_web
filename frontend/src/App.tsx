@@ -16,6 +16,8 @@ import AdminRoles from './pages/admin/Roles'
 import AdminUsers from './pages/admin/Users'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import ToolPage from './tools/ToolPage'
+import ToolsHub from './tools/ToolsHub'
 import { getThemePreference, setThemePreference, type ThemePreference } from './theme'
 import './App.css'
 
@@ -143,6 +145,10 @@ function App() {
                   </RequireAuth>
                 }
               />
+            </Route>
+            <Route path="/tools" element={<AppLayout />}>
+              <Route index element={<ToolsHub />} />
+              <Route path=":id" element={<ToolPage />} />
             </Route>
             <Route path="/login" element={<Login />} />
             <Route

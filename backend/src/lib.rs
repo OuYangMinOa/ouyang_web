@@ -78,7 +78,10 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/rooms/{code}/ws", get(games::connect))
         .fallback(api_not_found);
 
-    let spa = ServeDir::new(static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
+    // 打包時已經把較大的檔案另存一份 .gz（Dockerfile），瀏覽器支援 gzip 就直接送那份
+    let spa = ServeDir::new(static_dir)
+        .precompressed_gzip()
+        .fallback(ServeFile::new(static_dir.join("index.html")).precompressed_gzip());
 
     Router::new().nest("/api", api).fallback_service(spa).layer(TraceLayer::new_for_http()).with_state(state)
 }

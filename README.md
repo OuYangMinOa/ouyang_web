@@ -139,6 +139,19 @@ DELETE /api/calendar/events/{id}
 
 「只刪這一次」是把那次的開始日期加進 `excluded`。修改重複事項會套用到每一次。
 
+## 小工具
+
+都在瀏覽器裡執行，後端不參與。工具登記在 `frontend/src/tools/registry.ts`，每個工具各自打包、進到那一頁才下載。
+
+- **圖片去背**：模型在 Web Worker 裡用 transformers.js 跑，從 Hugging Face 下載後存在瀏覽器快取。
+  自動去背用 `Ko033/isnet-general-use-onnx`（WebGPU 用 fp16 約 88 MB，CPU 用 int8 約 46 MB），點選用 `Xenova/slimsam-77-uniform`（第一次點選才下載），兩者都是 Apache-2.0。
+  onnxruntime 的 wasm（27 MB，gzip 後約 7 MB）跟著網站部署，不走 CDN；只有舊版 Safari 沒有 WebGPU 時才從 jsdelivr 載入另一個版本。
+  Docker 打包時會把大於 1 KB 的 JS／CSS／wasm 等另存一份 `.gz`，後端看到瀏覽器支援 gzip 就直接送壓縮版。
+- **匯率計算機**：瀏覽器直接呼叫 Frankfurter v2（`api.frankfurter.dev/v2`，彙整各國央行匯率，含 TWD），最新匯率存在 localStorage，離線時顯示上次的資料。
+- **ASCII 藝術字**：figlet 的 `.flf` 字型當成靜態檔輸出，選到才 fetch。
+- **Emoji 選擇器**：資料來自 `emojibase-data`（繁中＋英文）。**編碼與雜湊**：雜湊用 `hash-wasm`。
+
+## 部署
 
 | 環境 | 觸發 | Image tag | 伺服器 port |
 |---|---|---|---|

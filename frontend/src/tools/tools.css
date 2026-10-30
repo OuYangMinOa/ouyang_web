@@ -1,0 +1,74 @@
+/* ---- 小工具：大廳 ---- */
+
+.tools-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.tool-card {
+  display: flex;
+  gap: 14px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+.tool-card:hover,
+.tool-card:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.tool-card-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+.tool-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.tool-card-body strong {
+  color: var(--text-h);
+  font-size: 17px;
+}
+.tool-card-tags .chip {
+  margin: 0 4px 0 0;
+}
+
+/* ---- 小工具：共用版面 ---- */
+
+.tool-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.tool-title h1 {
+  margin: 0;
+}
+.tool-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 8px;
+  color: var(--text-h);
+  text-decoration: none;
+  font-size: 20px;
+}
+.tool-back:hover {
+  background: var(--surface);
+}

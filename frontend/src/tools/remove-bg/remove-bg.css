@@ -1,0 +1,303 @@
+/* ---- 圖片去背 ---- */
+
+.rbg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* 透明處的棋盤格，亮暗主題都從主題色調出來 */
+  --rbg-check-a: var(--surface);
+  --rbg-check-b: color-mix(in srgb, var(--text) 22%, var(--surface));
+}
+
+/* 上傳區 */
+.rbg-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 280px;
+  box-sizing: border-box;
+  padding: 32px 16px;
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.rbg-drop:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.rbg-drop.over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.rbg-drop strong {
+  color: var(--text-h);
+  font-size: 18px;
+}
+.rbg-drop-icon {
+  font-size: 44px;
+  line-height: 1;
+}
+.rbg-drop.over .rbg-drop-icon {
+  transform: scale(1.1);
+}
+
+/* 編輯時拖檔案進來的提示 */
+.rbg-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* 編輯器：窄的時候上下排，夠寬時畫布在左、控制在右 */
+.rbg-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@container (min-width: 780px) {
+  .rbg-editor {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+
+.rbg-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  min-height: 160px;
+  overflow: hidden;
+}
+
+.rbg-box {
+  position: relative;
+  flex: none;
+}
+
+.rbg-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  /* 讓筆刷在手機上不會變成捲動頁面 */
+  touch-action: none;
+  background: repeating-conic-gradient(var(--rbg-check-b) 0 25%, var(--rbg-check-a) 0 50%) 0 0 / 20px 20px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.rbg-canvas.brush {
+  cursor: none;
+}
+.rbg-canvas.click {
+  cursor: crosshair;
+}
+
+.rbg-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 1.5px solid var(--text-h);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px var(--bg),
+    inset 0 0 0 1px var(--bg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rbg-marker {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid var(--on-accent);
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--highlight);
+  pointer-events: none;
+  animation: rbg-pulse 1s ease-in-out infinite;
+}
+.rbg-marker.neg {
+  background: var(--danger);
+}
+@keyframes rbg-pulse {
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+/* 畫布上的狀態：下載進度、分析中 */
+.rbg-overlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--shadow);
+  color: var(--text-h);
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+.rbg-overlay button {
+  pointer-events: auto;
+}
+
+.rbg-bar {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.rbg-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s;
+}
+
+/* 控制面板 */
+.rbg-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rbg-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.rbg-fields:disabled {
+  opacity: 0.55;
+}
+
+.rbg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rbg-label {
+  font-size: 14px;
+}
+
+.rbg-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rbg-seg button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.rbg-seg button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.rbg-fields:disabled button:disabled {
+  opacity: 1;
+}
+
+.rbg-range {
+  gap: 0;
+}
+.rbg-range-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rbg-range output {
+  color: var(--text-h);
+  font: 13px var(--mono);
+}
+/* App.css 的 input 樣式是給文字框的，滑桿要拿掉外框與內距 */
+.rbg-range input[type='range'] {
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.rbg-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: 15px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+.rbg-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.rbg-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rbg-buttons > button {
+  flex: 1 1 auto;
+}
+
+/* 說明 */
+.rbg-notes h2 {
+  margin: 16px 0 8px;
+  font-size: 16px;
+}
+.rbg-notes ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+.rbg-notes li + li {
+  margin-top: 4px;
+}
