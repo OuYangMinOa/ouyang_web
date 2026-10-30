@@ -58,6 +58,18 @@
   --ev-teal: #0f766e;
   /* 對話框後面的遮罩 */
   --scrim: rgb(28 26 23 / 0.4);
+  /* 抽籤：轉盤格子、彈珠和名牌的十種顏色，lot-ink 是畫在上面的字 */
+  --lot-1: #c2410c;
+  --lot-2: #2563eb;
+  --lot-3: #2f7d4f;
+  --lot-4: #be123c;
+  --lot-5: #7c3aed;
+  --lot-6: #0f766e;
+  --lot-7: #a16207;
+  --lot-8: #c0267a;
+  --lot-9: #4f46e5;
+  --lot-10: #57534e;
+  --lot-ink: #fffaf3;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -123,6 +135,17 @@
     --ev-purple: #c084fc;
     --ev-teal: #2dd4bf;
     --scrim: rgb(0 0 0 / 0.6);
+    --lot-1: #ff7a3d;
+    --lot-2: #60a5fa;
+    --lot-3: #5fd38d;
+    --lot-4: #ff6b81;
+    --lot-5: #c084fc;
+    --lot-6: #2dd4bf;
+    --lot-7: #fbbf24;
+    --lot-8: #f472b6;
+    --lot-9: #a5b4fc;
+    --lot-10: #d6d3d1;
+    --lot-ink: #1a0e06;
     color-scheme: dark;
   }
 }
@@ -178,6 +201,17 @@
   --ev-purple: #c084fc;
   --ev-teal: #2dd4bf;
   --scrim: rgb(0 0 0 / 0.6);
+  --lot-1: #ff7a3d;
+  --lot-2: #60a5fa;
+  --lot-3: #5fd38d;
+  --lot-4: #ff6b81;
+  --lot-5: #c084fc;
+  --lot-6: #2dd4bf;
+  --lot-7: #fbbf24;
+  --lot-8: #f472b6;
+  --lot-9: #a5b4fc;
+  --lot-10: #d6d3d1;
+  --lot-ink: #1a0e06;
   color-scheme: dark;
 }
 

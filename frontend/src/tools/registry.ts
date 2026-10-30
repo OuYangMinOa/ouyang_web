@@ -1,7 +1,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 
 /** 側邊欄的分組，順序就是顯示順序 */
-export const TOOL_CATEGORIES = ['圖片', '文字', '計算'] as const
+export const TOOL_CATEGORIES = ['圖片', '文字', '計算', '娛樂'] as const
 
 export type ToolInfo = {
   /** 網址用的 id：/tools/<id> */
@@ -61,6 +61,15 @@ export const TOOLS: ToolInfo[] = [
     tags: ['Frankfurter'],
     category: '計算',
     component: lazy(() => import('./currency')),
+  },
+  {
+    id: 'lottery',
+    name: '抽籤',
+    icon: '🎲',
+    blurb: '籤筒、轉盤、彈珠賽跑、鬼腳圖，四種方式公平抽出結果。',
+    tags: ['轉盤', '鬼腳圖'],
+    category: '娛樂',
+    component: lazy(() => import('./lottery')),
   },
 ]
 
