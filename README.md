@@ -165,6 +165,42 @@ GET /api/music/files/{name}    檔案本身，支援 Range（拖曳進度）
 - 本機開發用 `MUSIC_DIR` 指定資料夾，沒設就讀 `backend/data/music`，不存在就是空清單。
 - 收藏、音量、隨機和循環設定存在瀏覽器的 localStorage，不跟帳號走。播放器放在 APP 的外層，切換「全部」「收藏」不會中斷，離開音樂 APP 才會停。
 
+## 天氣與環境
+
+`/weather`：總覽、`/weather/typhoon` 颱風、`/weather/forecast` 全台天氣、`/weather/quake` 地震。後端在 `backend/src/weather/`，外部資料都由後端抓、整理過再給前端。
+
+```
+GET /api/weather/typhoons      颱風（各來源合併）  快取 10 分鐘
+GET /api/weather/forecast      22 縣市天氣與空氣品質  快取 15 分鐘
+GET /api/weather/quakes        最新速報、各國地震報告、速報連線狀態  報告快取 3 分鐘
+GET /api/weather/quakes/ws     即時速報  server → client  {type:"snapshot", eew:[...]}、{type:"eew", eew}
+```
+
+- 有人來看才抓，同一時間只有一個請求真的打外部 API；外部來源掛掉時繼續回上一次成功的資料，頁尾標出哪個來源暫時連不上。
+- **颱風・傳統模式**：日本氣象廳（過去路徑、強度、70% 機率圓、暴風圈）、GDACS 整理的 JTWC／NHC（全球，含不確定範圍）、中央氣象署（要金鑰）。
+  各來源的颱風依目前位置合併（600 公里內視為同一個）。GDACS 在颱風消散後還會掛一陣子，美國那邊用 NHC 自己的清單過濾。
+- **颱風・AI 模式**：Google DeepMind Weather Lab 的系集預報（`OPER` 模型，每 6 小時起報，發布比起報晚 6～8 小時），平均路徑加上 50 個成員。即時資料受其使用條款約束，頁面上有標示。
+- **首頁颱風區**：西北太平洋有官方資料的颱風才出現，地圖（Leaflet）在那時才下載。
+- **天氣**：Open-Meteo（免金鑰，一次請求查 22 縣市），空氣品質是美國 AQI。
+- **地圖底圖**：Esri 的淺灰／深灰 Canvas，跟著主題切換（CARTO 已經要金鑰）。線條顏色用 CSS class 控制，才吃得到主題變數。
+- **地震速報**：伺服器一啟動就連 wolfx 的 `cwa_eew`、`jma_eew`、`sc_eew`、`fj_eew`，經過主機上的 relay（`EEW_RELAY_URL`，和歐陽小俠共用同一條上游）。
+  wolfx 同一個 IP 大約只給 5 條 WebSocket，所以只連小俠也在用的這 4 個，地震清單改用 HTTP；relay 連不上時也**不會**改成直連，避免和 relay 搶連線。
+  沒設 `EEW_RELAY_URL`（本機開發）就直接連 wolfx。台灣速報的 HTTP 版被 Cloudflare 擋，啟動後要等推送才有資料。
+- **地震報告**：USGS（台灣附近 M3+、全球 M4.5+）、wolfx 轉的日本氣象廳與中國地震台網清單、中央氣象署（要金鑰）。
+- 地震頁的 S 波倒數與當地震度是用 3.5 km/s 和台灣常用的 PGA 衰減式粗估，「測試速報畫面」按鈕只在自己的瀏覽器裡模擬一筆。
+
+### 中央氣象署的金鑰
+
+在伺服器上建立 `~/ouyang_web/<env>/secrets.env`（不進 git，部署也不會覆蓋），下次部署就會帶進容器：
+
+```shell
+echo 'CWA_API_KEY=CWA-XXXXXXXX' > ~/ouyang_web/prod/secrets.env
+chmod 600 ~/ouyang_web/prod/secrets.env
+```
+
+有金鑰才會抓的資料：颱風路徑 `W-C0034-005`（含中文名稱）、顯著與小區域有感地震報告 `E-A0015-001`／`E-A0016-001`。
+本機開發直接 `CWA_API_KEY=... cargo run`。
+
 ## 部署
 
 | 環境 | 觸發 | Image tag | 伺服器 port |
@@ -223,6 +259,7 @@ docker rollout app
 ```
 ~/ouyang_web/staging/   compose.yaml、staging.env、deploy.sh、traefik/（每次部署覆蓋）、.env（deploy.sh 產生）
 ~/ouyang_web/prod/      同上
+~/ouyang_web/<env>/secrets.env   手動放的金鑰（CWA_API_KEY），deploy.sh 會併進 .env
 ```
 
 Traefik 以固定的專案名稱 `ouyang-web-traefik` 執行，staging 和 prod 共用，所以修改 `deploy/traefik/` 會同時影響兩個環境。

@@ -1,0 +1,896 @@
+/* ---- 天氣與環境：共用 ---- */
+
+.weather-page {
+  min-width: 0;
+}
+
+.weather-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.weather-head h1 {
+  margin: 0;
+}
+.weather-lead {
+  margin-bottom: 16px;
+}
+.fineprint {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.fineprint a {
+  color: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sub-head {
+  margin: 20px 0 8px;
+}
+
+/* 兩個或多個選項的切換（傳統／AI） */
+.mode-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.mode-switch button {
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+}
+.mode-switch button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 分頁按鈕（預報單位、地震來源） */
+.detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0 8px;
+}
+.detail-tabs button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-h);
+}
+.detail-tabs button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 名稱／數值的清單 */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px 20px;
+  margin: 16px 0 0;
+}
+.facts div {
+  min-width: 0;
+}
+.facts dt {
+  font-size: 13px;
+  color: var(--text);
+}
+.facts dd {
+  margin: 2px 0 0;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.live-dot::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+}
+.live-dot.on::before {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+}
+
+.source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+  font-size: 13px;
+}
+.source-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+}
+.empty-state p {
+  margin: 0;
+}
+.empty-icon {
+  font-size: 40px;
+}
+
+/* ---- 地圖 ---- */
+
+.weather-map {
+  height: min(62vh, 540px);
+  min-height: 300px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  /* Leaflet 的控制項 z-index 很高，關在這個容器裡，免得蓋過頁首的下拉選單 */
+  isolation: isolate;
+  z-index: 0;
+}
+.weather-map .leaflet-container,
+.weather-map.leaflet-container {
+  font: inherit;
+  background: var(--surface);
+}
+.weather-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text);
+  font-size: 11px;
+}
+.weather-map .leaflet-control-attribution a {
+  color: var(--text-h);
+}
+.weather-map .leaflet-bar a {
+  background: var(--surface);
+  color: var(--text-h);
+  border-color: var(--border);
+}
+.weather-map .leaflet-tooltip {
+  background: var(--surface);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.weather-map .leaflet-tooltip-top::before {
+  border-top-color: var(--border);
+}
+
+/* 颱風：路徑線條（顏色依預報單位） */
+.agency-cwa {
+  --agency: var(--agency-cwa);
+}
+.agency-jma {
+  --agency: var(--agency-jma);
+}
+.agency-jtwc {
+  --agency: var(--agency-jtwc);
+}
+.agency-nhc {
+  --agency: var(--agency-nhc);
+}
+
+.tc-past {
+  stroke: var(--agency);
+  stroke-width: 2.5;
+  fill: none;
+}
+.tc-forecast {
+  stroke: var(--agency);
+  stroke-width: 2.5;
+  stroke-dasharray: 6 6;
+  fill: none;
+}
+.tc-prob {
+  stroke: var(--agency);
+  stroke-width: 1;
+  stroke-opacity: 0.5;
+  fill: var(--agency);
+  fill-opacity: 0.06;
+}
+.tc-cone {
+  stroke: var(--agency);
+  stroke-width: 1;
+  stroke-opacity: 0.4;
+  stroke-dasharray: 2 4;
+  fill: var(--agency);
+  fill-opacity: 0.08;
+}
+.tc-faint {
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+}
+.tc-storm-radius {
+  stroke: var(--danger);
+  stroke-width: 1.5;
+  fill: var(--danger);
+  fill-opacity: 0.1;
+}
+.tc-member {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-opacity: 0.35;
+  fill: none;
+}
+.tc-ai-mean {
+  stroke: var(--accent);
+  stroke-width: 3.5;
+  fill: none;
+}
+.tc-dim {
+  opacity: 0.35;
+}
+
+/* 颱風強度：圓點、標籤、圖例共用 */
+.tc-level-none,
+.tc-level-0 {
+  --level: var(--tc-0);
+}
+.tc-level-1 {
+  --level: var(--tc-1);
+}
+.tc-level-2 {
+  --level: var(--tc-2);
+}
+.tc-level-3 {
+  --level: var(--tc-3);
+}
+path.tc-point {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+  fill: var(--level);
+  fill-opacity: 1;
+}
+path.tc-point.tc-level-none {
+  stroke: var(--agency);
+  stroke-width: 2;
+  fill: var(--surface);
+}
+.tc-tag {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--level);
+  color: var(--level);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.storm-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--level);
+  flex-shrink: 0;
+}
+
+/* 颱風眼：外圈旋轉的弧線 */
+.tc-eye span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--level);
+  border-left-color: transparent;
+  border-right-color: transparent;
+  background: radial-gradient(circle, var(--level) 0 22%, transparent 26%);
+  animation: tc-spin 2.4s linear infinite;
+}
+@keyframes tc-spin {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+/* 頁面上的選擇與控制 */
+.storm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.storm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-h);
+  border-radius: 999px;
+  max-width: 100%;
+}
+.storm-chip.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.storm-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-bottom: 8px;
+}
+.legend-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.legend-line {
+  display: inline-block;
+  width: 22px;
+  border-top: 3px solid var(--agency, var(--accent));
+}
+
+.storm-detail {
+  margin-top: 16px;
+}
+.storm-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.storm-detail-head h2,
+.storm-detail-head h3 {
+  margin: 0;
+}
+.storm-detail .chip.subtle {
+  margin: 0;
+}
+.track-table {
+  margin-top: 8px;
+}
+
+/* ---- 首頁的颱風區 ---- */
+
+.typhoon-home {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--danger) 6%, transparent), transparent 60%);
+}
+.typhoon-home .kicker span {
+  color: var(--danger);
+}
+.typhoon-home-title {
+  margin: 0 0 24px;
+  font: 900 clamp(30px, 4vw, 48px) / 1.1 var(--serif);
+  color: var(--text-h);
+}
+.typhoon-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  gap: 20px;
+  align-items: start;
+}
+.typhoon-home-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.typhoon-home-list .card {
+  margin: 0;
+}
+.typhoon-home-list p {
+  margin: 6px 0 0;
+}
+.typhoon-home-map {
+  height: 420px;
+}
+
+/* ---- 總覽 ---- */
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.hub-card {
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+.hub-card:hover,
+.hub-card:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.hub-card-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+.hub-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.hub-card-body strong {
+  color: var(--text-h);
+  font-size: 17px;
+}
+.hub-cities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--text-h);
+}
+
+/* ---- 全台天氣 ---- */
+
+.city-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+.city-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 12px 14px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 0;
+}
+.city-card:hover {
+  border-color: var(--accent);
+}
+.city-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.city-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.city-card-top strong {
+  color: var(--text-h);
+}
+.city-card-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.city-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.city-temp {
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--text-h);
+  line-height: 1.1;
+}
+.city-card-meta {
+  font-size: 13px;
+}
+
+.aqi-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--aqi);
+  color: var(--aqi);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.aqi-0 {
+  --aqi: var(--aqi-0);
+}
+.aqi-1 {
+  --aqi: var(--aqi-1);
+}
+.aqi-2 {
+  --aqi: var(--aqi-2);
+}
+.aqi-3 {
+  --aqi: var(--aqi-3);
+}
+.aqi-4 {
+  --aqi: var(--aqi-4);
+}
+.aqi-5 {
+  --aqi: var(--aqi-5);
+}
+
+.city-detail {
+  margin-top: 0;
+}
+.city-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.city-detail-head h2 {
+  margin: 0;
+}
+.city-detail-icon {
+  font-size: 44px;
+  line-height: 1;
+}
+.city-detail-temp {
+  margin-left: auto;
+  font-size: 44px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+/* 逐時預報：卡片裡自己橫向捲動，頁面本身不會出現橫向捲軸 */
+.hourly {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  padding: 0 0 6px;
+  margin: 0;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+.hourly li {
+  flex: 0 0 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  scroll-snap-align: start;
+}
+.hourly strong {
+  color: var(--text-h);
+}
+.rain {
+  font-size: 12px;
+  color: var(--agency-jma);
+}
+
+.daily {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.daily li {
+  display: grid;
+  grid-template-columns: 72px 32px minmax(0, 1fr) 56px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.daily li:last-child {
+  border-bottom: 0;
+}
+.daily-day {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.daily-day strong {
+  color: var(--text-h);
+}
+.daily-icon {
+  font-size: 22px;
+}
+.daily-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.daily-temp {
+  text-align: right;
+  white-space: nowrap;
+}
+.daily-temp strong {
+  color: var(--text-h);
+}
+
+/* ---- 地震 ---- */
+
+.eq-depth-shallow {
+  --depth: var(--eq-shallow);
+}
+.eq-depth-mid {
+  --depth: var(--eq-mid);
+}
+.eq-depth-deep {
+  --depth: var(--eq-deep);
+}
+path.eq-dot {
+  stroke: var(--depth);
+  stroke-width: 1.5;
+  fill: var(--depth);
+  fill-opacity: 0.35;
+}
+.eq-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--depth);
+  background: color-mix(in srgb, var(--depth) 35%, transparent);
+}
+.eq-mag {
+  font-weight: 600;
+  color: var(--depth);
+}
+
+.eq-level-0 {
+  --eq-level: var(--text);
+}
+.eq-level-1 {
+  --eq-level: var(--tc-1);
+}
+.eq-level-2 {
+  --eq-level: var(--tc-2);
+}
+.eq-level-3 {
+  --eq-level: var(--danger);
+}
+.eq-intensity {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--eq-level);
+  color: var(--eq-level);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* 震央：一直往外擴散的圓 */
+.eq-epicenter span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 0 var(--danger);
+  animation: eq-pulse 1.4s ease-out infinite;
+}
+@keyframes eq-pulse {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 70%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 22px transparent;
+  }
+}
+.eq-wave-p {
+  stroke: var(--agency-jma);
+  stroke-width: 2;
+  fill: none;
+}
+.eq-wave-s {
+  stroke: var(--danger);
+  stroke-width: 2.5;
+  fill: var(--danger);
+  fill-opacity: 0.08;
+}
+
+.eew-alert {
+  margin: 0 0 16px;
+  border: 2px solid var(--eq-level);
+  background: color-mix(in srgb, var(--eq-level) 8%, var(--surface));
+}
+.eew-alert.eq-level-0 {
+  --eq-level: var(--tc-1);
+}
+.eew-alert-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.eew-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--eq-level);
+  color: var(--on-accent);
+  font-weight: 600;
+  font-size: 14px;
+}
+.eew-alert-title {
+  margin: 10px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.eew-countdown {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.eew-countdown label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+}
+.eew-seconds {
+  margin: 10px 0 4px;
+  font-size: 20px;
+  color: var(--text-h);
+}
+.eew-seconds strong {
+  font-size: 40px;
+  color: var(--eq-level);
+  font-variant-numeric: tabular-nums;
+}
+
+.eew-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+.eew-list .card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+}
+.eew-list strong {
+  color: var(--text-h);
+}
+
+.quake-table td.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.quake-table td.actions button {
+  margin: 0;
+}
+.quake-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 8px;
+  color: var(--accent);
+}
+
+.feed-status {
+  margin-top: 24px;
+  font-size: 14px;
+}
+.feed-status summary {
+  cursor: pointer;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+.feed-status ul {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+.feed-status li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-eye span,
+  .eq-epicenter span {
+    animation: none;
+  }
+}
+
+/* ---- 手機 ---- */
+
+@media (max-width: 900px) {
+  .typhoon-home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .typhoon-home-map {
+    height: 340px;
+  }
+}
+
+@media (max-width: 640px) {
+  .weather-map {
+    height: 52vh;
+    min-height: 280px;
+  }
+  .mode-switch {
+    width: 100%;
+  }
+  .mode-switch button {
+    flex: 1;
+  }
+  .city-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .city-temp {
+    font-size: 26px;
+  }
+  .city-detail-icon,
+  .city-detail-temp {
+    font-size: 36px;
+  }
+  .daily li {
+    grid-template-columns: 56px 28px minmax(0, 1fr) auto;
+  }
+  .daily-label {
+    display: none;
+  }
+  .quake-table td.actions {
+    justify-content: flex-start;
+  }
+  .facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

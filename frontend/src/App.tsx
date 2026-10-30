@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { api, PERMISSIONS, type User } from './api'
 import AppLauncher from './apps/AppLauncher'
@@ -22,6 +22,20 @@ import ToolPage from './tools/ToolPage'
 import ToolsHub from './tools/ToolsHub'
 import { getThemePreference, setThemePreference, type ThemePreference } from './theme'
 import './App.css'
+
+// 天氣與環境的頁面帶著 Leaflet 地圖，進到那一頁才下載
+const WeatherHub = lazy(() => import('./weather/WeatherHub'))
+const TyphoonPage = lazy(() => import('./weather/TyphoonPage'))
+const ForecastPage = lazy(() => import('./weather/ForecastPage'))
+const QuakePage = lazy(() => import('./weather/QuakePage'))
+
+function Lazy({ page: Page }: { page: ComponentType }) {
+  return (
+    <Suspense fallback={<p className="muted">載入中…</p>}>
+      <Page />
+    </Suspense>
+  )
+}
 
 type Health = { status: string; env: string; version: string; db: boolean }
 
@@ -158,6 +172,12 @@ function App() {
                 <Route index element={<MusicLibrary />} />
                 <Route path="favorites" element={<MusicLibrary favoritesOnly />} />
               </Route>
+            </Route>
+            <Route path="/weather" element={<AppLayout />}>
+              <Route index element={<Lazy page={WeatherHub} />} />
+              <Route path="typhoon" element={<Lazy page={TyphoonPage} />} />
+              <Route path="forecast" element={<Lazy page={ForecastPage} />} />
+              <Route path="quake" element={<Lazy page={QuakePage} />} />
             </Route>
             <Route path="/login" element={<Login />} />
             <Route

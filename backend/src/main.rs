@@ -10,7 +10,12 @@ use std::{
     time::Duration,
 };
 
-use backend::{AppState, auth::upsert_admin, healthcheck, router};
+use backend::{
+    AppState,
+    auth::upsert_admin,
+    healthcheck, router,
+    weather::{self, Weather},
+};
 use sqlx::{
     SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
@@ -47,6 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(dir) = env::var("MUSIC_DIR") {
         state.music_dir = dir.into();
     }
+    state.weather = Arc::new(Weather::from_env());
+    // 地震速報要一直連著，不等有人來看；本機的 relay 見 weather/quake.rs
+    weather::quake::spawn(state.weather.clone(), env::var("EEW_RELAY_URL").ok());
     let draining = state.draining.clone();
     let app = router(state, &static_dir);
     let listener = tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;

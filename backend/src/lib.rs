@@ -3,6 +3,7 @@ pub mod auth;
 pub mod calendar;
 pub mod games;
 pub mod music;
+pub mod weather;
 
 use std::{
     io::{Read, Write},
@@ -47,6 +48,8 @@ pub struct AppState {
     pub rooms: Arc<games::Rooms>,
     /// 音樂資料夾（唯讀），見 music.rs
     pub music_dir: PathBuf,
+    /// 天氣與環境：外部資料的快取，以及地震速報的即時連線
+    pub weather: Arc<weather::Weather>,
 }
 
 impl AppState {
@@ -60,6 +63,7 @@ impl AppState {
             login_limiter: Arc::default(),
             rooms: Arc::default(),
             music_dir: PathBuf::from("data/music"),
+            weather: Arc::default(),
         }
     }
 }
@@ -82,6 +86,10 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/rooms/{code}/ws", get(games::connect))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
+        .route("/weather/forecast", get(weather::forecast::forecast))
+        .route("/weather/typhoons", get(weather::typhoon::typhoons))
+        .route("/weather/quakes", get(weather::quake::quakes))
+        .route("/weather/quakes/ws", get(weather::quake::connect))
         .fallback(api_not_found);
 
     // 打包時已經把較大的檔案另存一份 .gz（Dockerfile），瀏覽器支援 gzip 就直接送那份

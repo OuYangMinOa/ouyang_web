@@ -5,6 +5,7 @@ import { appPath, visibleApps } from '../apps/registry'
 import { useAuth } from '../auth'
 import SunStage from '../components/SunStage'
 import TiltCard from '../components/TiltCard'
+import TyphoonHome from '../weather/TyphoonHome'
 import './Home.css'
 
 type Message = { id: number; content: string; created_at: string }
@@ -344,6 +345,8 @@ export default function Home() {
   return (
     <div className="home">
       <Hero />
+      {/* 西北太平洋有颱風時才會出現 */}
+      <TyphoonHome />
       <About />
       <Works />
       <Guestbook />
