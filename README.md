@@ -128,11 +128,25 @@ POST /api/games/tetris/rooms  {"public":true}  →  201 {"code":"ABCDE"}   publi
 GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升級成 WebSocket（登入時用帳號與帳號名稱）
 ```
 
-- 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T-Spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
+- 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T／L／J／S／Z／I 的 spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
   負責選目標（隨機／快輸的／徽章／反擊，或手動點小盤面）、轉送垃圾行、算 KO、徽章、名次與速度等級，以及模擬電腦玩家。
 - 房間每 250ms 推進一次，這段時間的狀態和盤面變化合併成一則廣播。
 - 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
 - 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
+- 單人模式每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限；分數照官方規則（消行、spin、B2B、連擊、全消乘上等級，加上下落格數）。
+  登入的人的成績會上傳到排行榜（`backend/src/tetris_scores.rs`，每個帳號只留最高分）：
+
+  ```
+  GET  /api/games/tetris/scores                 →  {"top":[{rank,username,score,lines,level,duration_ms,achieved_at}],"me":{…}|null}
+  POST /api/games/tetris/runs                   →  201 {"id"}   開局，伺服器記下開始時間（要登入，一個帳號同時一局）
+  POST /api/games/tetris/runs/{id}/checkpoints  {"score","lines","level","pieces","duration_ms","board"}  →  204
+  POST /api/games/tetris/runs/{id}/finish       同上  →  排行榜再加 "best"（有沒有刷新紀錄）
+  ```
+
+  分數是前端算的，伺服器不重播整局，而是每 5 秒（遊戲時間）檢查一次中間態來確認真的有玩：遊戲時間不能超過實際經過的時間、
+  數字只增不減且增加速度合理、盤面沒有滿行且格數等於「方塊數 × 4 − 行數 × 10」。有一次不合理整局作廢。
+  進行中的局只放在記憶體，重啟或換版時正在玩的那局無法上傳。
+- 背景音樂是 Korobeiniki（俄羅斯民謠），用 Web Audio 即時合成（`music.ts`），不需要音檔；速度跟著等級變快，按 M 或按鈕開關。
 
 ## 日曆
 

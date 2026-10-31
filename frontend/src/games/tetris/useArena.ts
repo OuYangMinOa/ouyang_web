@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router'
 import { api, errorMessage } from '../../api'
 import { useAuth } from '../../auth'
 import { load, save } from '../shared/storage'
-import { normalizeCode } from '../shared/useRoom'
+import { normalizeCode, playerId } from '../shared/useRoom'
 
 /**
  * 俄羅斯方塊大逃殺的連線（後端見 `backend/src/tetris.rs`）。
@@ -97,24 +97,6 @@ export function loadName(): string {
 
 export function saveName(name: string) {
   save('tetris:name', name)
-}
-
-/** 訪客的玩家 id：和棋類共用同一把 key，每個分頁一個 */
-function playerId(): string {
-  const key = 'games:player'
-  try {
-    const existing = sessionStorage.getItem(key)
-    if (existing) return existing
-  } catch {
-    // 讀不到就每次產生新的，只是重新整理後拿不回位置
-  }
-  const id = crypto.randomUUID()
-  try {
-    sessionStorage.setItem(key, id)
-  } catch {
-    // 同上
-  }
-  return id
 }
 
 export function useArena(handlers: ArenaHandlers) {

@@ -4,6 +4,7 @@ pub mod calendar;
 pub mod games;
 pub mod music;
 pub mod tetris;
+pub mod tetris_scores;
 pub mod visits;
 pub mod weather;
 
@@ -50,6 +51,8 @@ pub struct AppState {
     pub rooms: Arc<games::Rooms>,
     /// 俄羅斯方塊大逃殺的房間（只在記憶體裡）
     pub tetris: Arc<tetris::Arenas>,
+    /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
+    pub tetris_runs: Arc<tetris_scores::Runs>,
     /// 音樂資料夾（唯讀），見 music.rs
     pub music_dir: PathBuf,
     /// 天氣與環境：外部資料的快取，以及地震速報的即時連線
@@ -68,6 +71,7 @@ impl AppState {
             login_limiter: Arc::default(),
             rooms: Arc::default(),
             tetris: Arc::default(),
+            tetris_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
             weather: Arc::default(),
             visit_limiter: Arc::default(),
@@ -96,6 +100,10 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/rooms/{code}/ws", get(games::connect))
         .route("/games/tetris/rooms", post(tetris::create_arena))
         .route("/games/tetris/rooms/{code}/ws", get(tetris::connect))
+        .route("/games/tetris/scores", get(tetris_scores::list_scores))
+        .route("/games/tetris/runs", post(tetris_scores::start_run))
+        .route("/games/tetris/runs/{id}/checkpoints", post(tetris_scores::checkpoint))
+        .route("/games/tetris/runs/{id}/finish", post(tetris_scores::finish_run))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))

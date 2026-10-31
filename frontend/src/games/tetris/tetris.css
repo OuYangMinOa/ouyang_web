@@ -373,3 +373,57 @@
   font-weight: 600;
   color: var(--accent);
 }
+
+/* 單人排行榜：名次、名字、分數一行，行數和等級在下面一行（窄螢幕也不會擠） */
+.tetris-scores a {
+  color: var(--accent);
+}
+.tetris-ranks {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tetris-rank {
+  display: grid;
+  grid-template-columns: 2em minmax(0, 1fr) auto;
+  column-gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.tetris-rank-no {
+  grid-row: span 2;
+  align-self: center;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.tetris-rank-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-h);
+}
+.tetris-rank-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.tetris-rank-meta {
+  grid-column: 2 / span 2;
+  font-size: 12px;
+}
+.tetris-rank.mine {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.tetris-rank.mine .tetris-rank-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tetris-rank-gap {
+  text-align: center;
+  line-height: 1;
+}

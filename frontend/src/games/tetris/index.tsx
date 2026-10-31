@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
+import { errorMessage } from '../../api'
 import { useAuth } from '../../auth'
 import { load, save } from '../shared/storage'
 import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
 import type { MiniInfo } from './draw'
 import { badgeCount, describe, Tetris } from './engine'
+import { CHECKPOINT_MS, formatScore, Leaderboard, RunReporter, useLeaderboard, type RunState } from './Leaderboard'
 import { MiniBoards } from './MiniBoards'
+import { useMusic } from './music'
 import { Playfield, type PlayfieldHooks } from './Playfield'
 import {
   MAX_NAME,
@@ -34,6 +37,10 @@ const STRATEGIES: { value: Strategy; label: string; hint: string }[] = [
 
 const BOT_OPTIONS = [0, 10, 30, 60, 98]
 
+/** 單人模式每消這麼多行、或每玩這麼久就升一級（後端檢查分數時用一樣的規則） */
+const LINES_PER_LEVEL = 10
+const MS_PER_LEVEL = 60_000
+
 function stars(points: number): string {
   const n = badgeCount(points)
   return '★'.repeat(n) + '☆'.repeat(4 - n)
@@ -56,6 +63,15 @@ function useFlash(): [ReactNode, (text: string | null, sent: number) => void] {
     </span>
   )
   return [node, show]
+}
+
+/** 背景音樂開關（也可以按 M） */
+function MusicButton({ music }: { music: ReturnType<typeof useMusic> }) {
+  return (
+    <button type="button" className="secondary" onClick={music.toggle} aria-pressed={music.enabled}>
+      {music.enabled ? '♪ 音樂：開' : '♪ 音樂：關'}
+    </button>
+  )
 }
 
 /** 從收到的毫秒數往下倒數；`stamp` 換了（收到新的狀態）就從現在重新起算 */
@@ -87,14 +103,17 @@ function Help() {
           <li>↓：加速下落；空白鍵：直接落下</li>
           <li>↑ / X：順時針轉；Z / Ctrl：逆時針轉</li>
           <li>C / Shift：保留（Hold）</li>
-          <li>1～4：切換攻擊目標</li>
+          <li>1～4：切換攻擊目標；M：背景音樂開關</li>
         </ul>
         <p className="muted">手機用盤面下方的按鈕，左右和下可以按住不放。</p>
       </div>
       <div className="tetris-help">
         <strong>規則</strong>
         <ul>
-          <li>一次消 2 / 3 / 4 行送出 1 / 2 / 4 行垃圾；T-Spin、連擊、連續高難度消行（B2B）和全消都有加成。</li>
+          <li>一次消 2 / 3 / 4 行送出 1 / 2 / 4 行垃圾；連擊、連續高難度消行（B2B）和全消都有加成。</li>
+          <li>
+            用旋轉把方塊卡進去再消行就是 spin：T 以外的方塊（O 除外）只要轉進去後左、右、上都動不了就算，攻擊和 T-Spin 一樣，單消 2、雙消 4、三消 6 行。
+          </li>
           <li>收到的垃圾行先在左邊量表等 2 秒（黃→紅），這段時間消行可以抵銷；之後放下沒消行的方塊就會升上來。</li>
           <li>把對手頂到出局就是 KO，拿到徽章點數；徽章越多攻擊越強，最多 +100%。</li>
           <li>剩下的人越少，方塊掉得越快。活到最後的人獲勝。</li>
@@ -110,6 +129,7 @@ function Menu({ onPractice }: { onPractice: () => void }) {
   const location = useLocation()
   const [name, setName] = useState(loadName)
   const [draft, setDraft] = useState('')
+  const leaderboard = useLeaderboard()
 
   function changeName(value: string) {
     const next = [...value].slice(0, MAX_NAME).join('')
@@ -123,7 +143,14 @@ function Menu({ onPractice }: { onPractice: () => void }) {
   }
 
   return (
-    <GameLayout side={<Help />}>
+    <GameLayout
+      side={
+        <>
+          <Leaderboard board={leaderboard.board} error={leaderboard.error} />
+          <Help />
+        </>
+      }
+    >
       <div className="tetris-menu">
         <p className="tetris-intro">
           最多 {MAX_PLAYERS} 人同場的俄羅斯方塊大逃殺。消行會變成垃圾行送給你瞄準的對手，把別人頂到出局就能拿徽章、讓攻擊更強，
@@ -163,7 +190,7 @@ function Menu({ onPractice }: { onPractice: () => void }) {
             建立私人房間
           </button>
           <button type="button" className="secondary" onClick={onPractice}>
-            單人練習
+            單人模式
           </button>
         </div>
         <form className="inline-form" onSubmit={submit}>
@@ -191,18 +218,61 @@ function Menu({ onPractice }: { onPractice: () => void }) {
 
 type PracticePhase = 'running' | 'paused' | 'over'
 
+/** 回報給排行榜伺服器的中間態 */
+function runState(g: Tetris): RunState {
+  return {
+    score: g.score,
+    lines: g.lines,
+    level: g.level,
+    pieces: g.pieces,
+    // 無條件進位：等級是用沒取整的時間算的，送出去的時間不能比它短
+    duration_ms: Math.max(1, Math.ceil(g.clock)),
+    board: g.cells(),
+  }
+}
+
 function Practice({ onExit }: { onExit: () => void }) {
+  const { user } = useAuth()
   const [initial] = useState(() => new Tetris())
   const game = useRef<Tetris | null>(initial)
+  /** 已經結算過的那一局，避免結束時連續幾個畫面重複上傳 */
+  const ended = useRef<Tetris | null>(null)
   const [phase, setPhase] = useState<PracticePhase>('running')
-  const [hud, setHud] = useState({ lines: 0, level: 1 })
-  const [best, setBest] = useState(() => load<number>('tetris:best', 0))
+  const [hud, setHud] = useState({ score: 0, lines: 0, level: 1 })
+  const [best, setBest] = useState(() => load<number>('tetris:best-score', 0))
+  /** 這局上傳後的結果：null 是還沒（或不用）上傳 */
+  const [result, setResult] = useState<
+    { rank: number; best: boolean } | { error: string } | 'sending' | null
+  >(null)
+  /** 這局的成績上傳（有登入才有），以及下一次要回報進度的遊戲時間 */
+  const run = useRef<{ game: Tetris; reporter: RunReporter; next: number } | null>(null)
+  const leaderboard = useLeaderboard()
   const [flash, showFlash] = useFlash()
+  const music = useMusic(phase === 'running', hud.level)
 
   function restart() {
     game.current = new Tetris()
-    setHud({ lines: 0, level: 1 })
+    setHud({ score: 0, lines: 0, level: 1 })
+    setResult(null)
     setPhase('running')
+  }
+
+  function finish(g: Tetris) {
+    ended.current = g
+    setPhase('over')
+    if (g.score > best) {
+      setBest(g.score)
+      save('tetris:best-score', g.score)
+    }
+    if (run.current?.game !== g || g.score <= 0) return
+    setResult('sending')
+    run.current.reporter
+      .finish(runState(g))
+      .then((b) => {
+        leaderboard.update(b)
+        setResult(b.me ? { rank: b.me.rank, best: !!b.best } : null)
+      })
+      .catch((e) => setResult({ error: errorMessage(e) }))
   }
 
   function frame() {
@@ -212,19 +282,30 @@ function Practice({ onExit }: { onExit: () => void }) {
       const label = describe(r)
       if (label) showFlash(label, 0)
     }
-    // 每消 10 行升一級
-    g.level = Math.min(15, 1 + Math.floor(g.lines / 10))
-    if (g.lines !== hud.lines || g.level !== hud.level) setHud({ lines: g.lines, level: g.level })
-    if (g.over && phase === 'running') {
-      setPhase('over')
-      if (g.lines > best) {
-        setBest(g.lines)
-        save('tetris:best', g.lines)
-      }
+    // 每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限，一直快到撐不住為止
+    const level = 1 + Math.max(Math.floor(g.lines / LINES_PER_LEVEL), Math.floor(g.clock / MS_PER_LEVEL))
+    if (level > g.level) {
+      g.level = level
+      showFlash(`LEVEL ${level}`, 0)
     }
+    if (g.score !== hud.score || g.lines !== hud.lines || g.level !== hud.level)
+      setHud({ score: g.score, lines: g.lines, level: g.level })
+    // 登入的人開局就跟伺服器登記，之後定期回報進度（伺服器會比對開局到現在實際經過的時間，所以只在剛開局時登記）
+    if (user && run.current?.game !== g && g.clock < 1000) {
+      run.current = { game: g, reporter: new RunReporter(), next: CHECKPOINT_MS }
+    }
+    if (run.current?.game === g && !g.over && g.clock >= run.current.next) {
+      run.current.reporter.report(runState(g))
+      run.current.next += CHECKPOINT_MS
+    }
+    if (g.over && ended.current !== g) finish(g)
   }
 
   function onKey(code: string): boolean {
+    if (code === 'KeyM') {
+      music.toggle()
+      return true
+    }
     if (code === 'Escape' || code === 'KeyP') {
       if (phase === 'running') setPhase('paused')
       else if (phase === 'paused') setPhase('running')
@@ -246,7 +327,7 @@ function Practice({ onExit }: { onExit: () => void }) {
     return () => document.removeEventListener('visibilitychange', hide)
   }, [])
 
-  const record = phase === 'over' && hud.lines > 0 && hud.lines >= best
+  const record = phase === 'over' && hud.score > 0 && hud.score >= best
   const overlay =
     phase === 'paused' ? (
       <Overlay>
@@ -259,8 +340,20 @@ function Practice({ onExit }: { onExit: () => void }) {
       <Overlay>
         <strong className="tetris-overlay-title">遊戲結束</strong>
         <span>
-          消了 {hud.lines} 行{record ? '，新紀錄！' : `（最高 ${best} 行）`}
+          {formatScore(hud.score)} 分 · {hud.lines} 行 · 等級 {hud.level}
         </span>
+        <span>{record ? '新紀錄！' : `最高 ${formatScore(best)} 分`}</span>
+        {result === 'sending' ? (
+          <span className="muted">上傳成績中…</span>
+        ) : result && 'error' in result ? (
+          <span className="error">{result.error}</span>
+        ) : result ? (
+          <span>
+            {result.best ? '刷新個人紀錄，' : ''}排行榜第 {result.rank} 名
+          </span>
+        ) : (
+          !user && hud.score > 0 && <span className="muted">登入後成績會登上排行榜</span>
+        )}
         <button type="button" onClick={restart}>
           再玩一次
         </button>
@@ -268,10 +361,17 @@ function Practice({ onExit }: { onExit: () => void }) {
     ) : null
 
   return (
-    <GameLayout side={<Help />}>
+    <GameLayout
+      side={
+        <>
+          <Leaderboard board={leaderboard.board} error={leaderboard.error} />
+          <Help />
+        </>
+      }
+    >
       <StatusLine tone={phase === 'over' ? 'danger' : undefined}>
-        {hud.lines} 行 · 等級 {hud.level}
-        <span className="tetris-muted"> · 最高 {Math.max(best, hud.lines)} 行</span>
+        {formatScore(hud.score)} 分 · {hud.lines} 行 · 等級 {hud.level}
+        <span className="tetris-muted"> · 最高 {formatScore(Math.max(best, hud.score))}</span>
       </StatusLine>
       <Playfield
         game={game}
@@ -292,6 +392,7 @@ function Practice({ onExit }: { onExit: () => void }) {
         <button type="button" className="secondary" onClick={restart}>
           重新開始
         </button>
+        <MusicButton music={music} />
         <button type="button" className="secondary" onClick={onExit}>
           回到選單
         </button>
@@ -349,6 +450,7 @@ function Online() {
   const playing = !!me?.inRound && !!me.alive
   const mine = local.round === roundNo
   const running = phase === 'playing' && playing && mine
+  const music = useMusic(running, state?.level ?? 1)
 
   function sendBoard() {
     const g = game.current
@@ -397,6 +499,10 @@ function Online() {
   }
 
   function onKey(code: string): boolean {
+    if (code === 'KeyM') {
+      music.toggle()
+      return true
+    }
     const n = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(code)
     if (n < 0 || !running) return false
     strategy(STRATEGIES[n].value)
@@ -418,7 +524,7 @@ function Online() {
     return () => ro.disconnect()
   }, [])
 
-  const header = <RoomHeader arena={arena} />
+  const header = <RoomHeader arena={arena} extra={<MusicButton music={music} />} />
 
   if (!state || !me) {
     return (
@@ -578,7 +684,7 @@ function Online() {
 }
 
 /** 房間代碼、邀請與離開，以及連線錯誤 */
-function RoomHeader({ arena }: { arena: Arena }) {
+function RoomHeader({ arena, extra }: { arena: Arena; extra?: ReactNode }) {
   const [copied, setCopied] = useState(false)
 
   async function share() {
@@ -614,6 +720,7 @@ function RoomHeader({ arena }: { arena: Arena }) {
             在這裡繼續
           </button>
         )}
+        {extra}
         <button type="button" className="secondary" onClick={share}>
           {copied ? '已複製連結' : '邀請朋友'}
         </button>
