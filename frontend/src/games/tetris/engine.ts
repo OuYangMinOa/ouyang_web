@@ -257,6 +257,8 @@ export class Tetris {
   }
 
   setSoftDrop(on: boolean) {
+    // 照原本重力累積的時間不能拿來算加速後的格數，否則按下的瞬間會一口氣掉好幾格
+    if (on !== this.softDrop) this.fall = 0
     this.softDrop = on
   }
 
