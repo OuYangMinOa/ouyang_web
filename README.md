@@ -42,8 +42,9 @@ alice                  admin（系統管理員）         admin.users
 - 同一個 IP 15 分鐘內登入失敗 10 次會暫停登入。
 - 停用帳號、重設密碼會讓該帳號所有裝置登出；自己改密碼只保留目前這個裝置。
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
+- 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 建立或救回管理員
 

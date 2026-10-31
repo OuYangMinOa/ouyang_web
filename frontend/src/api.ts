@@ -33,3 +33,8 @@ export type User = {
 export const PERMISSIONS = {
   adminUsers: 'admin.users',
 } as const
+
+/** 註冊入口有沒有開（管理員在系統管理裡切換） */
+export async function registrationOpen(): Promise<boolean> {
+  return (await api<{ open: boolean }>('/auth/register')).open
+}

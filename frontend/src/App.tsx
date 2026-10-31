@@ -20,11 +20,13 @@ import MusicApp from './music/MusicApp'
 import MusicLibrary from './music/MusicLibrary'
 import Account from './pages/Account'
 import AdminAccess from './pages/admin/Access'
+import AdminRegistrations from './pages/admin/Registrations'
 import AdminRoles from './pages/admin/Roles'
 import AdminUsers from './pages/admin/Users'
 import AdminVisits from './pages/admin/Visits'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import ToolPage from './tools/ToolPage'
 import ToolsHub from './tools/ToolsHub'
 import { getThemePreference, setThemePreference, type ThemePreference } from './theme'
@@ -199,6 +201,7 @@ function App() {
             </Route>
             <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             <Route
               path="/account"
               element={
@@ -218,6 +221,7 @@ function App() {
               <Route index element={<Navigate to="users" replace />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="roles" element={<AdminRoles />} />
+              <Route path="registrations" element={<AdminRegistrations />} />
               <Route path="access" element={<AdminAccess />} />
               <Route path="visits" element={<AdminVisits />} />
             </Route>

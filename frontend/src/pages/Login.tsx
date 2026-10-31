@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation } from 'react-router'
-import { errorMessage, PERMISSIONS } from '../api'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link, Navigate, useLocation } from 'react-router'
+import { errorMessage, PERMISSIONS, registrationOpen } from '../api'
 import { useAuth } from '../auth'
 
 export default function Login() {
@@ -10,6 +10,14 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // 管理員開放註冊時才顯示註冊按鈕
+  const [canRegister, setCanRegister] = useState(false)
+
+  useEffect(() => {
+    registrationOpen()
+      .then(setCanRegister)
+      .catch(() => setCanRegister(false))
+  }, [])
 
   // 登入成功後 user 會更新、重新 render 到這裡：回到原本要去的頁面，否則管理員進系統管理、其他人回首頁
   if (user) return <Navigate to={from ?? (can(PERMISSIONS.adminUsers) ? '/admin' : '/')} replace />
@@ -52,6 +60,11 @@ export default function Login() {
       <button type="submit" disabled={busy}>
         {busy ? '登入中…' : '登入'}
       </button>
+      {canRegister && (
+        <p className="muted">
+          還沒有帳號？<Link to="/register" className="text-link">註冊</Link>
+        </p>
+      )}
     </form>
   )
 }

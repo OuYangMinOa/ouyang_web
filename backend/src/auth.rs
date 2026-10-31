@@ -302,7 +302,7 @@ pub async fn login(
 ) -> Result<Response, AppError> {
     let key = client_key(&headers);
     if state.login_limiter.blocked(&key) {
-        return Err(AppError::TooManyRequests);
+        return Err(AppError::TooManyRequests("嘗試次數過多，請 15 分鐘後再試"));
     }
 
     let row = sqlx::query_as::<_, (i64, String, String, bool)>(

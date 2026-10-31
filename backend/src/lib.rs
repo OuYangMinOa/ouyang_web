@@ -4,6 +4,7 @@ pub mod auth;
 pub mod calendar;
 pub mod games;
 pub mod music;
+pub mod registration;
 pub mod tetris;
 pub mod tetris_scores;
 pub mod tetris_settings;
@@ -94,9 +95,14 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
         .route("/auth/password", post(auth::change_password))
+        .route("/auth/register", get(registration::status).post(registration::register))
         .route("/admin/users", get(admin::list_users).post(admin::create_user))
         .route("/admin/users/{id}", patch(admin::update_user))
         .route("/admin/roles", get(admin::list_roles))
+        .route("/admin/registrations", get(registration::list))
+        .route("/admin/registrations/open", put(registration::set_open))
+        .route("/admin/registrations/{id}/approve", post(registration::approve))
+        .route("/admin/registrations/{id}/reject", post(registration::reject))
         .route("/admin/access", get(access_log::report))
         .route("/admin/access/requests", get(access_log::requests))
         .route("/admin/visits/{page}", get(visits::list_sessions))
@@ -219,7 +225,7 @@ pub enum AppError {
     Forbidden,
     NotFound,
     Conflict(String),
-    TooManyRequests,
+    TooManyRequests(&'static str),
     ServiceUnavailable(&'static str),
     Database(sqlx::Error),
     Internal(String),
@@ -229,10 +235,11 @@ impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadRequest(message) | Self::Conflict(message) | Self::Internal(message) => f.write_str(message),
-            Self::Unauthorized(message) | Self::ServiceUnavailable(message) => f.write_str(message),
+            Self::Unauthorized(message) | Self::TooManyRequests(message) | Self::ServiceUnavailable(message) => {
+                f.write_str(message)
+            }
             Self::Forbidden => f.write_str("沒有權限"),
             Self::NotFound => f.write_str("not found"),
-            Self::TooManyRequests => f.write_str("嘗試次數過多，請 15 分鐘後再試"),
             Self::Database(err) => write!(f, "database error: {err}"),
         }
     }
@@ -254,7 +261,7 @@ impl IntoResponse for AppError {
             Self::Forbidden => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
-            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            Self::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
             Self::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Database(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
