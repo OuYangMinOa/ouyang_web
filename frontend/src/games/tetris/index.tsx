@@ -6,6 +6,7 @@ import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/u
 import type { MiniInfo } from './draw'
 import { badgeCount, describe, Tetris } from './engine'
 import { MiniBoards } from './MiniBoards'
+import { useMusic } from './music'
 import { Playfield, type PlayfieldHooks } from './Playfield'
 import {
   MAX_NAME,
@@ -58,6 +59,15 @@ function useFlash(): [ReactNode, (text: string | null, sent: number) => void] {
   return [node, show]
 }
 
+/** 背景音樂開關（也可以按 M） */
+function MusicButton({ music }: { music: ReturnType<typeof useMusic> }) {
+  return (
+    <button type="button" className="secondary" onClick={music.toggle} aria-pressed={music.enabled}>
+      {music.enabled ? '♪ 音樂：開' : '♪ 音樂：關'}
+    </button>
+  )
+}
+
 /** 從收到的毫秒數往下倒數；`stamp` 換了（收到新的狀態）就從現在重新起算 */
 function Countdown({ ms, stamp, children }: { ms: number; stamp: unknown; children: (left: number) => ReactNode }) {
   const [left, setLeft] = useState(ms)
@@ -87,7 +97,7 @@ function Help() {
           <li>↓：加速下落；空白鍵：直接落下</li>
           <li>↑ / X：順時針轉；Z / Ctrl：逆時針轉</li>
           <li>C / Shift：保留（Hold）</li>
-          <li>1～4：切換攻擊目標</li>
+          <li>1～4：切換攻擊目標；M：背景音樂開關</li>
         </ul>
         <p className="muted">手機用盤面下方的按鈕，左右和下可以按住不放。</p>
       </div>
@@ -201,6 +211,7 @@ function Practice({ onExit }: { onExit: () => void }) {
   const [hud, setHud] = useState({ lines: 0, level: 1 })
   const [best, setBest] = useState(() => load<number>('tetris:best', 0))
   const [flash, showFlash] = useFlash()
+  const music = useMusic(phase === 'running', hud.level)
 
   function restart() {
     game.current = new Tetris()
@@ -228,6 +239,10 @@ function Practice({ onExit }: { onExit: () => void }) {
   }
 
   function onKey(code: string): boolean {
+    if (code === 'KeyM') {
+      music.toggle()
+      return true
+    }
     if (code === 'Escape' || code === 'KeyP') {
       if (phase === 'running') setPhase('paused')
       else if (phase === 'paused') setPhase('running')
@@ -295,6 +310,7 @@ function Practice({ onExit }: { onExit: () => void }) {
         <button type="button" className="secondary" onClick={restart}>
           重新開始
         </button>
+        <MusicButton music={music} />
         <button type="button" className="secondary" onClick={onExit}>
           回到選單
         </button>
@@ -352,6 +368,7 @@ function Online() {
   const playing = !!me?.inRound && !!me.alive
   const mine = local.round === roundNo
   const running = phase === 'playing' && playing && mine
+  const music = useMusic(running, state?.level ?? 1)
 
   function sendBoard() {
     const g = game.current
@@ -400,6 +417,10 @@ function Online() {
   }
 
   function onKey(code: string): boolean {
+    if (code === 'KeyM') {
+      music.toggle()
+      return true
+    }
     const n = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(code)
     if (n < 0 || !running) return false
     strategy(STRATEGIES[n].value)
@@ -421,7 +442,7 @@ function Online() {
     return () => ro.disconnect()
   }, [])
 
-  const header = <RoomHeader arena={arena} />
+  const header = <RoomHeader arena={arena} extra={<MusicButton music={music} />} />
 
   if (!state || !me) {
     return (
@@ -581,7 +602,7 @@ function Online() {
 }
 
 /** 房間代碼、邀請與離開，以及連線錯誤 */
-function RoomHeader({ arena }: { arena: Arena }) {
+function RoomHeader({ arena, extra }: { arena: Arena; extra?: ReactNode }) {
   const [copied, setCopied] = useState(false)
 
   async function share() {
@@ -617,6 +638,7 @@ function RoomHeader({ arena }: { arena: Arena }) {
             在這裡繼續
           </button>
         )}
+        {extra}
         <button type="button" className="secondary" onClick={share}>
           {copied ? '已複製連結' : '邀請朋友'}
         </button>

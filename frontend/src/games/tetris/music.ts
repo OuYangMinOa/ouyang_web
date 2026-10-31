@@ -1,0 +1,166 @@
+/**
+ * 背景音樂：Korobeiniki（俄羅斯民謠，就是大家熟悉的俄羅斯方塊主題），用 Web Audio 即時合成，不需要音檔。
+ * 主旋律是方波、低音是三角波；速度跟著等級變快。
+ *
+ * 排程以八分音符為單位，旋律和低音一起走，中途變速也不會對不齊。用「往前看」的做法：每 50ms 檢查一次，把接下來 0.2 秒內要響的音先排進 AudioContext，
+ * 計時器有點延遲也不會走音。
+ */
+
+import { useCallback, useEffect, useState } from 'react'
+import { load, save } from '../shared/storage'
+
+/** [音名, 長度（八分音符數）]；音名 null 是休止 */
+type Note = [string | null, number]
+
+// A 段：大家最熟的那段
+const PART_A: Note[] = [
+  ['E5', 2], ['B4', 1], ['C5', 1], ['D5', 2], ['C5', 1], ['B4', 1],
+  ['A4', 2], ['A4', 1], ['C5', 1], ['E5', 2], ['D5', 1], ['C5', 1],
+  ['B4', 3], ['C5', 1], ['D5', 2], ['E5', 2],
+  ['C5', 2], ['A4', 2], ['A4', 4],
+  [null, 1], ['D5', 2], ['F5', 1], ['A5', 2], ['G5', 1], ['F5', 1],
+  ['E5', 3], ['C5', 1], ['E5', 2], ['D5', 1], ['C5', 1],
+  ['B4', 2], ['B4', 1], ['C5', 1], ['D5', 2], ['E5', 2],
+  ['C5', 2], ['A4', 2], ['A4', 2], [null, 2],
+]
+
+// B 段：慢下來的那段
+const PART_B: Note[] = [
+  ['E5', 4], ['C5', 4], ['D5', 4], ['B4', 4],
+  ['C5', 4], ['A4', 4], ['G#4', 4], ['B4', 2], [null, 2],
+  ['E5', 4], ['C5', 4], ['D5', 4], ['B4', 4],
+  ['C5', 2], ['E5', 2], ['A5', 4], ['G#5', 8],
+]
+
+/** 每小節（8 個八分音符）的低音根音 */
+const BASS_A = ['E2', 'A2', 'E2', 'A2', 'D2', 'C2', 'E2', 'A2']
+const BASS_B = ['A2', 'E2', 'A2', 'E2', 'A2', 'E2', 'A2', 'E2']
+
+const MELODY: Note[] = [...PART_A, ...PART_A, ...PART_B]
+const BASS: string[] = [...BASS_A, ...BASS_A, ...BASS_B]
+/** 整首有幾個八分音符（每小節 8 個） */
+const STEPS = BASS.length * 8
+/** 第幾個八分音符要開始哪個旋律音 */
+const MELODY_AT = new Map<number, Note>()
+MELODY.reduce((step, note) => (MELODY_AT.set(step, note), step + note[1]), 0)
+
+const SEMITONES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }
+
+function frequency(name: string): number {
+  const m = /^([A-G])(#?)(\d)$/.exec(name)!
+  const midi = (Number(m[3]) + 1) * 12 + SEMITONES[m[1]] + (m[2] ? 1 : 0)
+  return 440 * 2 ** ((midi - 69) / 12)
+}
+
+/** 等級 1 是 140 BPM，每升一級快一點，最快 220 */
+export function tempo(level: number): number {
+  return Math.min(140 + (level - 1) * 6, 220)
+}
+
+const LOOKAHEAD_S = 0.2
+const TIMER_MS = 50
+const VOLUME = 0.12
+
+export class Music {
+  private ctx: AudioContext | null = null
+  private master: GainNode | null = null
+  private timer: ReturnType<typeof setInterval> | undefined
+  /** 已經排進去、還沒響完的音，暫停時要停掉 */
+  private sounding = new Set<OscillatorNode>()
+  /** 下一個要排的八分音符，以及它開始的時間 */
+  private step = 0
+  private time = 0
+  private bpm = tempo(1)
+
+  setLevel(level: number) {
+    this.bpm = tempo(level)
+  }
+
+  /** 要在使用者操作（點擊、按鍵）之後呼叫，瀏覽器才允許出聲 */
+  play() {
+    if (this.timer) return
+    if (!this.ctx) {
+      const Ctx =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!Ctx) return
+      this.ctx = new Ctx()
+      this.master = this.ctx.createGain()
+      this.master.gain.value = VOLUME
+      this.master.connect(this.ctx.destination)
+    }
+    void this.ctx.resume().catch(() => {})
+    // 從停下的那一小節開頭接著播
+    this.step = Math.floor(this.step / 8) * 8
+    this.time = this.ctx.currentTime + 0.05
+    this.timer = setInterval(() => this.schedule(), TIMER_MS)
+    this.schedule()
+  }
+
+  pause() {
+    clearInterval(this.timer)
+    this.timer = undefined
+    for (const osc of this.sounding) osc.stop()
+    this.sounding.clear()
+  }
+
+  dispose() {
+    this.pause()
+    void this.ctx?.close().catch(() => {})
+    this.ctx = null
+    this.master = null
+  }
+
+  private schedule() {
+    const ctx = this.ctx
+    if (!ctx) return
+    // 分頁在背景太久，排程落後太多就直接跳到現在
+    if (this.time < ctx.currentTime - 1) this.time = ctx.currentTime + 0.05
+    const eighth = 60 / this.bpm / 2
+    while (this.time < ctx.currentTime + LOOKAHEAD_S) {
+      const note = MELODY_AT.get(this.step)
+      if (note?.[0]) this.tone('square', frequency(note[0]), this.time, note[1] * eighth * 0.9, 0.5)
+      // 低音每個八分音符一下，根音和高八度交替
+      const root = frequency(BASS[Math.floor(this.step / 8)])
+      this.tone('triangle', root * (this.step % 2 ? 2 : 1), this.time, eighth * 0.8, 0.7)
+      this.time += eighth
+      this.step = (this.step + 1) % STEPS
+    }
+  }
+
+  private tone(type: OscillatorType, freq: number, at: number, duration: number, volume: number) {
+    const ctx = this.ctx!
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = type
+    osc.frequency.value = freq
+    // 很短的起音和收尾，避免喀喀聲
+    gain.gain.setValueAtTime(0, at)
+    gain.gain.linearRampToValueAtTime(volume, at + 0.01)
+    gain.gain.setValueAtTime(volume, at + Math.max(0.01, duration - 0.03))
+    gain.gain.linearRampToValueAtTime(0, at + duration)
+    osc.connect(gain).connect(this.master!)
+    osc.onended = () => this.sounding.delete(osc)
+    this.sounding.add(osc)
+    osc.start(at)
+    osc.stop(at + duration + 0.02)
+  }
+}
+
+/** 在遊戲進行中（`playing`）播放背景音樂；開關記在 localStorage */
+export function useMusic(playing: boolean, level: number) {
+  const [enabled, setEnabled] = useState(() => load<boolean>('tetris:music', true))
+  const [music] = useState(() => new Music())
+  useEffect(() => () => music.dispose(), [music])
+  useEffect(() => music.setLevel(level), [music, level])
+  useEffect(() => {
+    if (playing && enabled) music.play()
+    else music.pause()
+  }, [music, playing, enabled])
+  const toggle = useCallback(() => {
+    setEnabled((on) => {
+      save('tetris:music', !on)
+      return !on
+    })
+  }, [])
+  return { enabled, toggle }
+}
