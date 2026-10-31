@@ -85,6 +85,20 @@
   aspect-ratio: 10.6 / 20;
   border-radius: 6px;
 }
+/* 觸控裝置下面還有一排按鈕，盤面要照螢幕高度縮小，按鈕才不會被擠到畫面外；大逃殺上面還有房間列 */
+@media not ((hover: hover) and (pointer: fine)) {
+  .tetris-board-box {
+    width: min(320px, calc((100dvh - 305px) * 10.6 / 20), calc(100vw - 32px - 2 * 52px - 16px));
+  }
+  .arena-field .tetris-board-box {
+    width: min(320px, calc((100dvh - 395px) * 10.6 / 20), calc(100vw - 32px - 2 * 52px - 16px));
+    min-width: 120px;
+  }
+  /* 盤面縮小時兩側也要窄一點，不然 NEXT 的預覽（高度跟著欄寬）會比盤面還高 */
+  .arena-field .tetris-field {
+    grid-template-columns: minmax(40px, 56px) auto minmax(40px, 56px);
+  }
+}
 .tetris-board-box .game-overlay {
   border-radius: 6px;
 }

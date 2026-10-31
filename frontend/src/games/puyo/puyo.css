@@ -105,9 +105,9 @@
   }
   .puyo-field.versus .puyo-board-box {
     width: min(260px, calc((100dvh - 400px) * 6 / 12.9), calc((100vw - 32px - 40px - 16px) / 2));
-  }  /* 大逃殺上面還有房間列（窄螢幕時按鈕排成兩行） */
+  }  /* 大逃殺上面還有房間列 */
   .arena-field .puyo-board-box {
-    width: min(300px, calc((100dvh - 450px) * 6 / 12.9), calc(100vw - 32px - 64px - 8px));
+    width: min(300px, calc((100dvh - 395px) * 6 / 12.9), calc(100vw - 32px - 64px - 8px));
     min-width: 120px;
   }
 }
