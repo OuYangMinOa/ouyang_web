@@ -436,6 +436,18 @@
   flex-basis: 100%;
   margin: 0;
 }
+/* 窄螢幕：按鈕擠在同一行（太擠才換行），手機上盤面和下面的操作按鈕才放得進一個畫面 */
+@media (max-width: 480px) {
+  .arena-room .game-toolbar {
+    flex: 1 1 100%;
+  }
+  .arena-room .game-toolbar > button {
+    flex: 1 1 0;
+    min-width: fit-content;
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+}
 
 /* 寬的時候小盤面放主盤面兩側，窄的時候放下面 */
 .arena-field {
