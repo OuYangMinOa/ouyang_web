@@ -1,7 +1,6 @@
 /* ---- 俄羅斯方塊 ---- */
 
-.tetris-menu,
-.tetris-online {
+.tetris-menu {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -13,15 +12,6 @@
 }
 .tetris-menu a {
   color: var(--accent);
-}
-.tetris-name {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 320px;
-}
-.tetris-name span {
-  font-size: 14px;
 }
 .tetris-menu-actions {
   display: flex;
@@ -37,39 +27,6 @@
   font-weight: 400;
   color: var(--text);
 }
-.tetris-stars {
-  color: var(--warn);
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-}
-.tetris-info .tetris-stars {
-  font-size: 12px;
-  letter-spacing: 0;
-}
-.tetris-danger {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-/* 房間列：代碼在左、按鈕在右，窄螢幕換行 */
-.tetris-room {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-}
-.tetris-room .room-code {
-  flex-wrap: wrap;
-}
-.tetris-room .game-toolbar {
-  flex: 0 1 auto;
-}
-.tetris-room .error {
-  flex-basis: 100%;
-  margin: 0;
-}
-
 /* 主盤面：左邊 Hold、中間盤面、右邊 Next */
 .tetris-play {
   display: flex;
@@ -115,14 +72,6 @@
 .tetris-next {
   aspect-ratio: 4 / 15;
 }
-.tetris-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 13px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
 
 /* 盤面大小：不超過視窗高度（扣掉頁首、狀態列和按鈕），也不超過寬度（扣掉兩側欄位） */
 .tetris-board-box {
@@ -141,10 +90,6 @@
 }
 .tetris-overlay-title {
   font-size: 20px;
-}
-.tetris-countdown {
-  font: 700 64px/1 var(--mono);
-  color: var(--accent);
 }
 
 /* 觸控按鈕：上排保留與旋轉、下排移動與落下；只在觸控裝置顯示 */
@@ -197,115 +142,4 @@
   .tetris-pad {
     display: none;
   }
-}
-
-/* 對戰：寬的時候小盤面放兩側，窄的時候放下面 */
-.tetris-arena {
-  display: flex;
-  justify-content: center;
-  min-width: 0;
-}
-.tetris-arena.wide {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 16px;
-}
-.tetris-minis {
-  min-width: 0;
-}
-.tetris-minis.fill {
-  position: relative;
-}
-.tetris-minis.fill .tetris-minis-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-.tetris-minis-canvas {
-  display: block;
-  width: 100%;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.tetris-strategy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 480px;
-  width: 100%;
-  margin: 0 auto;
-}
-.tetris-strategy .segmented button {
-  min-height: 40px;
-}
-.tetris-strategy .muted {
-  font-size: 14px;
-}
-
-.tetris-feed {
-  list-style: none;
-  margin: 0 auto;
-  padding: 0;
-  max-width: 480px;
-  width: 100%;
-  font-size: 14px;
-}
-.tetris-feed li {
-  padding: 2px 0;
-  border-bottom: 1px solid var(--border);
-}
-.tetris-feed li.mine {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.tetris-lobby {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 560px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-}
-.tetris-lobby h2 {
-  margin: 0;
-  font-size: 18px;
-  color: var(--text-h);
-}
-.tetris-lobby p {
-  margin: 0;
-}
-.tetris-lobby > button {
-  min-height: 44px;
-}
-.tetris-roster {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.tetris-roster li {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-h);
-  overflow-wrap: anywhere;
-}
-.tetris-roster li.me {
-  border-color: var(--accent);
-}
-.tetris-roster .chip {
-  margin: 0;
-}
-.tetris-auto {
-  font-weight: 600;
-  color: var(--accent);
 }

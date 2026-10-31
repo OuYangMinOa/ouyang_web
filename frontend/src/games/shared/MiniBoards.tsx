@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
-import { drawMinis, miniAt, miniLayout, readPalette, type MiniInfo } from './draw'
+import { drawMinis, miniAt, miniLayout, type MiniInfo, type MiniPalette, type MiniShape } from './minis'
 
 /**
- * 其他玩家的小盤面，全部畫在同一張 canvas 上（最多 98 個）。
+ * 其他玩家的小盤面，全部畫在同一張 canvas 上（最多 98 個）。`readPalette` 從 CSS 變數讀顏色，主題切換時重讀。
  * `fill`：塞滿容器的高度（桌機放在主盤面兩側）；否則用固定大小往下排（手機放在主盤面下面）。
  */
 export function MiniBoards({
@@ -10,6 +10,8 @@ export function MiniBoards({
   boards,
   version,
   fill,
+  shape,
+  readPalette,
   onPick,
   label,
 }: {
@@ -18,6 +20,8 @@ export function MiniBoards({
   /** 盤面有更新時會變，用來觸發重畫 */
   version: number
   fill: boolean
+  shape: MiniShape
+  readPalette: () => MiniPalette
   onPick?: (pid: number) => void
   label: string
 }) {
@@ -41,7 +45,7 @@ export function MiniBoards({
       mo.disconnect()
       mq.removeEventListener('change', refresh)
     }
-  }, [])
+  }, [readPalette])
 
   const layout = useMemo(
     () => miniLayout(box.width, minis.length, fill ? box.height : null),
@@ -56,8 +60,8 @@ export function MiniBoards({
     canvas.width = Math.round(box.width * dpr)
     canvas.height = Math.round(Math.max(layout.height, 1) * dpr)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    drawMinis(ctx, box.width, layout, minis, boards, palette)
-  }, [box.width, layout, minis, boards, version, palette])
+    drawMinis(ctx, box.width, layout, minis, boards, shape, palette)
+  }, [box.width, layout, minis, boards, version, shape, palette])
 
   function pick(e: PointerEvent<HTMLCanvasElement>) {
     if (!onPick) return
@@ -67,10 +71,10 @@ export function MiniBoards({
   }
 
   return (
-    <div ref={boxRef} className={`tetris-minis${fill ? ' fill' : ''}`}>
+    <div ref={boxRef} className={`arena-minis${fill ? ' fill' : ''}`}>
       <canvas
         ref={canvasRef}
-        className="tetris-minis-canvas"
+        className="arena-minis-canvas"
         style={{ height: layout.height }}
         onPointerDown={pick}
         aria-label={label}

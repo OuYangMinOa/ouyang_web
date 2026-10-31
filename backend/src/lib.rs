@@ -1,11 +1,13 @@
 pub mod access_log;
 pub mod admin;
+pub mod arena;
 pub mod auth;
 pub mod calendar;
 pub mod feedback;
 pub mod game_settings;
 pub mod games;
 pub mod music;
+pub mod puyo;
 pub mod puyo_scores;
 pub mod registration;
 pub mod tetris;
@@ -56,7 +58,8 @@ pub struct AppState {
     /// 小遊戲線上對戰中有人連線的房間（房間本身存在資料庫）
     pub rooms: Arc<games::Rooms>,
     /// 俄羅斯方塊大逃殺的房間（只在記憶體裡）
-    pub tetris: Arc<tetris::Arenas>,
+    pub tetris: Arc<arena::Arenas<tetris::Tetris>>,
+    pub puyo: Arc<arena::Arenas<puyo::Puyo>>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
     pub tetris_runs: Arc<tetris_scores::Runs>,
     /// 魔法氣泡單人模式進行中的局
@@ -81,6 +84,7 @@ impl AppState {
             login_limiter: Arc::default(),
             rooms: Arc::default(),
             tetris: Arc::default(),
+            puyo: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
@@ -127,13 +131,15 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/calendar/events/{id}", put(calendar::update_event).delete(calendar::delete_event))
         .route("/games/rooms", post(games::create_room))
         .route("/games/rooms/{code}/ws", get(games::connect))
-        .route("/games/tetris/rooms", post(tetris::create_arena))
-        .route("/games/tetris/rooms/{code}/ws", get(tetris::connect))
+        .route("/games/tetris/rooms", post(arena::create_arena::<tetris::Tetris>))
+        .route("/games/tetris/rooms/{code}/ws", get(arena::connect::<tetris::Tetris>))
         .route("/games/tetris/scores", get(tetris_scores::list_scores))
         .route("/games/tetris/runs", post(tetris_scores::start_run))
         .route("/games/tetris/runs/{id}/checkpoints", post(tetris_scores::checkpoint))
         .route("/games/tetris/runs/{id}/finish", post(tetris_scores::finish_run))
         .route("/games/tetris/settings", get(game_settings::get_tetris).put(game_settings::put_tetris))
+        .route("/games/puyo/rooms", post(arena::create_arena::<puyo::Puyo>))
+        .route("/games/puyo/rooms/{code}/ws", get(arena::connect::<puyo::Puyo>))
         .route("/games/puyo/scores", get(puyo_scores::list_scores))
         .route("/games/puyo/runs", post(puyo_scores::start_run))
         .route("/games/puyo/runs/{id}/checkpoints", post(puyo_scores::checkpoint))

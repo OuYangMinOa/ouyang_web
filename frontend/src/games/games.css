@@ -366,3 +366,184 @@
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* ---- 大逃殺共用（俄羅斯方塊、魔法氣泡）：暱稱、房間列、小盤面、攻擊目標、KO 訊息、大廳 ---- */
+
+.arena-online {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.arena-name {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 320px;
+}
+.arena-name span {
+  font-size: 14px;
+}
+.arena-stars {
+  color: var(--warn);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.arena-muted {
+  font-weight: 400;
+  color: var(--text);
+}
+/* 主盤面旁邊：徽章、攻擊加成、被幾個人瞄準 */
+.arena-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.arena-info .arena-stars {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.arena-overlay-title {
+  font-size: 20px;
+}
+.arena-countdown {
+  font: 700 64px/1 var(--mono);
+  color: var(--accent);
+}
+.arena-danger {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* 房間列：代碼在左、按鈕在右，窄螢幕換行 */
+.arena-room {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.arena-room .room-code {
+  flex-wrap: wrap;
+}
+.arena-room .game-toolbar {
+  flex: 0 1 auto;
+}
+.arena-room .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* 寬的時候小盤面放主盤面兩側，窄的時候放下面 */
+.arena-field {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.arena-field.wide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 16px;
+}
+.arena-minis {
+  min-width: 0;
+}
+.arena-minis.fill {
+  position: relative;
+}
+.arena-minis.fill .arena-minis-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.arena-minis-canvas {
+  display: block;
+  width: 100%;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.arena-strategy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 480px;
+  width: 100%;
+  margin: 0 auto;
+}
+.arena-strategy .segmented button {
+  min-height: 40px;
+}
+.arena-strategy .muted {
+  font-size: 14px;
+}
+
+.arena-feed {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 480px;
+  width: 100%;
+  font-size: 14px;
+}
+.arena-feed li {
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+.arena-feed li.mine {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.arena-lobby {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.arena-lobby h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-h);
+}
+.arena-lobby p {
+  margin: 0;
+}
+.arena-lobby > button {
+  min-height: 44px;
+}
+.arena-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.arena-roster li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.arena-roster li.me {
+  border-color: var(--accent);
+}
+.arena-roster .chip {
+  margin: 0;
+}
+.arena-auto {
+  font-weight: 600;
+  color: var(--accent);
+}
