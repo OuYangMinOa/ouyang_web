@@ -7,7 +7,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       RUST_LOG: ${RUST_LOG:-info}
-      # 接上 HTTPS 之後在 <env>.env 設 COOKIE_SECURE=true，登入 cookie 就只會走 HTTPS
+      # prod 有 HTTPS，prod.env 設了 COOKIE_SECURE=true，登入 cookie 只會走 HTTPS
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       MUSIC_DIR: /music
       # 地震速報經過主機上的 relay（systemd 的 wb-relay，:8080），和歐陽小俠共用 wolfx 的連線

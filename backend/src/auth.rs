@@ -278,7 +278,7 @@ impl LoginLimiter {
 }
 
 /// 對外流量一律經過 Traefik：它不信任客戶端送來的 X-Forwarded-For，會改成真正的來源 IP
-fn client_key(headers: &HeaderMap) -> String {
+pub(crate) fn client_key(headers: &HeaderMap) -> String {
     headers
         .get("x-forwarded-for")
         .and_then(|value| value.to_str().ok())

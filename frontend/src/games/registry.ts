@@ -1,7 +1,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 
 /** 側邊欄的分組，順序就是顯示順序 */
-export const GAME_CATEGORIES = ['棋類對戰', '單人'] as const
+export const GAME_CATEGORIES = ['多人對戰', '棋類對戰', '單人'] as const
 
 export type GameInfo = {
   /** 網址用的 id：/games/<id> */
@@ -17,6 +17,15 @@ export type GameInfo = {
 
 // 每個遊戲各自打包，進到那一頁才下載
 export const GAMES: GameInfo[] = [
+  {
+    id: 'tetris',
+    name: '俄羅斯方塊 99',
+    icon: '🧱',
+    blurb: '最多 99 人同場的大逃殺：消行攻擊、KO 搶徽章，活到最後的人獲勝。人不夠由電腦補位。',
+    tags: ['多人', '線上', '練習'],
+    category: '多人對戰',
+    component: lazy(() => import('./tetris')),
+  },
   {
     id: 'snake',
     name: '貪食蛇',

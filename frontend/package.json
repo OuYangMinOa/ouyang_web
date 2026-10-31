@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",
+    "@zxing/library": "^0.23.0",
+    "bwip-js": "^4.11.4",
     "emojibase-data": "^18.0.0",
     "figlet": "^1.12.0",
     "hash-wasm": "^4.12.0",

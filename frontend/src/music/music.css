@@ -157,8 +157,10 @@
   }
 }
 
-button.music-fav {
+button:is(.music-fav, .music-share) {
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
   width: 44px;
   min-height: 44px;
   padding: 0;
@@ -167,11 +169,41 @@ button.music-fav {
   font-size: 20px;
   line-height: 1;
 }
-button.music-fav:hover {
+button:is(.music-fav, .music-share):hover {
   color: var(--text-h);
 }
 button.music-fav.on {
   color: var(--accent);
+}
+button.music-share svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 複製連結後的提示；放在上方，不會蓋到底部的播放列 */
+.music-toast {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 200;
+  max-width: calc(100% - 32px);
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--on-accent);
+  background: var(--accent);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: music-toast 0.25s ease-out;
+}
+@keyframes music-toast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
 }
 
 .music-bars {

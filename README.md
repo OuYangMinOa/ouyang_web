@@ -43,7 +43,7 @@ alice                  admin（系統管理員）         admin.users
 - 停用帳號、重設密碼會讓該帳號所有裝置登出；自己改密碼只保留目前這個裝置。
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 
-頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 建立或救回管理員
 
@@ -88,7 +88,7 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
    ```
    桌機會有可收合的側邊欄，窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
 
-> 目前 staging / prod 都還是 HTTP，密碼和 cookie 在網路上是明文傳送。接上 HTTPS 前不要在公共網路登入重要帳號；接上之後在 `<env>.env` 加 `COOKIE_SECURE=true`。
+> prod（`https://music.ouyangminwei.com`）走 HTTPS，`prod.env` 設了 `COOKIE_SECURE=true`。staging（`:8102`）還是 HTTP，密碼和 cookie 在網路上是明文傳送，不要在公共網路登入重要帳號。
 
 ## 小遊戲線上對戰
 
@@ -117,6 +117,22 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
 - 房間、座位和歷史存在資料庫（`game_rooms`、`game_events`），記憶體只放有人連線中的房間。重啟或換版後，前端自動重連就能接著下。
 - 換版的幾秒內新舊容器可能各有同一個房間的連線：座位用條件式 UPDATE 搶，事件用 `(room_code, seq)` 主鍵擋重複序號。
   寫入時序號撞到，就關掉那個容器裡這個房間的連線，前端重連後從資料庫重新載入，送出的那一步要重下。
+
+### 俄羅斯方塊 99
+
+`/games/tetris`：參考 Tetris 99 的大逃殺，一間最多 99 人，人不夠由電腦補位。和上面的棋類不同，伺服器懂一部分規則
+（`backend/src/tetris.rs`，協定寫在 `frontend/src/games/tetris/useArena.ts`）：
+
+```
+POST /api/games/tetris/rooms  {"public":true}  →  201 {"code":"ABCDE"}   public：快速配對，加入正在等人的公開房間，沒有就開一間
+GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升級成 WebSocket（登入時用帳號與帳號名稱）
+```
+
+- 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T-Spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
+  負責選目標（隨機／快輸的／徽章／反擊，或手動點小盤面）、轉送垃圾行、算 KO、徽章、名次與速度等級，以及模擬電腦玩家。
+- 房間每 250ms 推進一次，這段時間的狀態和盤面變化合併成一則廣播。
+- 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
+- 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
 
 ## 日曆
 
@@ -151,6 +167,23 @@ DELETE /api/calendar/events/{id}
 - **ASCII 藝術字**：figlet 的 `.flf` 字型當成靜態檔輸出，選到才 fetch。
 - **Emoji 選擇器**：資料來自 `emojibase-data`（繁中＋英文）。**編碼與雜湊**：雜湊用 `hash-wasm`。
 
+## 隱藏頁面
+
+不在任何選單、首頁或工具清單裡，只有知道網址的人進得來；頁面加了 `noindex`。誰來過記在「系統管理 › 頁面訪客」（`/admin/visits`，需要 `admin.users`）。
+
+- **`/bcs` Data Matrix 生成器**：倉位（SLOC / BIN / STYP）和料件（MODEL / MO / QTY / DC / SER）兩種內容產生 Data Matrix，最愛和歷史存在 localStorage。
+  掃描在支援 BarcodeDetector 的瀏覽器即時掃相機，其他（iOS）改成拍照後解碼，解不出來再用 ZXing。相機和 BarcodeDetector 都只在 HTTPS 能用，HTTP 下一律走拍照。
+
+```
+POST /api/visits/{page}                  {session, action, detail}   action：open / click / scan / error，不用登入
+GET  /api/admin/visits/{page}            統計和最近 300 次瀏覽（每個分頁一次）
+GET  /api/admin/visits/{page}/{session}  那次瀏覽的事件
+```
+
+- 前端用 `useVisitTracking`（`frontend/src/visits.ts`）：進頁面送 open，頁面裡的按鈕被點送 click（名稱取 `data-track` 或按鈕文字），JS 錯誤送 error（每次瀏覽最多 20 筆）。
+- 後端補上來源 IP（Traefik 的 X-Forwarded-For）、登入的帳號和 User-Agent，存在 `page_events`，保留 180 天。同一個 IP 10 分鐘超過 200 筆就不再記。
+- 新增隱藏頁面：在 `backend/src/visits.rs` 的 `PAGES` 加上 id，頁面裡呼叫 `useVisitTracking('<id>', rootRef)`。
+
 ## 音樂
 
 `/music`：播放伺服器上一個資料夾裡的音樂，`/music/favorites` 是收藏。檔案由 Discord bot（Xiao-Xia）放進
@@ -159,11 +192,16 @@ DELETE /api/calendar/events/{id}
 ```
 GET /api/music                 [{ name, size, modified }]   modified 是 Unix 毫秒；每次都重新讀資料夾，bot 新增的檔案馬上看得到
 GET /api/music/files/{name}    檔案本身，支援 Range（拖曳進度）
+GET /api/music/s/{hex}.{ext}   同上，分享用：檔名（不含副檔名）的 UTF-8 十六進位，回應帶原本檔名的 Content-Disposition
 ```
 
 - 只認最上層、不是隱藏檔、副檔名是 mp3 / m4a / aac / ogg / oga / opus / wav / flac / webm 的檔案，其他一律 404。
 - 本機開發用 `MUSIC_DIR` 指定資料夾，沒設就讀 `backend/data/music`，不存在就是空清單。
 - 收藏、音量、隨機和循環設定存在瀏覽器的 localStorage，不跟帳號走。播放器放在 APP 的外層，切換「全部」「收藏」不會中斷，離開音樂 APP 才會停。
+- 每首歌的分享鈕給的是音檔本身的網址：Telegram、Discord 只有直接連到音檔才會在聊天室裡顯示播放條，
+  連到網頁的話不會。手機用系統的分享選單，電腦直接複製。
+  Telegram 只幫網域產生預覽（貼 IP 的不會），路徑裡有中文的也不會（編不編碼都一樣），
+  所以檔名不是單純英數字時改用 `/api/music/s/` 的十六進位網址，例如 `三蛋一體.mp3` → `/api/music/s/E4B889E89B8BE4B880E9AB94.mp3`。
 
 ## 天氣與環境
 
@@ -230,7 +268,7 @@ ddragon.leagueoflegends.com                                      英雄頭像與
 | 環境 | 觸發 | Image tag | 伺服器 port |
 |---|---|---|---|
 | staging | merge / push 到 `dev` | `staging-<commit>`、`staging-latest` | 8102 |
-| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | 443（目前是 HTTP，之後接 HTTPS） |
+| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | 443（HTTPS，`music.ouyangminwei.com`） |
 
 分支流程：
 
@@ -246,8 +284,14 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 ### 不斷線部署（Traefik + docker-rollout）
 
 ```
-外部 ─▶ Traefik（:8102 → staging、:443 → prod）─▶ app 容器（不直接對外綁 port）
+外部 ─▶ Traefik（:8102 → staging、:443 → prod、:80 → 轉到 https）─▶ app 容器（不直接對外綁 port）
 ```
+
+HTTPS 憑證由 Traefik 向 Let's Encrypt 申請（HTTP-01，走 :80），到期前自動續約，存在 volume `ouyang-web-traefik_letsencrypt`。
+`ouyangminwei.com` 在 Hostinger（WordPress 也在那裡），DNS 加了一筆 `music` 的 A 紀錄指到伺服器。
+AWS 安全群組要開 80、443、8102。
+之後若把 DNS 搬到 Cloudflare 並開代理（橘色雲朵），Traefik 看到的來源 IP 會變成 Cloudflare 的，
+登入限制和訪客紀錄都會算錯，要先讓 Traefik 信任 Cloudflare 的 IP 範圍。
 
 `deploy.sh` 用 `docker rollout` 換版：先啟動新容器 → 等 healthcheck 通過 → 再等 3 秒讓 Traefik 接上 → 停掉舊容器。
 

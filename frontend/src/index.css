@@ -92,6 +92,18 @@
   --side-blue: #2563eb;
   --side-red: #be123c;
   --logo-tile: #26221d;
+  /* Data Matrix 生成器：條碼一定要白底黑碼掃描槍才讀得到，兩種主題都一樣 */
+  --code-bg: #ffffff;
+  /* 俄羅斯方塊：I J L O S T Z 七種方塊、垃圾行，以及盤面底色 */
+  --tet-1: #0891b2;
+  --tet-2: #2563eb;
+  --tet-3: #ea580c;
+  --tet-4: #ca8a04;
+  --tet-5: #16a34a;
+  --tet-6: #9333ea;
+  --tet-7: #dc2626;
+  --tet-8: #9c9486;
+  --tet-bg: #efe9dd;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -188,6 +200,16 @@
   --side-blue: #60a5fa;
   --side-red: #ff6b81;
   --logo-tile: #2a2520;
+    --code-bg: #ffffff;
+    --tet-1: #22d3ee;
+    --tet-2: #60a5fa;
+    --tet-3: #fb923c;
+    --tet-4: #facc15;
+    --tet-5: #4ade80;
+    --tet-6: #c084fc;
+    --tet-7: #f87171;
+    --tet-8: #5c554d;
+    --tet-bg: #0b0a09;
     color-scheme: dark;
   }
 }
@@ -274,6 +296,16 @@
   --side-blue: #60a5fa;
   --side-red: #ff6b81;
   --logo-tile: #2a2520;
+  --code-bg: #ffffff;
+  --tet-1: #22d3ee;
+  --tet-2: #60a5fa;
+  --tet-3: #fb923c;
+  --tet-4: #facc15;
+  --tet-5: #4ade80;
+  --tet-6: #c084fc;
+  --tet-7: #f87171;
+  --tet-8: #5c554d;
+  --tet-bg: #0b0a09;
   color-scheme: dark;
 }
 

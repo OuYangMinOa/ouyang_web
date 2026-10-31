@@ -1,0 +1,401 @@
+/* Data Matrix 生成器：手機單手操作為主，整頁一欄、按鈕都做大 */
+
+.dmx {
+  max-width: 520px;
+  margin: 0 auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dmx-title {
+  text-align: center;
+  font-size: clamp(20px, 5vw, 26px);
+  letter-spacing: 0.04em;
+  margin-bottom: 20px;
+}
+.dmx-title span {
+  color: var(--accent);
+}
+
+.dmx h2 {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text);
+}
+
+/* ---- 倉位 / 料件 ---- */
+
+.dmx-modes {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.dmx-modes button {
+  flex: 1;
+  min-height: 46px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+}
+.dmx-modes button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.dmx-box {
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+/* ---- 最愛 / 歷史 ---- */
+
+.dmx-quick {
+  padding: 12px;
+}
+.dmx-quick-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.dmx-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+.dmx-tabs button,
+.dmx-fav,
+.dmx-clear {
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+}
+.dmx-tabs button.active {
+  background: var(--bg);
+  color: var(--text-h);
+}
+.dmx-fav {
+  color: var(--warn);
+}
+.dmx-fav.on {
+  border-color: var(--warn);
+}
+
+.dmx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.dmx-chip {
+  display: flex;
+  align-items: stretch;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.dmx-chip:has(button:active) {
+  border-color: var(--accent);
+}
+.dmx-chip button {
+  background: transparent;
+  color: var(--text-h);
+  border-radius: 10px;
+}
+.dmx-chip button:first-child {
+  min-width: 0;
+  padding: 8px 4px 8px 12px;
+  font: 14px var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dmx-chip .dmx-chip-del {
+  padding: 0 12px;
+  font-size: 18px;
+  color: var(--text);
+}
+.dmx-empty {
+  margin: 0;
+  padding: 6px 2px;
+  font-size: 13px;
+  color: var(--text);
+}
+.dmx-clear {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+/* ---- 欄位 ---- */
+
+.dmx-scan {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 14px;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--glow);
+  color: var(--accent);
+}
+
+.dmx-field {
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.dmx-field:last-child {
+  margin-bottom: 0;
+}
+.dmx-field > span {
+  display: block;
+  margin-bottom: 2px;
+}
+.dmx-field input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--bg);
+  letter-spacing: 0.02em;
+}
+.dmx-field input:read-only {
+  color: var(--text);
+}
+
+.dmx-ser {
+  display: flex;
+  gap: 8px;
+}
+.dmx-ser button {
+  flex-shrink: 0;
+  font-size: 14px;
+  border-radius: 10px;
+}
+
+/* ---- 條碼與結果 ---- */
+
+.dmx-generate {
+  width: 100%;
+  min-height: 56px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 14px;
+  box-shadow: 0 4px 18px var(--glow);
+}
+.dmx-generate:active {
+  transform: scale(0.98);
+}
+
+.dmx-code {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80px;
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--code-bg);
+  scroll-margin: 16px;
+}
+.dmx-code canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.dmx-result {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font: 13px/1.8 var(--mono);
+  color: var(--text-h);
+  word-break: break-all;
+}
+
+button.dmx-copy {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+}
+button.dmx-copy.copied {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+/* 拍照用，畫面上看不到 */
+.dmx-file {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- 即時掃描 ---- */
+
+.dmx-scanner {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+}
+.dmx-scanner video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dmx-scan-ui {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+.dmx-scan-frame {
+  position: relative;
+  width: min(72vw, 280px);
+  aspect-ratio: 1;
+  border-radius: 4px;
+  box-shadow: 0 0 0 9999px var(--scrim);
+}
+.dmx-scan-frame .corner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 0 solid var(--accent);
+}
+.corner.tl {
+  top: 0;
+  left: 0;
+  border-top-width: 3px;
+  border-left-width: 3px;
+}
+.corner.tr {
+  top: 0;
+  right: 0;
+  border-top-width: 3px;
+  border-right-width: 3px;
+}
+.corner.bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 3px;
+  border-left-width: 3px;
+}
+.corner.br {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 3px;
+  border-right-width: 3px;
+}
+.dmx-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: dmx-scan 1.8s ease-in-out infinite;
+}
+@keyframes dmx-scan {
+  0%,
+  100% {
+    top: 0;
+  }
+  50% {
+    top: calc(100% - 2px);
+  }
+}
+.dmx-scan-hint {
+  margin: 0;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-h);
+  font-size: 15px;
+}
+button.dmx-scan-cancel {
+  position: absolute;
+  bottom: max(40px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  min-height: 48px;
+  padding: 0 52px;
+  font-size: 17px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+/* ---- 提示 ---- */
+
+.dmx-toast {
+  position: fixed;
+  bottom: max(40px, env(safe-area-inset-bottom));
+  left: 50%;
+  z-index: 200;
+  max-width: calc(100% - 32px);
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--on-accent);
+  background: var(--danger);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: dmx-toast 0.25s ease-out;
+}
+.dmx-toast.success {
+  background: var(--ok);
+}
+.dmx-toast.info {
+  background: var(--accent);
+}
+@keyframes dmx-toast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
