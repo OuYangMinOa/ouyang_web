@@ -43,7 +43,7 @@ alice                  admin（系統管理員）         admin.users
 - 停用帳號、重設密碼會讓該帳號所有裝置登出；自己改密碼只保留目前這個裝置。
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 
-頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 建立或救回管理員
 
@@ -180,6 +180,22 @@ DELETE /api/calendar/events/{id}
 - **匯率計算機**：瀏覽器直接呼叫 Frankfurter v2（`api.frankfurter.dev/v2`，彙整各國央行匯率，含 TWD），最新匯率存在 localStorage，離線時顯示上次的資料。
 - **ASCII 藝術字**：figlet 的 `.flf` 字型當成靜態檔輸出，選到才 fetch。
 - **Emoji 選擇器**：資料來自 `emojibase-data`（繁中＋英文）。**編碼與雜湊**：雜湊用 `hash-wasm`。
+
+## IP 訪問紀錄
+
+「系統管理 › IP 訪問紀錄」（`/admin/access`，需要 `admin.users`）：全站每個請求的來源 IP、方法、路徑、狀態碼、花費時間、登入的帳號和 User-Agent，
+可以依 IP 彙整（依最後活動或請求數排序，展開看那個 IP 的請求），或看最近 500 筆請求。程式在 `backend/src/access_log.rs`。
+
+```
+GET /api/admin/access?hours=24&sort=recent|requests   統計、前 300 個 IP、請求最多的 15 個路徑      hours：1～720
+GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可以只看某個 IP、只看 4xx／5xx）
+```
+
+- 用 middleware 記錄，IP 跟登入限制一樣取 Traefik 的 X-Forwarded-For。前端打包出來的靜態檔（`STATIC_DIR` 最上層有的檔案和資料夾）、
+  `/api/health` 和這個頁面自己的查詢不記；不存在的路徑（掃描器找的 `/wp-login.php`、`/.env`）會記。
+- 請求本身不碰資料庫：先放在記憶體，背景每 2 秒整批寫進 `access_logs`，帳號也是那時才從 session 查（登入那一次還沒有 cookie、
+  登出那一次 session 已刪，都算訪客）。關機時會寫完剩下的，被強制結束的話最後幾秒會遺失。
+- 保留 30 天，每小時清一次。同一個 IP 10 分鐘超過 1000 筆的部分不記，避免被灌爆。
 
 ## 隱藏頁面
 

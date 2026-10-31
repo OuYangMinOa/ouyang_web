@@ -1,3 +1,4 @@
+pub mod access_log;
 pub mod admin;
 pub mod auth;
 pub mod calendar;
@@ -23,6 +24,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::StatusCode,
+    middleware,
     response::{IntoResponse, Response},
     routing::{get, patch, post, put},
 };
@@ -58,6 +60,8 @@ pub struct AppState {
     /// 天氣與環境：外部資料的快取，以及地震速報的即時連線
     pub weather: Arc<weather::Weather>,
     pub visit_limiter: Arc<visits::VisitLimiter>,
+    /// 全站的 IP 訪問紀錄，背景整批寫進資料庫（見 access_log.rs）
+    pub access_log: Arc<access_log::AccessLog>,
 }
 
 impl AppState {
@@ -75,6 +79,7 @@ impl AppState {
             music_dir: PathBuf::from("data/music"),
             weather: Arc::default(),
             visit_limiter: Arc::default(),
+            access_log: Arc::default(),
         }
     }
 }
@@ -91,6 +96,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/users", get(admin::list_users).post(admin::create_user))
         .route("/admin/users/{id}", patch(admin::update_user))
         .route("/admin/roles", get(admin::list_roles))
+        .route("/admin/access", get(access_log::report))
+        .route("/admin/access/requests", get(access_log::requests))
         .route("/admin/visits/{page}", get(visits::list_sessions))
         .route("/admin/visits/{page}/{session}", get(visits::session_events))
         .route("/visits/{page}", post(visits::track))
@@ -118,7 +125,13 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .precompressed_gzip()
         .fallback(ServeFile::new(static_dir.join("index.html")).precompressed_gzip());
 
-    Router::new().nest("/api", api).fallback_service(spa).layer(TraceLayer::new_for_http()).with_state(state)
+    let recorder = access_log::Recorder::new(state.clone(), static_dir);
+    Router::new()
+        .nest("/api", api)
+        .fallback_service(spa)
+        .layer(middleware::from_fn_with_state(recorder, access_log::record))
+        .layer(TraceLayer::new_for_http())
+        .with_state(state)
 }
 
 async fn health(State(state): State<AppState>) -> Response {

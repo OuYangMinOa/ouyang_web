@@ -11,7 +11,7 @@ use std::{
 };
 
 use backend::{
-    AppState,
+    AppState, access_log,
     auth::upsert_admin,
     healthcheck, router,
     weather::{self, Weather},
@@ -55,12 +55,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     state.weather = Arc::new(Weather::from_env());
     // 地震速報要一直連著，不等有人來看；本機的 relay 見 weather/quake.rs
     weather::quake::spawn(state.weather.clone(), env::var("EEW_RELAY_URL").ok());
+    access_log::spawn(state.access_log.clone(), pool.clone());
     let draining = state.draining.clone();
+    let access = state.access_log.clone();
     let app = router(state, &static_dir);
     let listener = tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;
     tracing::info!(%app_env, %commit, port, static_dir = %static_dir.display(), "listening");
 
     axum::serve(listener, app).with_graceful_shutdown(shutdown_signal(draining, drain)).await?;
+    // 背景每 2 秒才寫一次，關機前把剩下的寫完
+    if let Err(err) = access.flush(&pool).await {
+        tracing::warn!(error = %err, "failed to write access logs");
+    }
     pool.close().await;
     Ok(())
 }

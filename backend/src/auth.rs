@@ -214,7 +214,7 @@ fn random_token() -> Result<String, AppError> {
     Ok(hex(&bytes))
 }
 
-fn token_hash(token: &str) -> String {
+pub(crate) fn token_hash(token: &str) -> String {
     hex(&Sha256::digest(token.as_bytes()))
 }
 
@@ -224,7 +224,7 @@ fn hex(bytes: &[u8]) -> String {
 
 impl AppState {
     /// staging 和 prod 目前是同一個 IP 的不同 port，而 cookie 不分 port，名稱帶上環境才不會互相覆蓋
-    fn session_cookie_name(&self) -> String {
+    pub(crate) fn session_cookie_name(&self) -> String {
         format!("session_{}", self.app_env)
     }
 
@@ -234,7 +234,7 @@ impl AppState {
     }
 }
 
-fn read_session_token(headers: &HeaderMap, name: &str) -> Option<String> {
+pub(crate) fn read_session_token(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()

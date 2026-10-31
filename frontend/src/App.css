@@ -513,6 +513,99 @@ td .edit {
   overflow-wrap: anywhere;
 }
 
+/* IP 訪問紀錄 */
+.access-toolbar,
+.access-views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.access-toolbar select,
+.access-views select {
+  flex: 0 0 auto;
+}
+.access-toolbar {
+  margin-top: 16px;
+}
+.access-toolbar input {
+  flex: 1 1 200px;
+}
+.access-views {
+  justify-content: space-between;
+  margin: 16px 0 8px;
+}
+.access-tabs {
+  display: flex;
+  gap: 6px;
+}
+.access-paths {
+  margin-top: 0;
+  padding: 4px 16px;
+}
+.access-paths summary {
+  padding: 10px 0;
+  color: var(--text-h);
+  font-weight: 600;
+  cursor: pointer;
+}
+.access-paths ol {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.access-paths li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+.access-paths li:last-child {
+  border-bottom: 0;
+}
+.access-paths .link,
+.access-requests .visit-detail,
+.access-path {
+  font: 13px var(--mono);
+  color: var(--text-h);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.access-path {
+  max-width: 280px;
+}
+/* 窄的時候路徑自己一行，不要被擠成一字一行 */
+.access-requests .visit-detail {
+  flex: 1 1 240px;
+}
+.access-method {
+  font: 12px var(--mono);
+  color: var(--text);
+  white-space: nowrap;
+}
+.access-status {
+  margin: 0;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+}
+.access-status.is-4xx {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.access-status.is-5xx {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.access-all {
+  padding: 4px 16px;
+}
+.access-all .access-requests {
+  max-height: 70vh;
+}
+
 /* ---- 留言板 ---- */
 
 .messages {
@@ -646,6 +739,16 @@ time {
   }
   td .edit {
     min-width: 0;
+    flex: 1;
+  }
+  .access-path {
+    max-width: none;
+    min-width: 0;
+  }
+  .access-tabs {
+    flex: 1 1 100%;
+  }
+  .access-tabs button {
     flex: 1;
   }
   /* 展開的明細接在上一張卡片底下 */
