@@ -89,7 +89,8 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
    ```
    桌機會有可收合的側邊欄，窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
 
-> prod（`https://music.ouyangminwei.com`）走 HTTPS，`prod.env` 設了 `COOKIE_SECURE=true`。staging（`:8102`）還是 HTTP，密碼和 cookie 在網路上是明文傳送，不要在公共網路登入重要帳號。
+> prod（`https://ouyang.app`）和 staging（`https://test.ouyang.app`）都走 HTTPS，`<env>.env` 設了 `COOKIE_SECURE=true`。
+> cookie 沒有設 Domain，只屬於各自的網址，名稱也依環境分開（`session_<env>`），兩邊的登入互不影響。
 
 ## 小遊戲線上對戰
 
@@ -304,10 +305,10 @@ ddragon.leagueoflegends.com                                      英雄頭像與
 
 ## 部署
 
-| 環境 | 觸發 | Image tag | 伺服器 port |
+| 環境 | 觸發 | Image tag | 網址 |
 |---|---|---|---|
-| staging | merge / push 到 `dev` | `staging-<commit>`、`staging-latest` | 8102 |
-| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | 443（HTTPS，`music.ouyangminwei.com`） |
+| staging | merge / push 到 `dev` | `staging-<commit>`、`staging-latest` | `https://test.ouyang.app` |
+| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | `https://ouyang.app` |
 
 分支流程：
 
@@ -323,14 +324,20 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 ### 不斷線部署（Traefik + docker-rollout）
 
 ```
-外部 ─▶ Traefik（:8102 → staging、:443 → prod、:80 → 轉到 https）─▶ app 容器（不直接對外綁 port）
+外部 ─▶ Traefik :443 ─┬─ Host ouyang.app      ─▶ prod 的 app 容器
+                      └─ Host test.ouyang.app ─▶ staging 的 app 容器（app 容器都不直接對外綁 port）
 ```
 
-HTTPS 憑證由 Traefik 向 Let's Encrypt 申請（HTTP-01，走 :80），到期前自動續約，存在 volume `ouyang-web-traefik_letsencrypt`。
-`ouyangminwei.com` 在 Hostinger（WordPress 也在那裡），DNS 加了一筆 `music` 的 A 紀錄指到伺服器。
-AWS 安全群組要開 80、443、8102。
-之後若把 DNS 搬到 Cloudflare 並開代理（橘色雲朵），Traefik 看到的來源 IP 會變成 Cloudflare 的，
-登入限制和訪客紀錄都會算錯，要先讓 Traefik 信任 Cloudflare 的 IP 範圍。
+網域 `ouyang.app` 在 Cloudflare 註冊，DNS 有 `@` 和 `test` 兩筆 A 紀錄指到伺服器，都設成 **DNS only**（灰色雲朵，不經過 Cloudflare 代理）。
+網址寫在 `<env>.env` 的 `APP_HOST`，app 的 router 規則是 `Host(APP_HOST)`；Traefik 的 entrypoint 名稱 `prod` 是沿用舊的，兩個環境都走這裡。
+新增網域時，`traefik/compose.yaml` 的 `tls.domains` 也要加上。
+HTTPS 憑證由 Traefik 向 Let's Encrypt 申請（TLS-ALPN-01，只走 :443），每個網域一張，到期前自動續約，存在 volume `ouyang-web-traefik_letsencrypt`。
+不開 :80：`.app` 在瀏覽器的 HSTS 預載清單裡，瀏覽器本來就只會用 https 連。AWS 安全群組只要開 443。
+
+之後若要開 Cloudflare 代理（橘色雲朵），先處理這幾件事：
+- SSL/TLS 模式設 Full (strict)。Cloudflare 會在它那邊結束 TLS，TLS-ALPN-01 驗證不到伺服器，要改成 DNS-01（Cloudflare API token，只給這個 zone 的 DNS 編輯權限）。
+- 來源 IP：`auth.rs` 的 `client_key` 取 X-Forwarded-For 最後一筆，也就是直接連進 Traefik 的那台，開代理後會變成 Cloudflare 的節點；
+  只讓 Traefik 信任 Cloudflare 的 IP 範圍也不夠（Traefik 會把直接連線的 IP 接在最後）。要改成最後一筆是 Cloudflare 的 IP 時才讀 `CF-Connecting-IP`。
 
 `deploy.sh` 用 `docker rollout` 換版：先啟動新容器 → 等 healthcheck 通過 → 再等 3 秒讓 Traefik 接上 → 停掉舊容器。
 
