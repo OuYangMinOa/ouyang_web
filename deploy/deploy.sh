@@ -14,8 +14,10 @@ image=$2
 cd "$(dirname "$0")"
 
 # compose 和 docker rollout 都會自動讀同目錄的 .env；之後在伺服器上手動操作也只要 cd 進來就好
+# secrets.env 是手動放在伺服器上的金鑰（例如 CWA_API_KEY=...），不會被部署覆蓋，也不進 git
 {
   cat "$env_name.env"
+  if [ -f secrets.env ]; then cat secrets.env; fi
   echo "COMPOSE_PROJECT_NAME=ouyang-web-$env_name"
   echo "IMAGE=$image"
 } > .env

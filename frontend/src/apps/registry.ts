@@ -100,6 +100,25 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'weather',
+    name: '天氣與環境',
+    icon: '🌦️',
+    glyph: '氣',
+    blurb: '颱風路徑（各國官方與 AI 預報）、全台縣市天氣與空氣品質，還有台灣、日本、中國的即時地震速報。',
+    tag: '颱風 · 地震',
+    live: true,
+    nav: [
+      {
+        items: [
+          { to: '/weather', label: '總覽', icon: '▦' },
+          { to: '/weather/typhoon', label: '颱風', icon: '🌀' },
+          { to: '/weather/forecast', label: '全台天氣', icon: '⛅' },
+          { to: '/weather/quake', label: '地震', icon: '📈' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     name: '系統管理',
     icon: '🛠️',
