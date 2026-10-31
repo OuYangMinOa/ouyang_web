@@ -250,6 +250,7 @@ GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可
 
 - 用 middleware 記錄，IP 跟登入限制一樣取 Traefik 的 X-Forwarded-For。前端打包出來的靜態檔（`STATIC_DIR` 最上層有的檔案和資料夾）、
   `/api/health` 和這個頁面自己的查詢不記；不存在的路徑（掃描器找的 `/wp-login.php`、`/.env`）會記。
+  前端沒有點開頭的路徑，所以 `/.env`、`/.git/config` 這類直接回 404，不會拿到 index.html（`lib.rs` 的 `hide_dot_paths`）。
 - 請求本身不碰資料庫：先放在記憶體，背景每 2 秒整批寫進 `access_logs`，帳號也是那時才從 session 查（登入那一次還沒有 cookie、
   登出那一次 session 已刪，都算訪客）。關機時會寫完剩下的，被強制結束的話最後幾秒會遺失。
 - 保留 30 天，每小時清一次。同一個 IP 10 分鐘超過 1000 筆的部分不記，避免被灌爆。

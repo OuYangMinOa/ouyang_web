@@ -28,9 +28,9 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Request, State},
     http::StatusCode,
-    middleware,
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, patch, post, put},
 };
@@ -155,9 +155,10 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .fallback(api_not_found);
 
     // 打包時已經把較大的檔案另存一份 .gz（Dockerfile），瀏覽器支援 gzip 就直接送那份
-    let spa = ServeDir::new(static_dir)
+    let files = ServeDir::new(static_dir)
         .precompressed_gzip()
         .fallback(ServeFile::new(static_dir.join("index.html")).precompressed_gzip());
+    let spa = Router::new().fallback_service(files).layer(middleware::from_fn(hide_dot_paths));
 
     let recorder = access_log::Recorder::new(state.clone(), static_dir);
     Router::new()
@@ -242,6 +243,14 @@ async fn create_message(
 
 async fn api_not_found() -> AppError {
     AppError::NotFound
+}
+
+/// 掃描器常找 `/.env`、`/.git/config`：前端不會有點開頭的路徑，直接 404，不要回 index.html 讓它們以為找到東西。
+async fn hide_dot_paths(request: Request, next: Next) -> Response {
+    if request.uri().path().split('/').any(|segment| segment.starts_with('.')) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    next.run(request).await
 }
 
 #[derive(Debug)]
