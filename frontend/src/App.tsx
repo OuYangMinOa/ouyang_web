@@ -11,6 +11,11 @@ import MyEventsPage from './calendar/MyEventsPage'
 import { useMenu } from './components/useMenu'
 import GamePage from './games/GamePage'
 import GamesHub from './games/GamesHub'
+import LolApp from './lol/LolApp'
+import MatchPage from './lol/MatchPage'
+import Overview from './lol/Overview'
+import Schedule from './lol/Schedule'
+import Standings from './lol/Standings'
 import MusicApp from './music/MusicApp'
 import MusicLibrary from './music/MusicLibrary'
 import Account from './pages/Account'
@@ -178,6 +183,15 @@ function App() {
               <Route path="typhoon" element={<Lazy page={TyphoonPage} />} />
               <Route path="forecast" element={<Lazy page={ForecastPage} />} />
               <Route path="quake" element={<Lazy page={QuakePage} />} />
+            </Route>
+            <Route path="/lol" element={<AppLayout />}>
+              {/* 賽程和直播狀態在外層抓一次，切換頁面不用重抓 */}
+              <Route element={<LolApp />}>
+                <Route index element={<Overview />} />
+                <Route path="schedule" element={<Schedule />} />
+                <Route path="standings" element={<Standings />} />
+                <Route path="match/:id" element={<MatchPage />} />
+              </Route>
             </Route>
             <Route path="/login" element={<Login />} />
             <Route
