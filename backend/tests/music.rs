@@ -72,6 +72,46 @@ async fn serves_files_with_ranges() {
 }
 
 #[tokio::test]
+async fn serves_shared_alias_with_original_filename() {
+    let app = app_with_music(music_dir("share")).await;
+    // 「你好 世界」的 UTF-8 十六進位
+    let uri = "/api/music/s/E4BDA0E5A5BD20E4B896E7958C.mp3";
+    let response = app.router.clone().oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::CONTENT_TYPE], "audio/mpeg");
+    assert_eq!(
+        response.headers()[header::CONTENT_DISPOSITION],
+        "inline; filename*=UTF-8''%E4%BD%A0%E5%A5%BD%20%E4%B8%96%E7%95%8C.mp3"
+    );
+    assert_eq!(response.into_body().collect().await.unwrap().to_bytes().as_ref(), b"0123456789");
+
+    // 小寫也可以
+    let (status, _, body) = fetch(&app, "/api/music/s/e4bda0e5a5bd20e4b896e7958c.mp3", Some("bytes=2-4")).await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, b"234");
+}
+
+#[tokio::test]
+async fn refuses_bad_shared_aliases() {
+    let app = app_with_music(music_dir("share-refuse")).await;
+    for uri in [
+        // 奇數位、不是十六進位、不是 UTF-8、沒有副檔名
+        "/api/music/s/E4B.mp3",
+        "/api/music/s/ZZZZ.mp3",
+        "/api/music/s/FFFE.mp3",
+        "/api/music/s/E4BDA0",
+        "/api/music/s/.mp3",
+        // notes.txt、sub/inner.mp3、../x.mp3：解出來還是要過 is_track
+        "/api/music/s/6E6F746573.txt",
+        "/api/music/s/7375622F696E6E6572.mp3",
+        "/api/music/s/2E2E2F78.mp3",
+    ] {
+        let (status, _, _) = fetch(&app, uri, None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
+    }
+}
+
+#[tokio::test]
 async fn refuses_anything_but_top_level_audio() {
     let app = app_with_music(music_dir("refuse")).await;
     for uri in [

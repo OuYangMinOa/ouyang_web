@@ -98,6 +98,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/tetris/rooms/{code}/ws", get(tetris::connect))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
+        .route("/music/s/{alias}", get(music::shared_file))
         .route("/weather/forecast", get(weather::forecast::forecast))
         .route("/weather/typhoons", get(weather::typhoon::typhoons))
         .route("/weather/quakes", get(weather::quake::quakes))

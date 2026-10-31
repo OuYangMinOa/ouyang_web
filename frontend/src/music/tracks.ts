@@ -20,11 +20,14 @@ export function trackUrl(name: string) {
 
 /**
  * 分享用的完整網址，直接指向音檔：貼到 Telegram、Discord 會顯示可以直接播的播放條。
- * 中文字保留原樣比較好讀；空白、符號和全形標點照樣編碼，聊天軟體才不會把網址截斷。
+ * Telegram 遇到路徑裡有中文（或空白、符號）的網址不產生預覽，所以檔名不是單純英數字時，
+ * 改用後端的 /api/music/s/：檔名的 UTF-8 寫成十六進位，副檔名照留（見 music.rs 的 shared_file）。
  */
 export function shareUrl(name: string) {
-  const path = [...name].map((c) => (c > '\x7f' && /[\p{L}\p{N}\p{M}]/u.test(c) ? c : encodeURIComponent(c))).join('')
-  return `${location.origin}/api/music/files/${path}`
+  if (/^[\w.-]+$/.test(name)) return `${location.origin}${trackUrl(name)}`
+  const dot = name.lastIndexOf('.')
+  const hex = Array.from(new TextEncoder().encode(name.slice(0, dot)), (b) => b.toString(16).padStart(2, '0')).join('')
+  return `${location.origin}/api/music/s/${hex.toUpperCase()}${name.slice(dot)}`
 }
 
 /** 顯示用的名稱：去掉副檔名 */

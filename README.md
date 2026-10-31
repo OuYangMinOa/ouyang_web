@@ -192,14 +192,16 @@ GET  /api/admin/visits/{page}/{session}  那次瀏覽的事件
 ```
 GET /api/music                 [{ name, size, modified }]   modified 是 Unix 毫秒；每次都重新讀資料夾，bot 新增的檔案馬上看得到
 GET /api/music/files/{name}    檔案本身，支援 Range（拖曳進度）
+GET /api/music/s/{hex}.{ext}   同上，分享用：檔名（不含副檔名）的 UTF-8 十六進位，回應帶原本檔名的 Content-Disposition
 ```
 
 - 只認最上層、不是隱藏檔、副檔名是 mp3 / m4a / aac / ogg / oga / opus / wav / flac / webm 的檔案，其他一律 404。
 - 本機開發用 `MUSIC_DIR` 指定資料夾，沒設就讀 `backend/data/music`，不存在就是空清單。
 - 收藏、音量、隨機和循環設定存在瀏覽器的 localStorage，不跟帳號走。播放器放在 APP 的外層，切換「全部」「收藏」不會中斷，離開音樂 APP 才會停。
-- 每首歌的分享鈕給的是音檔本身的網址（`/api/music/files/…`）：Telegram、Discord 只有直接連到音檔才會在聊天室裡顯示播放條，
-  連到網頁的話不會。手機用系統的分享選單，電腦直接複製。網址裡的中文保留原樣，空白和符號才編碼。
-  Telegram 只幫網域產生預覽，貼 IP 的網址不會有播放條。
+- 每首歌的分享鈕給的是音檔本身的網址：Telegram、Discord 只有直接連到音檔才會在聊天室裡顯示播放條，
+  連到網頁的話不會。手機用系統的分享選單，電腦直接複製。
+  Telegram 只幫網域產生預覽（貼 IP 的不會），路徑裡有中文的也不會（編不編碼都一樣），
+  所以檔名不是單純英數字時改用 `/api/music/s/` 的十六進位網址，例如 `三蛋一體.mp3` → `/api/music/s/E4B889E89B8BE4B880E9AB94.mp3`。
 
 ## 天氣與環境
 
