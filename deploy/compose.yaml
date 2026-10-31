@@ -7,7 +7,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       RUST_LOG: ${RUST_LOG:-info}
-      # prod 有 HTTPS，prod.env 設了 COOKIE_SECURE=true，登入 cookie 只會走 HTTPS
+      # prod 和 staging 都走 HTTPS，<env>.env 設了 COOKIE_SECURE=true，登入 cookie 只會走 HTTPS
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       MUSIC_DIR: /music
       # 地震速報經過主機上的 relay（systemd 的 wb-relay，:8080），和歐陽小俠共用 wolfx 的連線
@@ -27,9 +27,10 @@ services:
     stop_grace_period: 20s
     labels:
       - traefik.enable=true
-      # router / entrypoint 都以環境命名（staging → :8102，prod → :443，定義在 traefik/compose.yaml）
-      - traefik.http.routers.${APP_ENV}.entrypoints=${APP_ENV}
-      - traefik.http.routers.${APP_ENV}.rule=PathPrefix(`/`)
+      # 兩個環境都走 Traefik 的 :443，依網址分流（APP_HOST 寫在 <env>.env）。
+      # entrypoint 沿用舊名稱 prod：Traefik 是共用的，改名的話，還沒換版的那個環境的 router 會找不到 entrypoint 而斷線
+      - traefik.http.routers.${APP_ENV}.entrypoints=prod
+      - traefik.http.routers.${APP_ENV}.rule=Host(`${APP_HOST:?APP_HOST is required}`)
       - traefik.http.routers.${APP_ENV}.middlewares=${APP_ENV}-retry
       - traefik.http.services.${APP_ENV}.loadbalancer.server.port=8080
       # Traefik 每秒主動檢查；舊容器 drain 時 health 回 503，會在停止前就被移出負載平衡

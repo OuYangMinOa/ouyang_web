@@ -42,8 +42,9 @@ alice                  admin（系統管理員）         admin.users
 - 同一個 IP 15 分鐘內登入失敗 10 次會暫停登入。
 - 停用帳號、重設密碼會讓該帳號所有裝置登出；自己改密碼只保留目前這個裝置。
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
+- 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 建立或救回管理員
 
@@ -88,7 +89,8 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
    ```
    桌機會有可收合的側邊欄，窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
 
-> prod（`https://music.ouyangminwei.com`）走 HTTPS，`prod.env` 設了 `COOKIE_SECURE=true`。staging（`:8102`）還是 HTTP，密碼和 cookie 在網路上是明文傳送，不要在公共網路登入重要帳號。
+> prod（`https://ouyang.app`）和 staging（`https://test.ouyang.app`）都走 HTTPS，`<env>.env` 設了 `COOKIE_SECURE=true`。
+> cookie 沒有設 Domain，只屬於各自的網址，名稱也依環境分開（`session_<env>`），兩邊的登入互不影響。
 
 ## 小遊戲線上對戰
 
@@ -128,11 +130,58 @@ POST /api/games/tetris/rooms  {"public":true}  →  201 {"code":"ABCDE"}   publi
 GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升級成 WebSocket（登入時用帳號與帳號名稱）
 ```
 
-- 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T-Spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
+- 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T／L／J／S／Z／I 的 spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
   負責選目標（隨機／快輸的／徽章／反擊，或手動點小盤面）、轉送垃圾行、算 KO、徽章、名次與速度等級，以及模擬電腦玩家。
 - 房間每 250ms 推進一次，這段時間的狀態和盤面變化合併成一則廣播。
 - 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
 - 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
+- 單人模式每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限；分數照官方規則（消行、spin、B2B、連擊、全消乘上等級，加上下落格數）。
+  登入的人的成績會上傳到排行榜（`backend/src/tetris_scores.rs`，每個帳號只留最高分）：
+
+  ```
+  GET  /api/games/tetris/scores                 →  {"top":[{rank,username,score,lines,level,duration_ms,achieved_at}],"me":{…}|null}
+  POST /api/games/tetris/runs                   →  201 {"id"}   開局，伺服器記下開始時間（要登入，一個帳號同時一局）
+  POST /api/games/tetris/runs/{id}/checkpoints  {"score","lines","level","pieces","duration_ms","board"}  →  204
+  POST /api/games/tetris/runs/{id}/finish       同上  →  排行榜再加 "best"（有沒有刷新紀錄）
+  ```
+
+  分數是前端算的，伺服器不重播整局，而是每 5 秒（遊戲時間）檢查一次中間態來確認真的有玩：遊戲時間不能超過實際經過的時間、
+  數字只增不減且增加速度合理、盤面沒有滿行且格數等於「方塊數 × 4 − 行數 × 10」。有一次不合理整局作廢。
+  進行中的局只放在記憶體，重啟或換版時正在玩的那局無法上傳。
+- 背景音樂是 Korobeiniki（俄羅斯民謠），用 Web Audio 即時合成（合成器在 `games/shared/music.ts`，曲子在 `tetris/music.ts`），不需要音檔：三角波旋律、正弦波低音，
+  加上低通濾波和一點回音讓聲音柔和；速度跟著等級變快，按 M 或按鈕開關。
+- 快捷鍵可以自訂（`games/shared/keys.ts`、`games/shared/KeyEditor.tsx`，和魔法氣泡共用），每個動作最多兩個鍵。沒登入存在瀏覽器，有登入存在帳號（`backend/src/game_settings.rs`），
+  換裝置也一樣；帳號還沒存過時沿用瀏覽器的設定：
+
+  ```
+  GET /api/games/tetris/settings  →  {"keys":{"left":["ArrowLeft"],…}|null}   null 是沒存過（要登入）
+  PUT /api/games/tetris/settings  {"keys":{…}|null}  →  204                   null 是恢復預設
+  ```
+
+### 魔法氣泡
+
+`/games/puyo`：參考ぷよぷよ通的規則，單人模式和一對一對戰電腦，全部在瀏覽器裡跑（`frontend/src/games/puyo/`）。
+和俄羅斯方塊共用快捷鍵、背景音樂合成器和排行榜元件（`games/shared/`）。
+
+- 規則（`engine.ts`）：6 × 12 的盤面加上看不到的第 13 列，兩顆一組、四種顏色，同色 4 顆以上相連就消掉，可以連鎖。
+  分數照官方公式：10 × 消掉的顆數 × (連鎖倍率 + 連結加成 + 顏色加成)。第 3 欄最上面被堵住就輸。
+  消除和掉落是有時間的動畫，連鎖一步一步推進，看得到每一連。
+- 對戰：兩邊用同一個亂數種子，拿到一樣順序的氣泡。每 70 分換一顆干擾泡，先抵銷自己待落下的再送出去；
+  開打 96 秒後進入加時，換算分數每 16 秒變成 3/4。全消後下一次連鎖多送 30 顆。
+- 電腦（`cpu.ts`）：每組把所有落點（最多 22 種）都模擬一次，看現在能不能打出夠大的連鎖、「再補一兩顆能引爆幾連鎖」和盤面形狀；
+  困難再把下一組也考慮進去（只從最好的 8 個落點往下看，手機上不會卡）。三種難度差在想多久、動多快、要等幾連鎖才引爆。
+- 單人模式每放 30 組或每玩 1 分鐘升一級。登入的人的成績會上傳到排行榜（`backend/src/puyo_scores.rs`），做法和俄羅斯方塊一樣檢查中間態：
+
+  ```
+  GET  /api/games/puyo/scores                 →  {"top":[{rank,username,score,max_chain,level,duration_ms,achieved_at}],"me":{…}|null}
+  POST /api/games/puyo/runs                   →  201 {"id"}
+  POST /api/games/puyo/runs/{id}/checkpoints  {"score","level","pieces","popped","lost","max_chain","duration_ms","board"}  →  204
+  POST /api/games/puyo/runs/{id}/finish       同上  →  排行榜再加 "best"
+  ```
+
+  伺服器檢查：盤面沒有懸空的氣泡、沒有該消沒消的四連、顆數等於「組數 × 2 − 消掉的 − 疊出界的」；
+  分數增加不超過「消掉的顆數 × 9990」（倍率上限 999）加上下落與全消的分數。前端只在有一組在操作時回報（連鎖途中的盤面還沒算完）。
+- 背景音樂是另外寫的一段輕快小曲（`puyo/music.ts`），不是原作配樂。快捷鍵存在 `/api/games/puyo/settings`（格式同俄羅斯方塊）。
 
 ## 日曆
 
@@ -166,6 +215,22 @@ DELETE /api/calendar/events/{id}
 - **匯率計算機**：瀏覽器直接呼叫 Frankfurter v2（`api.frankfurter.dev/v2`，彙整各國央行匯率，含 TWD），最新匯率存在 localStorage，離線時顯示上次的資料。
 - **ASCII 藝術字**：figlet 的 `.flf` 字型當成靜態檔輸出，選到才 fetch。
 - **Emoji 選擇器**：資料來自 `emojibase-data`（繁中＋英文）。**編碼與雜湊**：雜湊用 `hash-wasm`。
+
+## IP 訪問紀錄
+
+「系統管理 › IP 訪問紀錄」（`/admin/access`，需要 `admin.users`）：全站每個請求的來源 IP、方法、路徑、狀態碼、花費時間、登入的帳號和 User-Agent，
+可以依 IP 彙整（依最後活動或請求數排序，展開看那個 IP 的請求），或看最近 500 筆請求。程式在 `backend/src/access_log.rs`。
+
+```
+GET /api/admin/access?hours=24&sort=recent|requests   統計、前 300 個 IP、請求最多的 15 個路徑      hours：1～720
+GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可以只看某個 IP、只看 4xx／5xx）
+```
+
+- 用 middleware 記錄，IP 跟登入限制一樣取 Traefik 的 X-Forwarded-For。前端打包出來的靜態檔（`STATIC_DIR` 最上層有的檔案和資料夾）、
+  `/api/health` 和這個頁面自己的查詢不記；不存在的路徑（掃描器找的 `/wp-login.php`、`/.env`）會記。
+- 請求本身不碰資料庫：先放在記憶體，背景每 2 秒整批寫進 `access_logs`，帳號也是那時才從 session 查（登入那一次還沒有 cookie、
+  登出那一次 session 已刪，都算訪客）。關機時會寫完剩下的，被強制結束的話最後幾秒會遺失。
+- 保留 30 天，每小時清一次。同一個 IP 10 分鐘超過 1000 筆的部分不記，避免被灌爆。
 
 ## 隱藏頁面
 
@@ -265,10 +330,10 @@ ddragon.leagueoflegends.com                                      英雄頭像與
 
 ## 部署
 
-| 環境 | 觸發 | Image tag | 伺服器 port |
+| 環境 | 觸發 | Image tag | 網址 |
 |---|---|---|---|
-| staging | merge / push 到 `dev` | `staging-<commit>`、`staging-latest` | 8102 |
-| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | 443（HTTPS，`music.ouyangminwei.com`） |
+| staging | merge / push 到 `dev` | `staging-<commit>`、`staging-latest` | `https://test.ouyang.app` |
+| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | `https://ouyang.app` |
 
 分支流程：
 
@@ -284,14 +349,20 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 ### 不斷線部署（Traefik + docker-rollout）
 
 ```
-外部 ─▶ Traefik（:8102 → staging、:443 → prod、:80 → 轉到 https）─▶ app 容器（不直接對外綁 port）
+外部 ─▶ Traefik :443 ─┬─ Host ouyang.app      ─▶ prod 的 app 容器
+                      └─ Host test.ouyang.app ─▶ staging 的 app 容器（app 容器都不直接對外綁 port）
 ```
 
-HTTPS 憑證由 Traefik 向 Let's Encrypt 申請（HTTP-01，走 :80），到期前自動續約，存在 volume `ouyang-web-traefik_letsencrypt`。
-`ouyangminwei.com` 在 Hostinger（WordPress 也在那裡），DNS 加了一筆 `music` 的 A 紀錄指到伺服器。
-AWS 安全群組要開 80、443、8102。
-之後若把 DNS 搬到 Cloudflare 並開代理（橘色雲朵），Traefik 看到的來源 IP 會變成 Cloudflare 的，
-登入限制和訪客紀錄都會算錯，要先讓 Traefik 信任 Cloudflare 的 IP 範圍。
+網域 `ouyang.app` 在 Cloudflare 註冊，DNS 有 `@` 和 `test` 兩筆 A 紀錄指到伺服器，都設成 **DNS only**（灰色雲朵，不經過 Cloudflare 代理）。
+網址寫在 `<env>.env` 的 `APP_HOST`，app 的 router 規則是 `Host(APP_HOST)`；Traefik 的 entrypoint 名稱 `prod` 是沿用舊的，兩個環境都走這裡。
+新增網域時，`traefik/compose.yaml` 的 `tls.domains` 也要加上。
+HTTPS 憑證由 Traefik 向 Let's Encrypt 申請（TLS-ALPN-01，只走 :443），每個網域一張，到期前自動續約，存在 volume `ouyang-web-traefik_letsencrypt`。
+不開 :80：`.app` 在瀏覽器的 HSTS 預載清單裡，瀏覽器本來就只會用 https 連。AWS 安全群組只要開 443。
+
+之後若要開 Cloudflare 代理（橘色雲朵），先處理這幾件事：
+- SSL/TLS 模式設 Full (strict)。Cloudflare 會在它那邊結束 TLS，TLS-ALPN-01 驗證不到伺服器，要改成 DNS-01（Cloudflare API token，只給這個 zone 的 DNS 編輯權限）。
+- 來源 IP：`auth.rs` 的 `client_key` 取 X-Forwarded-For 最後一筆，也就是直接連進 Traefik 的那台，開代理後會變成 Cloudflare 的節點；
+  只讓 Traefik 信任 Cloudflare 的 IP 範圍也不夠（Traefik 會把直接連線的 IP 接在最後）。要改成最後一筆是 Cloudflare 的 IP 時才讀 `CF-Connecting-IP`。
 
 `deploy.sh` 用 `docker rollout` 換版：先啟動新容器 → 等 healthcheck 通過 → 再等 3 秒讓 Traefik 接上 → 停掉舊容器。
 

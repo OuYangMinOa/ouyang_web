@@ -1,8 +1,8 @@
 name: CI/CD
 
 # PR → 只跑測試（main 的保護規則要求 test 通過才能 merge）
-# push 到 dev  → 部署 staging（:8102）
-# push 到 main → 部署 prod（:443）
+# push 到 dev  → 部署 staging（https://test.ouyang.app）
+# push 到 main → 部署 prod（https://ouyang.app）
 on:
   pull_request:
     branches: [dev, main]

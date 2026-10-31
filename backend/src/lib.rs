@@ -1,9 +1,14 @@
+pub mod access_log;
 pub mod admin;
 pub mod auth;
 pub mod calendar;
+pub mod game_settings;
 pub mod games;
 pub mod music;
+pub mod puyo_scores;
+pub mod registration;
 pub mod tetris;
+pub mod tetris_scores;
 pub mod visits;
 pub mod weather;
 
@@ -22,6 +27,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::StatusCode,
+    middleware,
     response::{IntoResponse, Response},
     routing::{get, patch, post, put},
 };
@@ -50,11 +56,17 @@ pub struct AppState {
     pub rooms: Arc<games::Rooms>,
     /// 俄羅斯方塊大逃殺的房間（只在記憶體裡）
     pub tetris: Arc<tetris::Arenas>,
+    /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
+    pub tetris_runs: Arc<tetris_scores::Runs>,
+    /// 魔法氣泡單人模式進行中的局
+    pub puyo_runs: Arc<puyo_scores::Runs>,
     /// 音樂資料夾（唯讀），見 music.rs
     pub music_dir: PathBuf,
     /// 天氣與環境：外部資料的快取，以及地震速報的即時連線
     pub weather: Arc<weather::Weather>,
     pub visit_limiter: Arc<visits::VisitLimiter>,
+    /// 全站的 IP 訪問紀錄，背景整批寫進資料庫（見 access_log.rs）
+    pub access_log: Arc<access_log::AccessLog>,
 }
 
 impl AppState {
@@ -68,9 +80,12 @@ impl AppState {
             login_limiter: Arc::default(),
             rooms: Arc::default(),
             tetris: Arc::default(),
+            tetris_runs: Arc::default(),
+            puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
             weather: Arc::default(),
             visit_limiter: Arc::default(),
+            access_log: Arc::default(),
         }
     }
 }
@@ -84,9 +99,16 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
         .route("/auth/password", post(auth::change_password))
+        .route("/auth/register", get(registration::status).post(registration::register))
         .route("/admin/users", get(admin::list_users).post(admin::create_user))
         .route("/admin/users/{id}", patch(admin::update_user))
         .route("/admin/roles", get(admin::list_roles))
+        .route("/admin/registrations", get(registration::list))
+        .route("/admin/registrations/open", put(registration::set_open))
+        .route("/admin/registrations/{id}/approve", post(registration::approve))
+        .route("/admin/registrations/{id}/reject", post(registration::reject))
+        .route("/admin/access", get(access_log::report))
+        .route("/admin/access/requests", get(access_log::requests))
         .route("/admin/visits/{page}", get(visits::list_sessions))
         .route("/admin/visits/{page}/{session}", get(visits::session_events))
         .route("/visits/{page}", post(visits::track))
@@ -96,6 +118,16 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/rooms/{code}/ws", get(games::connect))
         .route("/games/tetris/rooms", post(tetris::create_arena))
         .route("/games/tetris/rooms/{code}/ws", get(tetris::connect))
+        .route("/games/tetris/scores", get(tetris_scores::list_scores))
+        .route("/games/tetris/runs", post(tetris_scores::start_run))
+        .route("/games/tetris/runs/{id}/checkpoints", post(tetris_scores::checkpoint))
+        .route("/games/tetris/runs/{id}/finish", post(tetris_scores::finish_run))
+        .route("/games/tetris/settings", get(game_settings::get_tetris).put(game_settings::put_tetris))
+        .route("/games/puyo/scores", get(puyo_scores::list_scores))
+        .route("/games/puyo/runs", post(puyo_scores::start_run))
+        .route("/games/puyo/runs/{id}/checkpoints", post(puyo_scores::checkpoint))
+        .route("/games/puyo/runs/{id}/finish", post(puyo_scores::finish_run))
+        .route("/games/puyo/settings", get(game_settings::get_puyo).put(game_settings::put_puyo))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))
@@ -110,7 +142,13 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .precompressed_gzip()
         .fallback(ServeFile::new(static_dir.join("index.html")).precompressed_gzip());
 
-    Router::new().nest("/api", api).fallback_service(spa).layer(TraceLayer::new_for_http()).with_state(state)
+    let recorder = access_log::Recorder::new(state.clone(), static_dir);
+    Router::new()
+        .nest("/api", api)
+        .fallback_service(spa)
+        .layer(middleware::from_fn_with_state(recorder, access_log::record))
+        .layer(TraceLayer::new_for_http())
+        .with_state(state)
 }
 
 async fn health(State(state): State<AppState>) -> Response {
@@ -196,7 +234,7 @@ pub enum AppError {
     Forbidden,
     NotFound,
     Conflict(String),
-    TooManyRequests,
+    TooManyRequests(&'static str),
     ServiceUnavailable(&'static str),
     Database(sqlx::Error),
     Internal(String),
@@ -206,10 +244,11 @@ impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadRequest(message) | Self::Conflict(message) | Self::Internal(message) => f.write_str(message),
-            Self::Unauthorized(message) | Self::ServiceUnavailable(message) => f.write_str(message),
+            Self::Unauthorized(message) | Self::TooManyRequests(message) | Self::ServiceUnavailable(message) => {
+                f.write_str(message)
+            }
             Self::Forbidden => f.write_str("沒有權限"),
             Self::NotFound => f.write_str("not found"),
-            Self::TooManyRequests => f.write_str("嘗試次數過多，請 15 分鐘後再試"),
             Self::Database(err) => write!(f, "database error: {err}"),
         }
     }
@@ -231,7 +270,7 @@ impl IntoResponse for AppError {
             Self::Forbidden => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
-            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            Self::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
             Self::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Database(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };

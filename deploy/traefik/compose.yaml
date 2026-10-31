@@ -8,23 +8,21 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=ouyang-web
-      - --entrypoints.staging.address=:8102
-      # prod 走 HTTPS：TLS 設在 entrypoint 上，app 的 router 不用另外標 tls
+      # 只開 :443，prod 和 staging 依網址分流（app 的 router 規則是 Host(APP_HOST)，見 ../compose.yaml）。
+      # 名稱 prod 是沿用舊的，staging 也走這裡；TLS 設在 entrypoint 上，app 的 router 不用另外標 tls
       - --entrypoints.prod.address=:443
       - --entrypoints.prod.http.tls.certresolver=letsencrypt
-      - --entrypoints.prod.http.tls.domains[0].main=music.ouyangminwei.com
-      # :80 只做兩件事：Let's Encrypt 的驗證（優先權最高，不會被轉址），其他一律轉到 https
-      - --entrypoints.web.address=:80
-      - --entrypoints.web.http.redirections.entrypoint.to=prod
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      # 憑證由 Traefik 自動申請、到期前自動續約，存在 letsencrypt volume
+      # 兩個網域各一張憑證，其中一個申請失敗（例如 DNS 還沒設）不會拖累另一個
+      - --entrypoints.prod.http.tls.domains[0].main=ouyang.app
+      - --entrypoints.prod.http.tls.domains[1].main=test.ouyang.app
+      # 憑證由 Traefik 自動申請、到期前自動續約，存在 letsencrypt volume。
+      # 用 TLS-ALPN-01 驗證，只走 :443，所以不開 :80（.app 整個網域都在瀏覽器的 HSTS 預載清單裡，本來就只會用 https 連）。
+      # 這只在 Cloudflare 的 DNS 紀錄是「DNS only」時有效；要開代理（橘色雲朵）之前先改成 DNS-01。
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
       - --ping=true
       - --log.level=INFO
     ports:
-      - "80:80"
-      - "8102:8102"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro

@@ -27,6 +27,15 @@ export const GAMES: GameInfo[] = [
     component: lazy(() => import('./tetris')),
   },
   {
+    id: 'puyo',
+    name: '魔法氣泡',
+    icon: '🫧',
+    blurb: '同色四顆連起來就消掉，疊出大連鎖！單人模式衝排行榜，或和三種難度的電腦對戰，用連鎖互丟干擾泡。',
+    tags: ['單人', '電腦'],
+    category: '單人',
+    component: lazy(() => import('./puyo')),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',

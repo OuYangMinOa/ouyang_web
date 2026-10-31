@@ -1,5 +1,5 @@
 /**
- * 俄羅斯方塊的規則：SRS 旋轉與踢牆、7-bag、Hold、鎖定延遲、T-Spin、連擊與 Back-to-Back，
+ * 俄羅斯方塊的規則：SRS 旋轉與踢牆、7-bag、Hold、鎖定延遲、各種方塊的 spin、連擊與 Back-to-Back，
  * 以及大逃殺用的攻擊行數和待升垃圾行。
  *
  * 遊戲狀態是可變物件，每一幀由畫面呼叫 `update(dt)` 推進；鎖定方塊的結果放進 `events`，
@@ -74,13 +74,22 @@ const KICKS_I: Record<string, Cell[]> = {
   '03': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
 }
 
-/** 普通消行、T-Spin、T-Spin Mini 送出的行數（索引是消了幾行） */
+/** 普通消行、spin、T-Spin Mini 送出的行數（索引是消了幾行） */
 const ATTACK_NORMAL = [0, 0, 1, 2, 4]
-const ATTACK_TSPIN = [0, 2, 4, 6]
+/** T-Spin 和其他方塊的 spin 一樣多；只有 I 能 spin 消四行 */
+const ATTACK_SPIN = [0, 2, 4, 6, 8]
 const ATTACK_MINI = [0, 0, 1]
 /** 連擊加成：第 n 次連續消行（第一次是 0） */
 const COMBO = [0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5]
 const PERFECT_CLEAR = 10
+
+/** 單人模式的分數（官方規則，再乘上等級）：普通消行、spin、T-Spin Mini（索引是消了幾行） */
+const SCORE_NORMAL = [0, 100, 300, 500, 800]
+const SCORE_SPIN = [400, 800, 1200, 1600, 2000]
+const SCORE_MINI = [100, 200, 400]
+const SCORE_PERFECT = [0, 800, 1200, 1800, 2000]
+/** 每次連擊多 50 × 連擊數；B2B 乘 1.5；加速下落每格 1 分、直接落下每格 2 分 */
+const SCORE_COMBO = 50
 
 export const LOCK_MS = 500
 const MAX_LOCK_RESETS = 15
@@ -105,7 +114,9 @@ export type Garbage = { lines: number; readyAt: number; hole: number }
 
 export type LockResult = {
   lines: number
-  tspin: 'none' | 'mini' | 'full'
+  /** 用旋轉卡進去再消行：T 用三角規則，其他方塊（O 除外）是轉進去後左、右、上都動不了 */
+  spin: 'none' | 'mini' | 'full'
+  piece: Kind
   b2b: boolean
   combo: number
   perfect: boolean
@@ -113,6 +124,8 @@ export type LockResult = {
   attack: number
   /** 抵銷待升垃圾後真正送出去的行數 */
   sent: number
+  /** 這次消行得到的分數（已乘上等級，不含下落的分數） */
+  points: number
 }
 
 export class Tetris {
@@ -127,6 +140,10 @@ export class Tetris {
   badges = 0
   softDrop = false
   lines = 0
+  /** 單人模式的分數 */
+  score = 0
+  /** 放下了幾塊（上傳排行榜時給伺服器核對盤面） */
+  pieces = 0
   sent = 0
   garbage: Garbage[] = []
   events: LockResult[] = []
@@ -138,7 +155,7 @@ export class Tetris {
   private lockTimer = 0
   private lockResets = 0
   private lowest = 0
-  /** 最後一個成功的動作是旋轉，以及用了第幾個踢牆位置（判斷 T-Spin） */
+  /** 最後一個成功的動作是旋轉，以及用了第幾個踢牆位置（判斷 spin） */
   private lastKick = -1
   private combo = -1
   private b2b = false
@@ -267,6 +284,7 @@ export class Tetris {
     if (!p || this.over) return
     const y = this.ghostY()
     if (y !== p.y) this.lastKick = -1
+    this.score += (y - p.y) * 2
     p.y = y
     this.lock()
   }
@@ -307,6 +325,7 @@ export class Tetris {
       if (this.onGround()) break
       this.piece.y++
       this.lastKick = -1
+      if (this.softDrop) this.score++
       if (this.piece.y > this.lowest) {
         this.lowest = this.piece.y
         this.lockResets = 0
@@ -314,10 +333,19 @@ export class Tetris {
     }
   }
 
-  /** T 塊用旋轉進到三個角都被擋住的位置；前方兩角都擋住（或用了最後一個踢牆）才算完整 T-Spin */
-  private tspin(): LockResult['tspin'] {
+  private spin(): LockResult['spin'] {
     const p = this.piece!
-    if (p.kind !== 'T' || this.lastKick < 0) return 'none'
+    if (this.lastKick < 0 || p.kind === 'O') return 'none'
+    // L、J、S、Z、I：最後一個動作是旋轉，而且卡在原地不能往左、右、上移動
+    if (p.kind !== 'T') {
+      const stuck = [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+      ].every(([dx, dy]) => !this.fits(p.kind, p.rot, p.x + dx, p.y + dy))
+      return stuck ? 'full' : 'none'
+    }
+    // T：旋轉進到三個角都被擋住的位置；前方兩角都擋住（或用了最後一個踢牆）才算完整 T-Spin
     const cx = p.x + 1
     const cy = p.y + 1
     const blocked = (x: number, y: number) => x < 0 || x >= COLS || y >= TOTAL || (y >= 0 && this.get(x, y) !== 0)
@@ -336,7 +364,7 @@ export class Tetris {
   private lock() {
     const p = this.piece
     if (!p) return
-    const tspin = this.tspin()
+    const spin = this.spin()
     let visible = false
     for (const [cx, cy] of pieceCells(p.kind, p.rot)) {
       const y = p.y + cy
@@ -344,6 +372,7 @@ export class Tetris {
       if (y >= HIDDEN) visible = true
     }
     this.piece = null
+    this.pieces++
     // 整塊鎖在可見區上方：輸了
     if (!visible) {
       this.over = true
@@ -367,8 +396,8 @@ export class Tetris {
     let b2b = false
     const perfect = lines > 0 && this.board.every((c) => c === 0)
     if (lines > 0) {
-      attack = (tspin === 'full' ? ATTACK_TSPIN : tspin === 'mini' ? ATTACK_MINI : ATTACK_NORMAL)[lines] ?? 0
-      const difficult = lines === 4 || tspin !== 'none'
+      attack = (spin === 'full' ? ATTACK_SPIN : spin === 'mini' ? ATTACK_MINI : ATTACK_NORMAL)[lines] ?? 0
+      const difficult = lines === 4 || spin !== 'none'
       b2b = difficult && this.b2b
       if (b2b) attack += 1
       this.b2b = difficult
@@ -379,6 +408,13 @@ export class Tetris {
     } else {
       this.combo = -1
     }
+
+    let points = (spin === 'full' ? SCORE_SPIN : spin === 'mini' ? SCORE_MINI : SCORE_NORMAL)[lines] ?? 0
+    if (b2b) points = Math.floor(points * 1.5)
+    if (lines > 0) points += SCORE_COMBO * this.combo
+    if (perfect) points += SCORE_PERFECT[lines]
+    points *= this.level
+    this.score += points
 
     let sent = attack
     if (lines > 0) {
@@ -395,7 +431,7 @@ export class Tetris {
 
     this.lines += lines
     this.sent += sent
-    this.events.push({ lines, tspin, b2b, combo: this.combo, perfect, attack, sent })
+    this.events.push({ lines, spin, piece: p.kind, b2b, combo: this.combo, perfect, attack, sent, points })
     this.holdUsed = false
     if (!this.over) this.spawn()
   }
@@ -418,6 +454,11 @@ export class Tetris {
     }
   }
 
+  /** 整個盤面（含上方看不到的列），由上到下每格一個字元 */
+  cells(): string {
+    return this.board.join('')
+  }
+
   /** 給其他玩家看的盤面：可見的 20 列，由上到下 */
   snapshot(): string {
     let out = ''
@@ -430,9 +471,9 @@ export class Tetris {
 export function describe(r: LockResult): string | null {
   const parts: string[] = []
   if (r.perfect) parts.push('PERFECT CLEAR')
-  if (r.tspin !== 'none') {
-    const n = ['', ' SINGLE', ' DOUBLE', ' TRIPLE'][r.lines] ?? ''
-    parts.push(`T-SPIN${r.tspin === 'mini' ? ' MINI' : ''}${n}`)
+  if (r.spin !== 'none') {
+    const n = ['', ' SINGLE', ' DOUBLE', ' TRIPLE', ' QUAD'][r.lines] ?? ''
+    parts.push(`${r.piece}-SPIN${r.spin === 'mini' ? ' MINI' : ''}${n}`)
   } else if (r.lines === 4) {
     parts.push('TETRIS')
   }

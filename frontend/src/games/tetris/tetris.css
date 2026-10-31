@@ -33,17 +33,6 @@
   min-height: 44px;
 }
 
-.tetris-help ul {
-  margin: 6px 0;
-  padding-left: 20px;
-}
-.tetris-help li {
-  margin: 2px 0;
-}
-.tetris-help strong {
-  color: var(--text-h);
-}
-
 .tetris-muted {
   font-weight: 400;
   color: var(--text);
@@ -156,59 +145,6 @@
 .tetris-countdown {
   font: 700 64px/1 var(--mono);
   color: var(--accent);
-}
-
-.tetris-flash {
-  position: absolute;
-  top: 18%;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 3;
-}
-.tetris-flash-text {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg) 75%, transparent);
-  text-align: center;
-  animation: tetris-flash 1.2s ease-out forwards;
-}
-.tetris-flash-text strong {
-  font: 700 15px var(--mono);
-  color: var(--accent);
-  letter-spacing: 0.04em;
-}
-.tetris-flash-sent {
-  font-size: 13px;
-  color: var(--text-h);
-}
-@keyframes tetris-flash {
-  0% {
-    opacity: 0;
-    transform: translateY(6px) scale(0.95);
-  }
-  15% {
-    opacity: 1;
-    transform: none;
-  }
-  75% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tetris-flash-text {
-    animation: none;
-  }
 }
 
 /* 觸控按鈕：上排保留與旋轉、下排移動與落下；只在觸控裝置顯示 */
