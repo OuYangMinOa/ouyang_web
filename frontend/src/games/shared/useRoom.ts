@@ -70,7 +70,7 @@ const NO_EVENTS: never[] = []
 type RoomError = { code: string | null; message: string }
 
 /** 訪客用的玩家 id：每個分頁一個，用來在重連時拿回同一個座位（登入的人由伺服器改用帳號） */
-function playerId(): string {
+export function playerId(): string {
   const key = 'games:player'
   try {
     const existing = sessionStorage.getItem(key)
@@ -78,7 +78,8 @@ function playerId(): string {
   } catch {
     // 讀不到就每次產生新的，只是重新整理後拿不回座位
   }
-  const id = crypto.randomUUID()
+  // crypto.randomUUID 只在 HTTPS 能用（staging 是 http），getRandomValues 沒有這個限制
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
   try {
     sessionStorage.setItem(key, id)
   } catch {
