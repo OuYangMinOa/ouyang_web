@@ -1,7 +1,8 @@
 import { useEffect, useRef, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { drawBoard, drawPreview, readPalette, METER } from './draw'
 import { COLS, PREVIEW, ROWS, type Tetris } from './engine'
-import { actionOf, type Action, type Keys } from './keys'
+import { actionOf } from '../shared/keys'
+import { KEYS, type Action, type Keys } from './keys'
 
 /** 左右鍵按住多久開始連續移動，以及之後每格的間隔 */
 const DAS_MS = 150
@@ -170,7 +171,7 @@ export function Playfield({ game, running, keys, hooks, overlay, flash, info }: 
       if (e.metaKey || e.altKey || isTyping(e.target)) return
       const c = controls.current
       const code = e.code
-      const action = actionOf(latest.current.keys, code)
+      const action = actionOf(KEYS, latest.current.keys, code)
       const handled = () => e.preventDefault()
       if (hooks.current.onKey?.(code, action)) return handled()
       if (!latest.current.running || !action) return
@@ -204,7 +205,7 @@ export function Playfield({ game, running, keys, hooks, overlay, flash, info }: 
     }
     const up = (e: KeyboardEvent) => {
       const c = controls.current
-      const action = actionOf(latest.current.keys, e.code)
+      const action = actionOf(KEYS, latest.current.keys, e.code)
       if (action === 'left') c.release(-1)
       else if (action === 'right') c.release(1)
       else if (action === 'soft') c.soft(false)
@@ -270,7 +271,7 @@ export function Playfield({ game, running, keys, hooks, overlay, flash, info }: 
         </div>
         <div className="tetris-board-box">
           <canvas ref={boardRef} className="tetris-board" aria-label="俄羅斯方塊盤面" />
-          {flash && <div className="tetris-flash">{flash}</div>}
+          {flash && <div className="game-flash">{flash}</div>}
           {overlay}
         </div>
         <div className="tetris-col">

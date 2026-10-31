@@ -71,3 +71,12 @@ export function Toolbar({ children }: { children: ReactNode }) {
 export function Overlay({ children }: { children: ReactNode }) {
   return <div className="game-overlay">{children}</div>
 }
+
+/** 背景音樂開關（也可以按快捷鍵，預設是 M） */
+export function MusicButton({ music }: { music: { enabled: boolean; toggle: () => void } }) {
+  return (
+    <button type="button" className="secondary" onClick={music.toggle} aria-pressed={music.enabled}>
+      {music.enabled ? '♪ 音樂：開' : '♪ 音樂：關'}
+    </button>
+  )
+}

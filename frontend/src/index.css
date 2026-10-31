@@ -104,6 +104,15 @@
   --tet-7: #dc2626;
   --tet-8: #9c9486;
   --tet-bg: #efe9dd;
+  /* 魔法氣泡：紅、綠、藍、黃四色、干擾泡，盤面底色，以及氣泡的眼白和眼珠 */
+  --puyo-1: #e11d48;
+  --puyo-2: #16a34a;
+  --puyo-3: #2563eb;
+  --puyo-4: #d4a106;
+  --puyo-5: #a8a29e;
+  --puyo-bg: #efe9dd;
+  --puyo-eye: #ffffff;
+  --puyo-pupil: #1c1917;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -210,6 +219,14 @@
     --tet-7: #f87171;
     --tet-8: #5c554d;
     --tet-bg: #0b0a09;
+    --puyo-1: #fb7185;
+    --puyo-2: #4ade80;
+    --puyo-3: #60a5fa;
+    --puyo-4: #facc15;
+    --puyo-5: #78716c;
+    --puyo-bg: #0b0a09;
+    --puyo-eye: #ffffff;
+    --puyo-pupil: #1c1917;
     color-scheme: dark;
   }
 }
@@ -306,6 +323,14 @@
   --tet-7: #f87171;
   --tet-8: #5c554d;
   --tet-bg: #0b0a09;
+  --puyo-1: #fb7185;
+  --puyo-2: #4ade80;
+  --puyo-3: #60a5fa;
+  --puyo-4: #facc15;
+  --puyo-5: #78716c;
+  --puyo-bg: #0b0a09;
+  --puyo-eye: #ffffff;
+  --puyo-pupil: #1c1917;
   color-scheme: dark;
 }
 

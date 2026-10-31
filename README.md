@@ -147,15 +147,40 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
   分數是前端算的，伺服器不重播整局，而是每 5 秒（遊戲時間）檢查一次中間態來確認真的有玩：遊戲時間不能超過實際經過的時間、
   數字只增不減且增加速度合理、盤面沒有滿行且格數等於「方塊數 × 4 − 行數 × 10」。有一次不合理整局作廢。
   進行中的局只放在記憶體，重啟或換版時正在玩的那局無法上傳。
-- 背景音樂是 Korobeiniki（俄羅斯民謠），用 Web Audio 即時合成（`music.ts`），不需要音檔：三角波旋律、正弦波低音，
+- 背景音樂是 Korobeiniki（俄羅斯民謠），用 Web Audio 即時合成（合成器在 `games/shared/music.ts`，曲子在 `tetris/music.ts`），不需要音檔：三角波旋律、正弦波低音，
   加上低通濾波和一點回音讓聲音柔和；速度跟著等級變快，按 M 或按鈕開關。
-- 快捷鍵可以自訂（`keys.ts`、`KeyEditor.tsx`），每個動作最多兩個鍵。沒登入存在瀏覽器，有登入存在帳號（`backend/src/tetris_settings.rs`），
+- 快捷鍵可以自訂（`games/shared/keys.ts`、`games/shared/KeyEditor.tsx`，和魔法氣泡共用），每個動作最多兩個鍵。沒登入存在瀏覽器，有登入存在帳號（`backend/src/game_settings.rs`），
   換裝置也一樣；帳號還沒存過時沿用瀏覽器的設定：
 
   ```
   GET /api/games/tetris/settings  →  {"keys":{"left":["ArrowLeft"],…}|null}   null 是沒存過（要登入）
   PUT /api/games/tetris/settings  {"keys":{…}|null}  →  204                   null 是恢復預設
   ```
+
+### 魔法氣泡
+
+`/games/puyo`：參考ぷよぷよ通的規則，單人模式和一對一對戰電腦，全部在瀏覽器裡跑（`frontend/src/games/puyo/`）。
+和俄羅斯方塊共用快捷鍵、背景音樂合成器和排行榜元件（`games/shared/`）。
+
+- 規則（`engine.ts`）：6 × 12 的盤面加上看不到的第 13 列，兩顆一組、四種顏色，同色 4 顆以上相連就消掉，可以連鎖。
+  分數照官方公式：10 × 消掉的顆數 × (連鎖倍率 + 連結加成 + 顏色加成)。第 3 欄最上面被堵住就輸。
+  消除和掉落是有時間的動畫，連鎖一步一步推進，看得到每一連。
+- 對戰：兩邊用同一個亂數種子，拿到一樣順序的氣泡。每 70 分換一顆干擾泡，先抵銷自己待落下的再送出去；
+  開打 96 秒後進入加時，換算分數每 16 秒變成 3/4。全消後下一次連鎖多送 30 顆。
+- 電腦（`cpu.ts`）：每組把所有落點（最多 22 種）都模擬一次，看現在能不能打出夠大的連鎖、「再補一兩顆能引爆幾連鎖」和盤面形狀；
+  困難再把下一組也考慮進去（只從最好的 8 個落點往下看，手機上不會卡）。三種難度差在想多久、動多快、要等幾連鎖才引爆。
+- 單人模式每放 30 組或每玩 1 分鐘升一級。登入的人的成績會上傳到排行榜（`backend/src/puyo_scores.rs`），做法和俄羅斯方塊一樣檢查中間態：
+
+  ```
+  GET  /api/games/puyo/scores                 →  {"top":[{rank,username,score,max_chain,level,duration_ms,achieved_at}],"me":{…}|null}
+  POST /api/games/puyo/runs                   →  201 {"id"}
+  POST /api/games/puyo/runs/{id}/checkpoints  {"score","level","pieces","popped","lost","max_chain","duration_ms","board"}  →  204
+  POST /api/games/puyo/runs/{id}/finish       同上  →  排行榜再加 "best"
+  ```
+
+  伺服器檢查：盤面沒有懸空的氣泡、沒有該消沒消的四連、顆數等於「組數 × 2 − 消掉的 − 疊出界的」；
+  分數增加不超過「消掉的顆數 × 9990」（倍率上限 999）加上下落與全消的分數。前端只在有一組在操作時回報（連鎖途中的盤面還沒算完）。
+- 背景音樂是另外寫的一段輕快小曲（`puyo/music.ts`），不是原作配樂。快捷鍵存在 `/api/games/puyo/settings`（格式同俄羅斯方塊）。
 
 ## 日曆
 
