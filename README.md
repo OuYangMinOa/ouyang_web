@@ -118,6 +118,22 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
 - 換版的幾秒內新舊容器可能各有同一個房間的連線：座位用條件式 UPDATE 搶，事件用 `(room_code, seq)` 主鍵擋重複序號。
   寫入時序號撞到，就關掉那個容器裡這個房間的連線，前端重連後從資料庫重新載入，送出的那一步要重下。
 
+### 俄羅斯方塊 99
+
+`/games/tetris`：參考 Tetris 99 的大逃殺，一間最多 99 人，人不夠由電腦補位。和上面的棋類不同，伺服器懂一部分規則
+（`backend/src/tetris.rs`，協定寫在 `frontend/src/games/tetris/useArena.ts`）：
+
+```
+POST /api/games/tetris/rooms  {"public":true}  →  201 {"code":"ABCDE"}   public：快速配對，加入正在等人的公開房間，沒有就開一間
+GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升級成 WebSocket（登入時用帳號與帳號名稱）
+```
+
+- 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T-Spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
+  負責選目標（隨機／快輸的／徽章／反擊，或手動點小盤面）、轉送垃圾行、算 KO、徽章、名次與速度等級，以及模擬電腦玩家。
+- 房間每 250ms 推進一次，這段時間的狀態和盤面變化合併成一則廣播。
+- 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
+- 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
+
 ## 日曆
 
 `/calendar`：月曆（農曆、節氣、節日、放假日標紅）、`/calendar/holidays` 整年的節日與節氣、`/calendar/events` 我的事項。

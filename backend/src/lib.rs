@@ -3,6 +3,7 @@ pub mod auth;
 pub mod calendar;
 pub mod games;
 pub mod music;
+pub mod tetris;
 pub mod visits;
 pub mod weather;
 
@@ -47,6 +48,8 @@ pub struct AppState {
     pub login_limiter: Arc<auth::LoginLimiter>,
     /// 小遊戲線上對戰中有人連線的房間（房間本身存在資料庫）
     pub rooms: Arc<games::Rooms>,
+    /// 俄羅斯方塊大逃殺的房間（只在記憶體裡）
+    pub tetris: Arc<tetris::Arenas>,
     /// 音樂資料夾（唯讀），見 music.rs
     pub music_dir: PathBuf,
     /// 天氣與環境：外部資料的快取，以及地震速報的即時連線
@@ -64,6 +67,7 @@ impl AppState {
             cookie_secure: false,
             login_limiter: Arc::default(),
             rooms: Arc::default(),
+            tetris: Arc::default(),
             music_dir: PathBuf::from("data/music"),
             weather: Arc::default(),
             visit_limiter: Arc::default(),
@@ -90,6 +94,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/calendar/events/{id}", put(calendar::update_event).delete(calendar::delete_event))
         .route("/games/rooms", post(games::create_room))
         .route("/games/rooms/{code}/ws", get(games::connect))
+        .route("/games/tetris/rooms", post(tetris::create_arena))
+        .route("/games/tetris/rooms/{code}/ws", get(tetris::connect))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/weather/forecast", get(weather::forecast::forecast))
