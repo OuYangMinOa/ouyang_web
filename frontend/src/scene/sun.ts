@@ -1,4 +1,4 @@
-// 首頁的 3D 場景：粒子組成的太陽，點一下凝聚成「陽」字，游標／手指會把附近的粒子撥開。
+// 首頁的 3D 場景：粒子組成的太陽，點一下凝聚成「歐陽明崴」四個字輪流出現，游標／手指會把附近的粒子撥開。
 // 顏色和混色方式從 CSS 變數（--particle-a、--particle-b、--particle-blend）讀，跟著亮色／深色主題切換。
 import {
   AdditiveBlending,
@@ -18,7 +18,7 @@ import {
 } from 'three'
 
 export type SunScene = {
-  /** 在太陽和「陽」之間切換 */
+  /** 在太陽和文字之間切換 */
   toggle: () => void
   dispose: () => void
 }
@@ -26,25 +26,33 @@ export type SunScene = {
 type Options = {
   container: HTMLElement
   reducedMotion: boolean
-  onShapeChange?: (glyph: boolean) => void
+  /** 現在顯示的字，太陽時是 null */
+  onShapeChange?: (glyph: string | null) => void
 }
 
-const GLYPH = '陽'
+const GLYPHS = ['歐', '陽', '明', '崴']
 const AUTO_TOGGLE_MS = 7000
+const GLYPH_HOLD_MS = 3200
 const IDLE_BEFORE_AUTO_MS = 9000
 
 const vertexShader = /* glsl */ `
   uniform float uTime;
   uniform float uMorph;
+  uniform float uSwap;
   uniform vec3 uPointer;
   uniform float uPointerStrength;
   uniform float uSize;
   uniform float uPixelRatio;
-  attribute vec3 aGlyph;
+  attribute vec3 aGlyphFrom;
+  attribute vec3 aGlyphTo;
   attribute vec4 aRandom;
   varying float vRand;
   varying float vPush;
   varying float vMix;
+
+  float swapEase(float t, float r) {
+    return smoothstep(0.0, 1.0, clamp(t * 1.6 - r * 0.6, 0.0, 1.0));
+  }
 
   mat3 rotY(float a) {
     float c = cos(a), s = sin(a);
@@ -56,8 +64,13 @@ const vertexShader = /* glsl */ `
     vec3 sun = rotY(uTime * 0.12) * position;
     sun *= 1.0 + 0.035 * sin(uTime * 1.2 + aRandom.x * 6.2831);
 
-    // 「陽」：左右輕擺，看得出字有厚度
-    vec3 glyph = rotY(sin(uTime * 0.45) * 0.38) * aGlyph;
+    // 換字時粒子錯開出發，途中往前後散開一點
+    float s = swapEase(uSwap, aRandom.w);
+    vec3 g = mix(aGlyphFrom, aGlyphTo, s);
+    g.z += sin(s * 3.14159) * (aRandom.z - 0.5) * 0.8;
+
+    // 字：左右輕擺，看得出字有厚度
+    vec3 glyph = rotY(sin(uTime * 0.45) * 0.38) * g;
 
     // 每顆粒子出發時間錯開，變形時像被吸過去
     float m = smoothstep(0.0, 1.0, clamp(uMorph * 1.6 - aRandom.x * 0.6, 0.0, 1.0));
@@ -101,6 +114,12 @@ const fragmentShader = /* glsl */ `
   }
 `
 
+/** 跟 shader 裡的 swapEase 一樣 */
+function swapEase(t: number, r: number): number {
+  const x = Math.min(1, Math.max(0, t * 1.6 - r * 0.6))
+  return x * x * (3 - 2 * x)
+}
+
 function sunPositions(count: number): Float32Array {
   const out = new Float32Array(count * 3)
   const golden = Math.PI * (1 + Math.sqrt(5))
@@ -120,12 +139,7 @@ function sunPositions(count: number): Float32Array {
 }
 
 /** 把字畫在離屏 canvas 上取樣，得到落在筆畫裡的點，再加上前後厚度 */
-async function glyphPositions(count: number): Promise<Float32Array> {
-  try {
-    await document.fonts.load(`900 200px "Noto Serif TC"`, GLYPH)
-  } catch {
-    // 字型載入失敗就用系統襯線字
-  }
+function glyphPositions(count: number, char: string): Float32Array {
   const size = 220
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = size
@@ -136,7 +150,7 @@ async function glyphPositions(count: number): Promise<Float32Array> {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.font = `900 ${size * 0.88}px "Noto Serif TC", "Songti TC", "PMingLiU", serif`
-  ctx.fillText(GLYPH, size / 2, size / 2 + size * 0.03)
+  ctx.fillText(char, size / 2, size / 2 + size * 0.03)
   const pixels = ctx.getImageData(0, 0, size, size).data
 
   const hits: number[] = []
@@ -181,7 +195,16 @@ export async function createSunScene({ container, reducedMotion, onShapeChange }
   const count = particleCount()
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(sunPositions(count), 3))
-  geometry.setAttribute('aGlyph', new BufferAttribute(await glyphPositions(count), 3))
+  try {
+    await document.fonts.load(`900 200px "Noto Serif TC"`, GLYPHS.join(''))
+  } catch {
+    // 字型載入失敗就用系統襯線字
+  }
+  const glyphs = GLYPHS.map((char) => glyphPositions(count, char))
+  const glyphFrom = new BufferAttribute(glyphs[0].slice(), 3)
+  const glyphTo = new BufferAttribute(glyphs[0].slice(), 3)
+  geometry.setAttribute('aGlyphFrom', glyphFrom)
+  geometry.setAttribute('aGlyphTo', glyphTo)
   const random = new Float32Array(count * 4)
   for (let i = 0; i < random.length; i++) random[i] = Math.random()
   geometry.setAttribute('aRandom', new BufferAttribute(random, 4))
@@ -194,6 +217,7 @@ export async function createSunScene({ container, reducedMotion, onShapeChange }
     uniforms: {
       uTime: { value: 0 },
       uMorph: { value: 0 },
+      uSwap: { value: 1 },
       uPointer: { value: new Vector3(99, 99, 0) },
       uPointerStrength: { value: 0 },
       uSize: { value: 26 },
@@ -245,10 +269,49 @@ export async function createSunScene({ container, reducedMotion, onShapeChange }
   let downAt: { x: number; y: number } | null = null
   let lastInteraction = 0
   let glyph = false
+  let index = 0
+  let nextSwap = 0
+
+  // 換到第 i 個字：從粒子現在的位置（換字可能還沒跑完）出發，飛向新的字
+  const swapTo = (i: number) => {
+    const u = material.uniforms
+    const from = glyphFrom.array as Float32Array
+    const to = glyphTo.array as Float32Array
+    if (u.uMorph.value === 0) {
+      // 還是太陽，直接換掉目標，不用飛
+      from.set(glyphs[i])
+      u.uSwap.value = 1
+    } else {
+      const t = u.uSwap.value
+      for (let p = 0; p < count; p++) {
+        const s = swapEase(t, random[p * 4 + 3])
+        for (let k = p * 3; k < p * 3 + 3; k++) from[k] += (to[k] - from[k]) * s
+      }
+      u.uSwap.value = 0
+    }
+    to.set(glyphs[i])
+    glyphFrom.needsUpdate = true
+    glyphTo.needsUpdate = true
+    index = i
+    nextSwap = performance.now() + GLYPH_HOLD_MS
+  }
 
   const setShape = (next: boolean) => {
     glyph = next
-    onShapeChange?.(glyph)
+    if (glyph) swapTo(0)
+    onShapeChange?.(glyph ? GLYPHS[index] : null)
+  }
+
+  const showGlyph = (i: number) => {
+    swapTo(i)
+    onShapeChange?.(GLYPHS[index])
+  }
+
+  // 點一下走下一步：太陽 → 歐 → 陽 → 明 → 崴 → 太陽
+  const step = () => {
+    if (!glyph) setShape(true)
+    else if (index === GLYPHS.length - 1) setShape(false)
+    else showGlyph(index + 1)
   }
 
   const onPointerMove = (e: PointerEvent) => {
@@ -272,7 +335,7 @@ export async function createSunScene({ container, reducedMotion, onShapeChange }
   }
   const onPointerUp = (e: PointerEvent) => {
     // 只有「點」才切換，拖曳撥粒子不算
-    if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 8) setShape(!glyph)
+    if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 8) step()
     downAt = null
     if (e.pointerType !== 'mouse') onPointerLeave()
   }
@@ -306,8 +369,17 @@ export async function createSunScene({ container, reducedMotion, onShapeChange }
     last = now
     if (!reducedMotion) elapsed += dt
 
-    if (!reducedMotion && now > nextAuto) {
-      if (now - lastInteraction > IDLE_BEFORE_AUTO_MS) setShape(!glyph)
+    const idle = now - lastInteraction > IDLE_BEFORE_AUTO_MS
+    if (!reducedMotion && glyph && now > nextSwap) {
+      // 字輪流換；閒置時輪完一圈就散回太陽
+      if (index === GLYPHS.length - 1 && idle) {
+        setShape(false)
+        nextAuto = now + AUTO_TOGGLE_MS
+      } else {
+        showGlyph((index + 1) % GLYPHS.length)
+      }
+    } else if (!reducedMotion && !glyph && now > nextAuto) {
+      if (idle) setShape(true)
       nextAuto = now + AUTO_TOGGLE_MS
     }
 
@@ -317,6 +389,7 @@ export async function createSunScene({ container, reducedMotion, onShapeChange }
     u.uMorph.value = reducedMotion
       ? target
       : u.uMorph.value + Math.sign(target - u.uMorph.value) * Math.min(Math.abs(target - u.uMorph.value), dt * 0.65)
+    u.uSwap.value = reducedMotion ? 1 : Math.min(1, u.uSwap.value + dt * 0.9)
     u.uPointerStrength.value += ((pointerActive ? 1 : 0) - u.uPointerStrength.value) * Math.min(1, dt * 6)
     group.rotation.x += (-tilt.y * 0.22 - group.rotation.x) * Math.min(1, dt * 3)
     group.rotation.y += (tilt.x * 0.32 - group.rotation.y) * Math.min(1, dt * 3)

@@ -98,7 +98,7 @@ function Hero() {
           </div>
           <p className="hero-hint">
             <span className="pulse" aria-hidden="true" />
-            拖曳撥動粒子，點一下讓太陽凝聚成「陽」
+            拖曳撥動粒子，點一下讓太陽凝聚成「歐陽明崴」
           </p>
         </div>
         <SunStage />

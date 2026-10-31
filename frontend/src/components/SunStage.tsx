@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SunScene } from '../scene/sun'
 
+// 粒子凝聚成的字和下方說明的拼音
+const ROMAN: Record<string, string> = { 歐: 'OU', 陽: 'YANG', 明: 'MING', 崴: 'WEI' }
+
 /** 首頁的 3D 太陽。three.js 只在這裡動態載入，其他頁面不用下載；不支援 WebGL 時改顯示靜態的「陽」字。 */
 export default function SunStage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<SunScene | null>(null)
-  const [glyph, setGlyph] = useState(false)
+  const [glyph, setGlyph] = useState<string | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading')
 
   useEffect(() => {
@@ -42,14 +45,14 @@ export default function SunStage() {
         </div>
       )}
       <div className="sun-caption">
-        <span>{glyph ? 'YANG · 陽' : 'SUN · 太陽'}</span>
+        <span>{glyph ? `${ROMAN[glyph]} · ${glyph}` : 'SUN · 太陽'}</span>
         <button
           type="button"
           className="sun-toggle"
           onClick={() => sceneRef.current?.toggle()}
           disabled={status !== 'ready'}
         >
-          {glyph ? '散開成太陽' : '凝聚成「陽」'}
+          {glyph ? '散開成太陽' : '凝聚成「歐陽明崴」'}
         </button>
       </div>
     </div>
