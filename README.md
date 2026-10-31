@@ -128,7 +128,7 @@ POST /api/games/tetris/rooms  {"public":true}  →  201 {"code":"ABCDE"}   publi
 GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升級成 WebSocket（登入時用帳號與帳號名稱）
 ```
 
-- 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T-Spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
+- 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T／L／J／S／Z／I 的 spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
   負責選目標（隨機／快輸的／徽章／反擊，或手動點小盤面）、轉送垃圾行、算 KO、徽章、名次與速度等級，以及模擬電腦玩家。
 - 房間每 250ms 推進一次，這段時間的狀態和盤面變化合併成一則廣播。
 - 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
