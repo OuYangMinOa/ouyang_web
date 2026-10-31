@@ -2,16 +2,13 @@ import { useRef } from 'react'
 import { intensityClass, taipeiTime, windText, type Storm, type TrackPoint } from './data'
 import { L, TAIWAN_CENTER, unwrapLongitudes, useLayers, useLeafletMap } from './map'
 
-export type TyphoonMode = 'official' | 'ai'
-
 type Props = {
   storms: Storm[]
   selectedId?: string
-  mode: TyphoonMode
-  /** 傳統模式要畫哪些單位 */
+  /** 要畫哪些官方單位的路徑 */
   agencies: string[]
-  /** AI 模式下也畫官方的預報路徑（淡色），方便對照 */
-  compareOfficial?: boolean
+  /** 也畫 AI 系集（成員路徑壓在官方路徑底下，平均路徑疊在最上面） */
+  ai?: boolean
   className?: string
 }
 
@@ -33,14 +30,7 @@ function levelClass(point: TrackPoint) {
 }
 
 /** 颱風路徑圖：所有颱風都畫，選到的那個比較明顯，並把視野移到它（西北太平洋的會連台灣一起框進來） */
-export default function TyphoonMap({
-  storms,
-  selectedId,
-  mode,
-  agencies,
-  compareOfficial = false,
-  className = '',
-}: Props) {
+export default function TyphoonMap({ storms, selectedId, agencies, ai = false, className = '' }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const map = useLeafletMap(container, TAIWAN_CENTER, 4)
 
@@ -56,33 +46,47 @@ export default function TyphoonMap({
           if (selected && inBounds) inBounds.forEach((p) => bounds.extend(p))
         }
 
-        const drawOfficial = (agency: string, faint: boolean) => {
+        const drawOfficial = (agency: string) => {
           const forecast = storm.agencies[agency]
           if (!forecast) return
-          const cls = `agency-${agency}${dim}${faint ? ' tc-faint' : ''}`
+          const cls = `agency-${agency}${dim}`
           const past = unwrapLongitudes(forecast.past.map((p) => [p.lat, p.lon]))
           const ahead = unwrapLongitudes(
             [forecast.past[forecast.past.length - 1], ...forecast.forecast].map((p) => [p.lat, p.lon]),
           )
-          if (forecast.cone && !faint) {
-            add(L.polygon(forecast.cone, { className: `tc-cone ${cls}`, interactive: false }))
+          if (forecast.cone) {
+            add(
+              L.polygon(forecast.cone, {
+                className: `tc-cone ${cls}`,
+                interactive: false,
+              }),
+            )
           }
-          if (!faint) {
-            for (const point of forecast.forecast) {
-              if (point.radius_km) {
-                add(
-                  L.circle([point.lat, point.lon], {
-                    radius: point.radius_km * 1000,
-                    className: `tc-prob ${cls}`,
-                    interactive: false,
-                  }),
-                )
-              }
+          for (const point of forecast.forecast) {
+            if (point.radius_km) {
+              add(
+                L.circle([point.lat, point.lon], {
+                  radius: point.radius_km * 1000,
+                  className: `tc-prob ${cls}`,
+                  interactive: false,
+                }),
+              )
             }
           }
-          add(L.polyline(past, { className: `tc-past ${cls}`, interactive: false }), past)
-          add(L.polyline(ahead, { className: `tc-forecast ${cls}`, interactive: false }), ahead)
-          if (faint) return
+          add(
+            L.polyline(past, {
+              className: `tc-past ${cls}`,
+              interactive: false,
+            }),
+            past,
+          )
+          add(
+            L.polyline(ahead, {
+              className: `tc-forecast ${cls}`,
+              interactive: false,
+            }),
+            ahead,
+          )
           const name = storm.name_zh ?? storm.name_en ?? '颱風'
           for (const point of forecast.forecast) {
             add(
@@ -94,34 +98,44 @@ export default function TyphoonMap({
           }
         }
 
-        if (mode === 'official') {
-          agencies.forEach((agency) => drawOfficial(agency, false))
-        } else {
-          if (compareOfficial) Object.keys(storm.agencies).forEach((agency) => drawOfficial(agency, true))
-          const ai = storm.ai
-          if (ai) {
-            for (const member of ai.members) {
-              const path = unwrapLongitudes(member.map(([, lat, lon]) => [lat, lon]))
-              add(L.polyline(path, { className: `tc-member${dim}`, interactive: false }), path)
-            }
-            const mean = unwrapLongitudes(ai.mean.map((p) => [p.lat, p.lon]))
-            add(L.polyline(mean, { className: `tc-ai-mean${dim}`, interactive: false }), mean)
-            ai.mean.forEach((point, i) => {
-              // 每 12 小時一個點就夠
-              if (i % 2 !== 0) return
-              add(
-                L.circleMarker([point.lat, point.lon], {
-                  radius: 4,
-                  className: `tc-point ${levelClass(point)}${dim}`,
-                }).bindTooltip(pointTooltip('AI 系集平均', point)),
-              )
-            })
+        const ensemble = ai ? storm.ai : undefined
+        if (ensemble) {
+          for (const member of ensemble.members) {
+            const path = unwrapLongitudes(member.map(([, lat, lon]) => [lat, lon]))
+            add(
+              L.polyline(path, {
+                className: `tc-member${dim}`,
+                interactive: false,
+              }),
+              path,
+            )
           }
+        }
+        agencies.forEach(drawOfficial)
+        if (ensemble) {
+          const mean = unwrapLongitudes(ensemble.mean.map((p) => [p.lat, p.lon]))
+          add(
+            L.polyline(mean, {
+              className: `tc-ai-mean${dim}`,
+              interactive: false,
+            }),
+            mean,
+          )
+          ensemble.mean.forEach((point, i) => {
+            // 每 12 小時一個點就夠
+            if (i % 2 !== 0) return
+            add(
+              L.circleMarker([point.lat, point.lon], {
+                radius: 4,
+                className: `tc-point tc-ai-point ${levelClass(point)}${dim}`,
+              }).bindTooltip(pointTooltip('AI 系集平均', point)),
+            )
+          })
         }
 
         // 目前位置與暴風圈
         const { current } = storm
-        if (current.storm_radius_km && (mode === 'official' || !storm.ai)) {
+        if (current.storm_radius_km && agencies.length > 0) {
           add(
             L.circle([current.lat, current.lon], {
               radius: current.storm_radius_km * 1000,
@@ -144,7 +158,7 @@ export default function TyphoonMap({
 
       if (bounds.isValid()) map?.fitBounds(bounds, { padding: [24, 24], maxZoom: 7 })
     },
-    [storms, selectedId, mode, agencies.join(','), compareOfficial],
+    [storms, selectedId, agencies.join(','), ai],
   )
 
   return <div ref={container} className={`weather-map ${className}`} role="region" aria-label="颱風路徑圖" />
