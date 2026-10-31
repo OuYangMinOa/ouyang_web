@@ -44,9 +44,10 @@ docker rollout --timeout 60 --wait-after-healthy 3 app
 # Traefik 放在 app 之後：從舊版（app 直接綁 port）升級時，舊容器要先被移除才空得出 port
 docker compose -p ouyang-web-traefik -f traefik/compose.yaml up -d --wait
 
-health_url=$(grep '^HEALTH_URL=' "$env_name.env" | cut -d= -f2)
+# 用這個環境的網址連本機的 Traefik，才會分流到對的容器；新網域的憑證可能還在申請，所以加 -k
+app_host=$(grep '^APP_HOST=' "$env_name.env" | cut -d= -f2)
 for _ in $(seq 1 15); do
-  if curl -fsSk "$health_url"; then
+  if curl -fsSk --resolve "$app_host:443:127.0.0.1" "https://$app_host/api/health"; then
     echo
     # tag 都帶 commit，舊版不是 dangling，image prune 清不到，要自己刪；
     # 只動這個環境的 tag（staging / prod 在同一台），image ls 由新到舊排
