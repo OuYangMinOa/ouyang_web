@@ -6,6 +6,8 @@
  * 畫面取走後決定要不要顯示、送出攻擊。
  */
 
+import { withBadges } from '../shared/badges'
+
 export const COLS = 10
 export const ROWS = 20
 /** 可見區上方的緩衝列，方塊在這裡出生 */
@@ -105,10 +107,6 @@ export function gravityMs(level: number): number {
   return Math.max(1000 * 0.82 ** (level - 1), 30)
 }
 
-/** 徽章數（0～4），每個讓攻擊多 25%；點數門檻和後端一樣 */
-export function badgeCount(points: number): number {
-  return [2, 6, 14, 30].filter((step) => points >= step).length
-}
 
 export type Garbage = { lines: number; readyAt: number; hole: number }
 
@@ -404,7 +402,7 @@ export class Tetris {
       this.combo++
       attack += COMBO[Math.min(this.combo, COMBO.length - 1)]
       if (perfect) attack += PERFECT_CLEAR
-      attack = Math.floor((attack * (4 + badgeCount(this.badges))) / 4)
+      attack = withBadges(attack, this.badges)
     } else {
       this.combo = -1
     }

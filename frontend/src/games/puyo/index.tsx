@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { errorMessage } from '../../api'
 import { useAuth } from '../../auth'
+import { ArenaIdentity, ArenaScreen, JoinForm } from '../shared/Arena'
 import { useFlash } from '../shared/flash'
 import { KeyEditor } from '../shared/KeyEditor'
 import { keyNames } from '../shared/keys'
 import { CHECKPOINT_MS, formatScore } from '../shared/Leaderboard'
 import { load, save } from '../shared/storage'
 import { GameLayout, MusicButton, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
+import { useArena } from '../shared/useArena'
+import { useArenaMatch, type ArenaEngine } from '../shared/useArenaMatch'
 import { Cpu, type Difficulty } from './cpu'
-import { describeLink, Puyo, type GameEvent } from './engine'
+import { readPalette } from './draw'
+import { COLS, HIDDEN, describeLink, Puyo, type GameEvent } from './engine'
 import { useKeys, type Action, type KeySettings } from './keys'
 import { Leaderboard, RunReporter, useLeaderboard, type RunState } from './Leaderboard'
 import { useMusic } from './music'
@@ -21,6 +26,8 @@ const MS_PER_LEVEL = 60_000
 /** 對戰時每玩這麼久兩邊一起變快，最多到這一級 */
 const VERSUS_MS_PER_LEVEL = 60_000
 const VERSUS_MAX_LEVEL = 8
+/** 大逃殺的速度等級最高 15（和俄羅斯方塊共用），魔法氣泡太快會來不及轉，最多到這一級 */
+const ARENA_MAX_LEVEL = 10
 /** 對戰開始前倒數幾下、每下多久 */
 const COUNTDOWN = 3
 const COUNTDOWN_MS = 700
@@ -41,8 +48,10 @@ function difficultyLabel(d: Difficulty): string {
 }
 
 export default function PuyoGame() {
+  const [params] = useSearchParams()
   const [mode, setMode] = useState<Mode>({ kind: 'menu' })
   const menu = () => setMode({ kind: 'menu' })
+  if (params.get('room')) return <Online />
   if (mode.kind === 'solo') return <Solo onExit={menu} />
   if (mode.kind === 'versus') return <Versus key={mode.difficulty} difficulty={mode.difficulty} onExit={menu} />
   return <Menu onSolo={() => setMode({ kind: 'solo' })} onVersus={(difficulty) => setMode({ kind: 'versus', difficulty })} />
@@ -99,6 +108,9 @@ function Help({ settings, onEdit }: { settings: KeySettings; onEdit?: () => void
           </li>
           <li>對戰開打 96 秒後進入加時，換算的分數越來越低，攻擊越來越兇。</li>
           <li>全部消光（全消）：單人模式加 2,100 分；對戰時下一次連鎖多送 30 顆干擾泡。</li>
+          <li>
+            大逃殺：干擾泡送給目前的攻擊目標（數字鍵 1～4 切換選目標的方式，或點小盤面指定）。KO 別人可以拿到徽章，每個徽章讓送出的干擾泡多 25%。
+          </li>
           <li>第 3 欄最上面那格（× 的位置）被堵住就輸了。</li>
         </ul>
       </div>
@@ -109,6 +121,8 @@ function Help({ settings, onEdit }: { settings: KeySettings; onEdit?: () => void
 function Menu({ onSolo, onVersus }: { onSolo: () => void; onVersus: (d: Difficulty) => void }) {
   const leaderboard = useLeaderboard()
   const keys = useKeys()
+  const arena = useArena('puyo', {})
+  const { loading } = useAuth()
   const [difficulty, setDifficulty] = useState<Difficulty>(() => load<Difficulty>('puyo:difficulty', 'normal'))
   const [records] = useState(() => load<Records>('puyo:records', {}))
   const record = records[difficulty]
@@ -150,6 +164,18 @@ function Menu({ onSolo, onVersus }: { onSolo: () => void; onVersus: (d: Difficul
           <button type="button" onClick={() => onVersus(difficulty)}>
             開始對戰
           </button>
+        </section>
+        <section className="puyo-mode">
+          <h2>大逃殺</h2>
+          <p className="muted">
+            最多 99 人同場，連鎖變成干擾泡丟給你瞄準的對手，活到最後的人獲勝。把房間代碼或邀請連結給朋友就能一起玩，人不夠由電腦補位。
+          </p>
+          <ArenaIdentity game="puyo" />
+          <button type="button" onClick={() => arena.create(false)} disabled={arena.busy || loading}>
+            建立房間
+          </button>
+          <JoinForm arena={arena} />
+          {arena.error && <p className="error">{arena.error}</p>}
         </section>
       </div>
     </GameLayout>
@@ -539,5 +565,68 @@ function Versus({ difficulty, onExit }: { difficulty: Difficulty; onExit: () => 
         </button>
       </Toolbar>
     </GameLayout>
+  )
+}
+
+const ENGINE: ArenaEngine<Puyo> = {
+  game: 'puyo',
+  unit: '顆干擾泡',
+  shareTitle: '一起來玩魔法氣泡',
+  shape: { cols: COLS, hidden: HIDDEN, round: true },
+  readPalette,
+  create: () => new Puyo({ versus: true }),
+  over: (g) => g.over,
+  sent: (g) => g.sent,
+  receive: (g, n) => g.receive(n),
+  sync: (g, level, badges) => {
+    g.level = Math.min(level, ARENA_MAX_LEVEL)
+    g.badges = badges
+  },
+  drain: (g, flash) => {
+    const events = g.events.splice(0)
+    if (events.length === 0) return null
+    return events.map((e) => {
+      announce(e, flash)
+      return e.kind === 'turn' ? e.sent : 0
+    })
+  },
+  snapshot: (g) => ({ rows: g.cells(), pending: g.pending }),
+}
+
+function Online() {
+  const match = useArenaMatch(ENGINE)
+  const music = useMusic(match.running, Math.min(match.state?.level ?? 1, ARENA_MAX_LEVEL))
+  const { keys } = useKeys()
+
+  const hooks = useRef<PlayfieldHooks>({})
+  useEffect(() => {
+    hooks.current = {
+      onFrame: match.frame,
+      onKey: (code, action) => {
+        if (action === 'music') {
+          music.toggle()
+          return true
+        }
+        return match.onKey(code, !!action)
+      },
+    }
+  })
+
+  return (
+    <ArenaScreen
+      match={match}
+      extra={<MusicButton music={music} />}
+      playfield={({ overlay, info, flash }) => (
+        <Playfield
+          game={match.game}
+          running={match.running}
+          keys={keys}
+          hooks={hooks}
+          overlay={overlay}
+          flash={flash}
+          info={info}
+        />
+      )}
+    />
   )
 }

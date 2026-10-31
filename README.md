@@ -123,7 +123,7 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
 ### 俄羅斯方塊 99
 
 `/games/tetris`：參考 Tetris 99 的大逃殺，一間最多 99 人，人不夠由電腦補位。和上面的棋類不同，伺服器懂一部分規則
-（`backend/src/tetris.rs`，協定寫在 `frontend/src/games/tetris/useArena.ts`）：
+（`backend/src/arena.rs`，和魔法氣泡共用；俄羅斯方塊的盤面格式和電腦玩家在 `tetris.rs`。協定寫在 `frontend/src/games/shared/useArena.ts`）：
 
 ```
 POST /api/games/tetris/rooms  {"public":true}  →  201 {"code":"ABCDE"}   public：快速配對，加入正在等人的公開房間，沒有就開一間
@@ -133,6 +133,8 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 - 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T／L／J／S／Z／I 的 spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
   負責選目標（隨機／快輸的／徽章／反擊，或手動點小盤面）、轉送垃圾行、算 KO、徽章、名次與速度等級，以及模擬電腦玩家。
 - 房間每 250ms 推進一次，這段時間的狀態和盤面變化合併成一則廣播。
+- 電腦玩家沒有真的在下方塊，是用機率模擬放塊、消行和被攻擊推高。大部分是弱的，前期就會陸續出局；每 7 個有 1 個強的（至少一個）撐到後面。
+  等級越高越容易失誤，只剩電腦時大約四、五分鐘分出勝負。調整時用 `cargo test --release pacing -- --ignored --nocapture` 看每個時間點出局了幾個。
 - 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
 - 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
 - 單人模式每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限；分數照官方規則（消行、spin、B2B、連擊、全消乘上等級，加上下落格數）。
@@ -160,8 +162,8 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 
 ### 魔法氣泡
 
-`/games/puyo`：參考ぷよぷよ通的規則，單人模式和一對一對戰電腦，全部在瀏覽器裡跑（`frontend/src/games/puyo/`）。
-和俄羅斯方塊共用快捷鍵、背景音樂合成器和排行榜元件（`games/shared/`）。
+`/games/puyo`：參考ぷよぷよ通的規則，有單人模式、一對一對戰電腦（全部在瀏覽器裡跑，`frontend/src/games/puyo/`），
+以及和俄羅斯方塊一樣的大逃殺。和俄羅斯方塊共用快捷鍵、背景音樂合成器、排行榜和大逃殺的元件（`games/shared/`）。
 
 - 規則（`engine.ts`）：6 × 12 的盤面加上看不到的第 13 列，兩顆一組、四種顏色，同色 4 顆以上相連就消掉，可以連鎖。
   分數照官方公式：10 × 消掉的顆數 × (連鎖倍率 + 連結加成 + 顏色加成)。第 3 欄最上面被堵住就輸。
@@ -181,6 +183,16 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 
   伺服器檢查：盤面沒有懸空的氣泡、沒有該消沒消的四連、顆數等於「組數 × 2 − 消掉的 − 疊出界的」；
   分數增加不超過「消掉的顆數 × 9990」（倍率上限 999）加上下落與全消的分數。前端只在有一組在操作時回報（連鎖途中的盤面還沒算完）。
+- 大逃殺（`backend/src/puyo.rs`）：房間、選目標、KO 和徽章和俄羅斯方塊共用 `arena.rs`，只能用房間代碼或邀請連結加入（沒有快速配對）。
+  攻擊單位是干擾泡顆數，盤面是 13 × 6 個 `0`～`5`（含看不到的第 13 列，`5` 是干擾泡）；速度等級最多用到 10：
+
+  ```
+  POST /api/games/puyo/rooms  →  201 {"code":"ABCDE"}
+  GET  /api/games/puyo/rooms/{code}/ws?player=<id>&name=<暱稱>
+  ```
+
+  電腦玩家每一手放兩顆，其中一部分「有用」，存夠了就引爆一串連鎖（強的打得比較長），干擾泡照前端的公式換算（含加時）；
+  弱的放得亂，沒用的氣泡越積越高。
 - 背景音樂是另外寫的一段輕快小曲（`puyo/music.ts`），不是原作配樂。快捷鍵存在 `/api/games/puyo/settings`（格式同俄羅斯方塊）。
 
 ## 日曆
