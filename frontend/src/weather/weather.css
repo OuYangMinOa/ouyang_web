@@ -15,10 +15,10 @@
 .weather-head h1 {
   margin: 0;
 }
-.weather-lead {
-  margin-bottom: 16px;
+p.weather-lead {
+  margin-bottom: 20px;
 }
-.fineprint {
+p.fineprint {
   margin-top: 12px;
   font-size: 13px;
 }
@@ -37,25 +37,6 @@
 
 .sub-head {
   margin: 20px 0 8px;
-}
-
-/* 兩個或多個選項的切換（傳統／AI） */
-.mode-switch {
-  display: inline-flex;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-}
-.mode-switch button {
-  padding: 6px 16px;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text);
-}
-.mode-switch button.active {
-  background: var(--accent);
-  color: var(--on-accent);
 }
 
 /* 分頁按鈕（預報單位、地震來源） */
@@ -241,10 +222,6 @@
   fill: var(--agency);
   fill-opacity: 0.08;
 }
-.tc-faint {
-  stroke-opacity: 0.45;
-  stroke-width: 1.5;
-}
 .tc-storm-radius {
   stroke: var(--danger);
   stroke-width: 1.5;
@@ -285,6 +262,10 @@ path.tc-point {
   stroke-width: 1.5;
   fill: var(--level);
   fill-opacity: 1;
+}
+/* AI 平均路徑上的點用強調色描邊，和官方的預報點分得出來 */
+path.tc-point.tc-ai-point {
+  stroke: var(--accent);
 }
 path.tc-point.tc-level-none {
   stroke: var(--agency);
@@ -372,6 +353,9 @@ path.tc-point.tc-level-none {
   display: inline-block;
   width: 22px;
   border-top: 3px solid var(--agency, var(--accent));
+}
+.legend-toggle.layer-ai .legend-line {
+  border-top-width: 4px;
 }
 
 .storm-detail {
@@ -864,12 +848,6 @@ path.eq-dot {
   .weather-map {
     height: 52vh;
     min-height: 280px;
-  }
-  .mode-switch {
-    width: 100%;
-  }
-  .mode-switch button {
-    flex: 1;
   }
   .city-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

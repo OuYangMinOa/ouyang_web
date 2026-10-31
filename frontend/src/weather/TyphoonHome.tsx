@@ -69,7 +69,7 @@ export default function TyphoonHome() {
             </li>
           </ul>
           <Suspense fallback={<div className="weather-map typhoon-home-map" />}>
-            <TyphoonMap storms={storms} mode="official" agencies={primary} className="typhoon-home-map" />
+            <TyphoonMap storms={storms} agencies={primary} className="typhoon-home-map" />
           </Suspense>
         </div>
       </div>

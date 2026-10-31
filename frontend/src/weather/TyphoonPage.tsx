@@ -15,14 +15,16 @@ import {
   type TrackPoint,
   type TyphoonReport,
 } from './data'
-import TyphoonMap, { type TyphoonMode } from './TyphoonMap'
+import TyphoonMap from './TyphoonMap'
 import { SourceList } from './WeatherHub'
 import './weather.css'
 
-const MODES: { value: TyphoonMode; label: string }[] = [
-  { value: 'official', label: '傳統模式' },
-  { value: 'ai', label: 'AI 模式' },
-]
+/** 詳細資料分頁裡 AI 系集的代號（其他分頁是預報單位的 id） */
+const AI_TAB = 'ai'
+
+function hasOfficial(storm: Storm) {
+  return Object.keys(storm.agencies).length > 0
+}
 
 export function IntensityTag({ windKt }: { windKt?: number }) {
   const { level, label } = intensityClass(windKt)
@@ -43,6 +45,7 @@ function StormChip({ storm, selected, onSelect }: { storm: Storm; selected: bool
       />
       <span className="storm-chip-name">{stormName(storm)}</span>
       {stormNumber(storm) && <span className="muted">{stormNumber(storm)}</span>}
+      {!hasOfficial(storm) && <span className="muted">僅 AI</span>}
     </button>
   )
 }
@@ -111,24 +114,32 @@ function TrackTable({ points, caption }: { points: TrackPoint[]; caption: string
 
 export default function TyphoonPage() {
   const { data, error } = useRemote<TyphoonReport>('/weather/typhoons', 10 * 60 * 1000)
-  const [mode, setMode] = usePreference<TyphoonMode>('typhoon-mode', 'official', ['official', 'ai'])
+  const [showAi, setShowAi] = usePreference<'on' | 'off'>('typhoon-ai', 'on', ['on', 'off'])
   const [selectedId, setSelectedId] = useState<string>()
   const [hidden, setHidden] = useState<string[]>([])
-  const [compare, setCompare] = useState(true)
-  const [tableAgency, setTableAgency] = useState<string>()
+  const [tableTab, setTableTab] = useState<string>()
 
-  // 傳統模式只列有官方資料的，AI 模式只列有 AI 路徑的
+  // 官方和 AI 畫在同一張圖；有官方資料的排前面，只有 AI 追蹤的熱帶擾動排後面
   const storms = useMemo(
-    () => (data?.storms ?? []).filter((s) => (mode === 'ai' ? s.ai : Object.keys(s.agencies).length > 0)),
-    [data, mode],
+    () => [...(data?.storms ?? [])].sort((a, b) => Number(hasOfficial(b)) - Number(hasOfficial(a))),
+    [data],
   )
   const selected = storms.find((s) => s.id === selectedId) ?? storms[0]
 
   const available = AGENCIES.filter((a) => storms.some((s) => s.agencies[a.id]))
   const shown = available.map((a) => a.id).filter((id) => !hidden.includes(id))
-  const selectedAgencies = selected ? AGENCIES.filter((a) => selected.agencies[a.id]) : []
-  const table = selectedAgencies.find((a) => a.id === tableAgency) ?? selectedAgencies[0]
-  const westPacific = (data?.storms ?? []).filter(isOfficialWestPacific).length
+  const anyAi = storms.some((s) => s.ai)
+  const tabs = selected
+    ? [
+        ...AGENCIES.filter((a) => selected.agencies[a.id]).map((a) => ({
+          id: a.id,
+          label: a.name,
+        })),
+        ...(selected.ai ? [{ id: AI_TAB, label: 'AI 系集平均' }] : []),
+      ]
+    : []
+  const tab = tabs.find((t) => t.id === tableTab) ?? tabs[0]
+  const westPacific = storms.filter(isOfficialWestPacific).length
 
   function toggleAgency(id: string) {
     setHidden((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -138,24 +149,10 @@ export default function TyphoonPage() {
     <div className="weather-page">
       <div className="weather-head">
         <h1>颱風</h1>
-        <div className="mode-switch" role="group" aria-label="預報模式">
-          {MODES.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              className={mode === m.value ? 'active' : ''}
-              aria-pressed={mode === m.value}
-              onClick={() => setMode(m.value)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
       </div>
       <p className="muted weather-lead">
-        {mode === 'official'
-          ? '各國氣象單位發布的官方路徑與強度預報。虛線是預報路徑，外圈是 70% 機率範圍。'
-          : 'Google DeepMind Weather Lab 的 AI 系集預報：粗線是平均路徑，細線是每個系集成員，越分散代表越不確定。'}
+        各國氣象單位的官方預報和 Google DeepMind 的 AI 系集預報畫在同一張圖。官方：虛線是預報路徑，外圈是 70%
+        機率範圍；AI：粗線是平均路徑，細灰線是每個系集成員，越分散代表越不確定。
       </p>
 
       {error && !data && <p className="error">{error}</p>}
@@ -168,7 +165,7 @@ export default function TyphoonPage() {
               <p className="empty-icon" aria-hidden="true">
                 🌤️
               </p>
-              <p>{mode === 'ai' ? 'AI 目前沒有追蹤中的熱帶氣旋。' : '目前全球沒有活動中的颱風。'}</p>
+              <p>目前全球沒有活動中的颱風或熱帶擾動。</p>
             </div>
           ) : (
             <>
@@ -183,30 +180,28 @@ export default function TyphoonPage() {
                 ))}
               </div>
 
-              <div className="map-controls">
-                {mode === 'official' ? (
-                  available.map((a) => (
-                    <label key={a.id} className={`legend-toggle agency-${a.id}`}>
-                      <input type="checkbox" checked={!hidden.includes(a.id)} onChange={() => toggleAgency(a.id)} />
-                      <span className="legend-line" aria-hidden="true" />
-                      {a.name}
-                    </label>
-                  ))
-                ) : (
-                  <label className="legend-toggle">
-                    <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} />
-                    對照官方路徑
+              <div className="map-controls" role="group" aria-label="地圖圖層">
+                {available.map((a) => (
+                  <label key={a.id} className={`legend-toggle agency-${a.id}`}>
+                    <input type="checkbox" checked={!hidden.includes(a.id)} onChange={() => toggleAgency(a.id)} />
+                    <span className="legend-line" aria-hidden="true" />
+                    {a.name}
+                  </label>
+                ))}
+                {anyAi && (
+                  <label className="legend-toggle layer-ai">
+                    <input
+                      type="checkbox"
+                      checked={showAi === 'on'}
+                      onChange={(e) => setShowAi(e.target.checked ? 'on' : 'off')}
+                    />
+                    <span className="legend-line" aria-hidden="true" />
+                    AI 系集（Weather Lab）
                   </label>
                 )}
               </div>
 
-              <TyphoonMap
-                storms={storms}
-                selectedId={selected?.id}
-                mode={mode}
-                agencies={shown}
-                compareOfficial={compare}
-              />
+              <TyphoonMap storms={storms} selectedId={selected?.id} agencies={shown} ai={showAi === 'on'} />
               <IntensityLegend />
 
               {selected && (
@@ -218,39 +213,38 @@ export default function TyphoonPage() {
                   </div>
                   <CurrentInfo storm={selected} />
 
-                  {mode === 'official' ? (
+                  <div className="detail-tabs" role="tablist" aria-label="預報來源">
+                    {tabs.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={t.id === tab?.id}
+                        className={t.id === tab?.id ? 'active' : ''}
+                        onClick={() => setTableTab(t.id)}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  {tab?.id === AI_TAB && selected.ai ? (
                     <>
-                      <div className="detail-tabs" role="tablist" aria-label="預報單位">
-                        {selectedAgencies.map((a) => (
-                          <button
-                            key={a.id}
-                            type="button"
-                            role="tab"
-                            aria-selected={a.id === table?.id}
-                            className={a.id === table?.id ? 'active' : ''}
-                            onClick={() => setTableAgency(a.id)}
-                          >
-                            {a.name}
-                          </button>
-                        ))}
-                      </div>
-                      {table && (
-                        <>
-                          <p className="muted">發布時間：{taipeiTime(selected.agencies[table.id].issued)}</p>
-                          <TrackTable points={selected.agencies[table.id].forecast} caption={`${table.name}預報`} />
-                        </>
-                      )}
+                      <p className="muted">
+                        起報時間：{taipeiTime(selected.ai.init_time)}・系集成員 {selected.ai.members.length} 個
+                      </p>
+                      <TrackTable
+                        points={selected.ai.mean.filter((_, i) => i > 0 && i % 2 === 0)}
+                        caption="AI 系集平均預報"
+                      />
                     </>
                   ) : (
-                    selected.ai && (
+                    tab && (
                       <>
                         <p className="muted">
-                          起報時間：{taipeiTime(selected.ai.init_time)}・系集成員 {selected.ai.members.length} 個
+                          發布時間：
+                          {taipeiTime(selected.agencies[tab.id].issued)}
                         </p>
-                        <TrackTable
-                          points={selected.ai.mean.filter((_, i) => i > 0 && i % 2 === 0)}
-                          caption="AI 系集平均預報"
-                        />
+                        <TrackTable points={selected.agencies[tab.id].forecast} caption={`${tab.label}預報`} />
                       </>
                     )
                   )}
@@ -259,15 +253,15 @@ export default function TyphoonPage() {
             </>
           )}
 
-          {mode === 'official' && westPacific === 0 && storms.length > 0 && (
+          {westPacific === 0 && storms.length > 0 && (
             <p className="muted">西北太平洋目前沒有颱風，上面是其他海域的熱帶氣旋。</p>
           )}
 
           <SourceList sources={data.sources} updatedAt={data.updated_at} />
           <p className="muted fineprint">
-            {mode === 'ai'
-              ? 'AI 預報是 Google DeepMind 的實驗性資料（即時資料依其使用條款，過去資料為 CC BY 4.0），僅供參考，防颱請以中央氣象署發布為準。'
-              : `官方資料：${available.map((a) => agencyName(a.id)).join('、') || '—'}；JTWC 與 NHC 經由 GDACS 取得。防颱請以中央氣象署發布為準。`}
+            官方資料：{available.map((a) => agencyName(a.id)).join('、') || '—'}
+            ；JTWC 與 NHC 經由 GDACS 取得。AI 預報是 Google DeepMind 的實驗性資料（即時資料依其使用條款，過去資料為 CC
+            BY 4.0），僅供參考。防颱請以中央氣象署發布為準。
           </p>
         </>
       )}
