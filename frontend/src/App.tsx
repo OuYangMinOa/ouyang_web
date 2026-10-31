@@ -19,6 +19,7 @@ import Standings from './lol/Standings'
 import MusicApp from './music/MusicApp'
 import MusicLibrary from './music/MusicLibrary'
 import Account from './pages/Account'
+import AdminAccess from './pages/admin/Access'
 import AdminRoles from './pages/admin/Roles'
 import AdminUsers from './pages/admin/Users'
 import AdminVisits from './pages/admin/Visits'
@@ -217,6 +218,7 @@ function App() {
               <Route index element={<Navigate to="users" replace />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="roles" element={<AdminRoles />} />
+              <Route path="access" element={<AdminAccess />} />
               <Route path="visits" element={<AdminVisits />} />
             </Route>
             <Route path="*" element={<p className="muted">找不到這個頁面。</p>} />

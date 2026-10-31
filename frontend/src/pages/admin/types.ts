@@ -41,3 +41,37 @@ export type VisitEvent = {
   username: string | null
   created_at: string
 }
+
+/** 全站的 IP 訪問紀錄，見後端 access_log.rs */
+export type AccessIp = {
+  ip: string
+  requests: number
+  errors: number
+  first_at: string
+  last_at: string
+  users: string[]
+  last_method: string
+  last_path: string
+  user_agent: string
+}
+
+export type AccessPath = { path: string; requests: number; ips: number; errors: number }
+
+export type AccessReport = {
+  summary: { requests: number; ips: number; users: number; errors: number }
+  ips: AccessIp[]
+  paths: AccessPath[]
+}
+
+export type AccessRequest = {
+  id: number
+  ip: string
+  method: string
+  path: string
+  query: string
+  status: number
+  duration_ms: number
+  username: string | null
+  user_agent: string
+  created_at: string
+}
