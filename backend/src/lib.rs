@@ -4,6 +4,7 @@ pub mod calendar;
 pub mod games;
 pub mod music;
 pub mod tetris;
+pub mod tetris_scores;
 pub mod visits;
 pub mod weather;
 
@@ -96,6 +97,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/rooms/{code}/ws", get(games::connect))
         .route("/games/tetris/rooms", post(tetris::create_arena))
         .route("/games/tetris/rooms/{code}/ws", get(tetris::connect))
+        .route("/games/tetris/scores", get(tetris_scores::list_scores).post(tetris_scores::submit_score))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/weather/forecast", get(weather::forecast::forecast))

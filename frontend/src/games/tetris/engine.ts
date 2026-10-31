@@ -83,6 +83,14 @@ const ATTACK_MINI = [0, 0, 1]
 const COMBO = [0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5]
 const PERFECT_CLEAR = 10
 
+/** 單人模式的分數（官方規則，再乘上等級）：普通消行、spin、T-Spin Mini（索引是消了幾行） */
+const SCORE_NORMAL = [0, 100, 300, 500, 800]
+const SCORE_SPIN = [400, 800, 1200, 1600, 2000]
+const SCORE_MINI = [100, 200, 400]
+const SCORE_PERFECT = [0, 800, 1200, 1800, 2000]
+/** 每次連擊多 50 × 連擊數；B2B 乘 1.5；加速下落每格 1 分、直接落下每格 2 分 */
+const SCORE_COMBO = 50
+
 export const LOCK_MS = 500
 const MAX_LOCK_RESETS = 15
 const SOFT_DROP_MS = 30
@@ -116,6 +124,8 @@ export type LockResult = {
   attack: number
   /** 抵銷待升垃圾後真正送出去的行數 */
   sent: number
+  /** 這次消行得到的分數（已乘上等級，不含下落的分數） */
+  points: number
 }
 
 export class Tetris {
@@ -130,6 +140,8 @@ export class Tetris {
   badges = 0
   softDrop = false
   lines = 0
+  /** 單人模式的分數 */
+  score = 0
   sent = 0
   garbage: Garbage[] = []
   events: LockResult[] = []
@@ -270,6 +282,7 @@ export class Tetris {
     if (!p || this.over) return
     const y = this.ghostY()
     if (y !== p.y) this.lastKick = -1
+    this.score += (y - p.y) * 2
     p.y = y
     this.lock()
   }
@@ -310,6 +323,7 @@ export class Tetris {
       if (this.onGround()) break
       this.piece.y++
       this.lastKick = -1
+      if (this.softDrop) this.score++
       if (this.piece.y > this.lowest) {
         this.lowest = this.piece.y
         this.lockResets = 0
@@ -392,6 +406,13 @@ export class Tetris {
       this.combo = -1
     }
 
+    let points = (spin === 'full' ? SCORE_SPIN : spin === 'mini' ? SCORE_MINI : SCORE_NORMAL)[lines] ?? 0
+    if (b2b) points = Math.floor(points * 1.5)
+    if (lines > 0) points += SCORE_COMBO * this.combo
+    if (perfect) points += SCORE_PERFECT[lines]
+    points *= this.level
+    this.score += points
+
     let sent = attack
     if (lines > 0) {
       // 消行先抵銷待升的垃圾，剩下的才送出去
@@ -407,7 +428,7 @@ export class Tetris {
 
     this.lines += lines
     this.sent += sent
-    this.events.push({ lines, spin, piece: p.kind, b2b, combo: this.combo, perfect, attack, sent })
+    this.events.push({ lines, spin, piece: p.kind, b2b, combo: this.combo, perfect, attack, sent, points })
     this.holdUsed = false
     if (!this.over) this.spawn()
   }

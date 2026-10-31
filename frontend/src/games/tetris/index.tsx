@@ -5,6 +5,7 @@ import { load, save } from '../shared/storage'
 import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
 import type { MiniInfo } from './draw'
 import { badgeCount, describe, Tetris } from './engine'
+import { formatScore, Leaderboard, useLeaderboard } from './Leaderboard'
 import { MiniBoards } from './MiniBoards'
 import { useMusic } from './music'
 import { Playfield, type PlayfieldHooks } from './Playfield'
@@ -34,6 +35,10 @@ const STRATEGIES: { value: Strategy; label: string; hint: string }[] = [
 ]
 
 const BOT_OPTIONS = [0, 10, 30, 60, 98]
+
+/** 單人模式每消這麼多行、或每玩這麼久就升一級（後端檢查分數時用一樣的規則） */
+const LINES_PER_LEVEL = 10
+const MS_PER_LEVEL = 60_000
 
 function stars(points: number): string {
   const n = badgeCount(points)
@@ -123,6 +128,7 @@ function Menu({ onPractice }: { onPractice: () => void }) {
   const location = useLocation()
   const [name, setName] = useState(loadName)
   const [draft, setDraft] = useState('')
+  const leaderboard = useLeaderboard()
 
   function changeName(value: string) {
     const next = [...value].slice(0, MAX_NAME).join('')
@@ -136,7 +142,14 @@ function Menu({ onPractice }: { onPractice: () => void }) {
   }
 
   return (
-    <GameLayout side={<Help />}>
+    <GameLayout
+      side={
+        <>
+          <Leaderboard board={leaderboard.board} error={leaderboard.error} />
+          <Help />
+        </>
+      }
+    >
       <div className="tetris-menu">
         <p className="tetris-intro">
           最多 {MAX_PLAYERS} 人同場的俄羅斯方塊大逃殺。消行會變成垃圾行送給你瞄準的對手，把別人頂到出局就能拿徽章、讓攻擊更強，
@@ -176,7 +189,7 @@ function Menu({ onPractice }: { onPractice: () => void }) {
             建立私人房間
           </button>
           <button type="button" className="secondary" onClick={onPractice}>
-            單人練習
+            單人模式
           </button>
         </div>
         <form className="inline-form" onSubmit={submit}>
@@ -205,18 +218,40 @@ function Menu({ onPractice }: { onPractice: () => void }) {
 type PracticePhase = 'running' | 'paused' | 'over'
 
 function Practice({ onExit }: { onExit: () => void }) {
+  const { user } = useAuth()
   const [initial] = useState(() => new Tetris())
   const game = useRef<Tetris | null>(initial)
+  /** 已經結算過的那一局，避免結束時連續幾個畫面重複上傳 */
+  const ended = useRef<Tetris | null>(null)
   const [phase, setPhase] = useState<PracticePhase>('running')
-  const [hud, setHud] = useState({ lines: 0, level: 1 })
-  const [best, setBest] = useState(() => load<number>('tetris:best', 0))
+  const [hud, setHud] = useState({ score: 0, lines: 0, level: 1 })
+  const [best, setBest] = useState(() => load<number>('tetris:best-score', 0))
+  /** 這局上傳後的結果：null 是還沒（或不用）上傳 */
+  const [result, setResult] = useState<{ rank: number; best: boolean } | 'sending' | 'failed' | null>(null)
+  const leaderboard = useLeaderboard()
   const [flash, showFlash] = useFlash()
   const music = useMusic(phase === 'running', hud.level)
 
   function restart() {
     game.current = new Tetris()
-    setHud({ lines: 0, level: 1 })
+    setHud({ score: 0, lines: 0, level: 1 })
+    setResult(null)
     setPhase('running')
+  }
+
+  function finish(g: Tetris) {
+    ended.current = g
+    setPhase('over')
+    if (g.score > best) {
+      setBest(g.score)
+      save('tetris:best-score', g.score)
+    }
+    if (!user || g.score <= 0) return
+    setResult('sending')
+    leaderboard
+      .submit({ score: g.score, lines: g.lines, level: g.level, duration_ms: Math.max(1, Math.round(g.clock)) })
+      .then((b) => setResult(b.me ? { rank: b.me.rank, best: !!b.best } : null))
+      .catch(() => setResult('failed'))
   }
 
   function frame() {
@@ -226,16 +261,15 @@ function Practice({ onExit }: { onExit: () => void }) {
       const label = describe(r)
       if (label) showFlash(label, 0)
     }
-    // 每消 10 行升一級
-    g.level = Math.min(15, 1 + Math.floor(g.lines / 10))
-    if (g.lines !== hud.lines || g.level !== hud.level) setHud({ lines: g.lines, level: g.level })
-    if (g.over && phase === 'running') {
-      setPhase('over')
-      if (g.lines > best) {
-        setBest(g.lines)
-        save('tetris:best', g.lines)
-      }
+    // 每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限，一直快到撐不住為止
+    const level = 1 + Math.max(Math.floor(g.lines / LINES_PER_LEVEL), Math.floor(g.clock / MS_PER_LEVEL))
+    if (level > g.level) {
+      g.level = level
+      showFlash(`LEVEL ${level}`, 0)
     }
+    if (g.score !== hud.score || g.lines !== hud.lines || g.level !== hud.level)
+      setHud({ score: g.score, lines: g.lines, level: g.level })
+    if (g.over && ended.current !== g) finish(g)
   }
 
   function onKey(code: string): boolean {
@@ -264,7 +298,7 @@ function Practice({ onExit }: { onExit: () => void }) {
     return () => document.removeEventListener('visibilitychange', hide)
   }, [])
 
-  const record = phase === 'over' && hud.lines > 0 && hud.lines >= best
+  const record = phase === 'over' && hud.score > 0 && hud.score >= best
   const overlay =
     phase === 'paused' ? (
       <Overlay>
@@ -277,8 +311,20 @@ function Practice({ onExit }: { onExit: () => void }) {
       <Overlay>
         <strong className="tetris-overlay-title">遊戲結束</strong>
         <span>
-          消了 {hud.lines} 行{record ? '，新紀錄！' : `（最高 ${best} 行）`}
+          {formatScore(hud.score)} 分 · {hud.lines} 行 · 等級 {hud.level}
         </span>
+        <span>{record ? '新紀錄！' : `最高 ${formatScore(best)} 分`}</span>
+        {result === 'sending' ? (
+          <span className="muted">上傳成績中…</span>
+        ) : result === 'failed' ? (
+          <span className="error">成績上傳失敗</span>
+        ) : result ? (
+          <span>
+            {result.best ? '刷新個人紀錄，' : ''}排行榜第 {result.rank} 名
+          </span>
+        ) : (
+          !user && hud.score > 0 && <span className="muted">登入後成績會登上排行榜</span>
+        )}
         <button type="button" onClick={restart}>
           再玩一次
         </button>
@@ -286,10 +332,17 @@ function Practice({ onExit }: { onExit: () => void }) {
     ) : null
 
   return (
-    <GameLayout side={<Help />}>
+    <GameLayout
+      side={
+        <>
+          <Leaderboard board={leaderboard.board} error={leaderboard.error} />
+          <Help />
+        </>
+      }
+    >
       <StatusLine tone={phase === 'over' ? 'danger' : undefined}>
-        {hud.lines} 行 · 等級 {hud.level}
-        <span className="tetris-muted"> · 最高 {Math.max(best, hud.lines)} 行</span>
+        {formatScore(hud.score)} 分 · {hud.lines} 行 · 等級 {hud.level}
+        <span className="tetris-muted"> · 最高 {formatScore(Math.max(best, hud.score))}</span>
       </StatusLine>
       <Playfield
         game={game}

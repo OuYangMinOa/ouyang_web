@@ -133,6 +133,15 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 - 房間每 250ms 推進一次，這段時間的狀態和盤面變化合併成一則廣播。
 - 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
 - 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
+- 單人模式每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限；分數照官方規則（消行、spin、B2B、連擊、全消乘上等級，加上下落格數）。
+  登入的人結束時自動上傳到排行榜（`backend/src/tetris_scores.rs`，每個帳號只留最高分）：
+
+  ```
+  GET  /api/games/tetris/scores  →  {"top":[{rank,username,score,lines,level,duration_ms,achieved_at}],"me":{…}|null}
+  POST /api/games/tetris/scores  {"score","lines","level","duration_ms"}  →  同上再加 "best"（有沒有刷新紀錄），要登入
+  ```
+
+  分數是前端算的，後端只擋明顯不可能的數字（消行太快、等級或分數超過上限），有心人還是改得了。
 - 背景音樂是 Korobeiniki（俄羅斯民謠），用 Web Audio 即時合成（`music.ts`），不需要音檔；速度跟著等級變快，按 M 或按鈕開關。
 
 ## 日曆
