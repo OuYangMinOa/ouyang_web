@@ -1,10 +1,14 @@
 pub mod admin;
 pub mod auth;
+pub mod calendar;
+pub mod games;
+pub mod music;
+pub mod weather;
 
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -17,7 +21,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -40,6 +44,12 @@ pub struct AppState {
     /// 有 HTTPS 之後要設成 true，session cookie 才只會經由 HTTPS 傳送
     pub cookie_secure: bool,
     pub login_limiter: Arc<auth::LoginLimiter>,
+    /// 小遊戲線上對戰中有人連線的房間（房間本身存在資料庫）
+    pub rooms: Arc<games::Rooms>,
+    /// 音樂資料夾（唯讀），見 music.rs
+    pub music_dir: PathBuf,
+    /// 天氣與環境：外部資料的快取，以及地震速報的即時連線
+    pub weather: Arc<weather::Weather>,
 }
 
 impl AppState {
@@ -51,6 +61,9 @@ impl AppState {
             draining: Arc::default(),
             cookie_secure: false,
             login_limiter: Arc::default(),
+            rooms: Arc::default(),
+            music_dir: PathBuf::from("data/music"),
+            weather: Arc::default(),
         }
     }
 }
@@ -67,9 +80,22 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/users", get(admin::list_users).post(admin::create_user))
         .route("/admin/users/{id}", patch(admin::update_user))
         .route("/admin/roles", get(admin::list_roles))
+        .route("/calendar/events", get(calendar::list_events).post(calendar::create_event))
+        .route("/calendar/events/{id}", put(calendar::update_event).delete(calendar::delete_event))
+        .route("/games/rooms", post(games::create_room))
+        .route("/games/rooms/{code}/ws", get(games::connect))
+        .route("/music", get(music::list_tracks))
+        .route("/music/files/{name}", get(music::track_file))
+        .route("/weather/forecast", get(weather::forecast::forecast))
+        .route("/weather/typhoons", get(weather::typhoon::typhoons))
+        .route("/weather/quakes", get(weather::quake::quakes))
+        .route("/weather/quakes/ws", get(weather::quake::connect))
         .fallback(api_not_found);
 
-    let spa = ServeDir::new(static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
+    // 打包時已經把較大的檔案另存一份 .gz（Dockerfile），瀏覽器支援 gzip 就直接送那份
+    let spa = ServeDir::new(static_dir)
+        .precompressed_gzip()
+        .fallback(ServeFile::new(static_dir.join("index.html")).precompressed_gzip());
 
     Router::new().nest("/api", api).fallback_service(spa).layer(TraceLayer::new_for_http()).with_state(state)
 }
@@ -158,6 +184,7 @@ pub enum AppError {
     NotFound,
     Conflict(String),
     TooManyRequests,
+    ServiceUnavailable(&'static str),
     Database(sqlx::Error),
     Internal(String),
 }
@@ -166,7 +193,7 @@ impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadRequest(message) | Self::Conflict(message) | Self::Internal(message) => f.write_str(message),
-            Self::Unauthorized(message) => f.write_str(message),
+            Self::Unauthorized(message) | Self::ServiceUnavailable(message) => f.write_str(message),
             Self::Forbidden => f.write_str("沒有權限"),
             Self::NotFound => f.write_str("not found"),
             Self::TooManyRequests => f.write_str("嘗試次數過多，請 15 分鐘後再試"),
@@ -192,6 +219,7 @@ impl IntoResponse for AppError {
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            Self::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Database(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let message = if status == StatusCode::INTERNAL_SERVER_ERROR {

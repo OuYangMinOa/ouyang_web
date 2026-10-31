@@ -1,0 +1,461 @@
+/* ---- 日曆 ---- */
+
+.calendar a {
+  color: var(--accent);
+}
+.calendar input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+.cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.cal-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.cal-title h1 {
+  margin: 0;
+}
+.cal-nav {
+  display: flex;
+  gap: 8px;
+}
+.cal-nav button.secondary {
+  min-width: 44px;
+  padding: 8px 12px;
+}
+
+.cal-filters {
+  align-items: center;
+  margin-bottom: 12px;
+}
+.cal-legend {
+  font-size: 14px;
+}
+.cal-legend-off,
+.cal-off-text {
+  color: var(--holiday);
+}
+
+.cal-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: start;
+}
+.cal-body .cal-panel {
+  margin-top: 0;
+}
+
+/* 月曆本體：每週一列，日期格占滿整列高度，事項橫條疊在上面 */
+.cal-month {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  text-align: center;
+}
+.cal-weekdays .off {
+  color: var(--holiday);
+}
+
+.cal-week {
+  --head: 48px;
+  --bar: 22px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: var(--head) repeat(var(--lanes), var(--bar)) calc(var(--bar) - 2px);
+}
+.cal-week + .cal-week {
+  border-top: 1px solid var(--border);
+}
+
+button.cal-day {
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1px;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 2px 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-h);
+}
+button.cal-day:not(:nth-child(7)) {
+  border-right: 1px solid var(--border);
+}
+button.cal-day:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+button.cal-day.selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+button.cal-day:focus-visible {
+  outline-offset: -2px;
+}
+.cal-day.outside > * {
+  opacity: 0.4;
+}
+
+.cal-num {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+.cal-day.off .cal-num {
+  color: var(--holiday);
+}
+.cal-day.today .cal-num {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.cal-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text);
+}
+.cal-label.holiday {
+  color: var(--holiday);
+  font-weight: 600;
+}
+.cal-label.term {
+  color: var(--term);
+}
+.cal-label.festival {
+  color: var(--festival);
+}
+.cal-label.lunar-month,
+.cal-label.workday {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+/* 事項橫條：多天的事項連成一條，跨週的那一端不加圓角 */
+button.cal-bar {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: calc(var(--bar) - 2px);
+  margin: 1px 3px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-left: 3px solid var(--ev);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ev) 22%, var(--surface));
+  color: var(--text-h);
+  font-size: 12px;
+  line-height: calc(var(--bar) - 2px);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.cal-bar:hover {
+  background: color-mix(in srgb, var(--ev) 34%, var(--surface));
+}
+button.cal-bar.from-before {
+  margin-left: 0;
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+button.cal-bar.to-after {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+button.cal-more {
+  position: relative;
+  justify-self: center;
+  min-height: 0;
+  padding: 0 6px;
+  background: none;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* ---- 選取那天的詳細 ---- */
+
+.card.cal-panel > h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.card.cal-panel > h3 {
+  margin: 16px 0 8px;
+}
+.cal-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.cal-mark {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-h);
+  font-size: 13px;
+}
+.cal-mark-kind {
+  margin-right: 6px;
+  font-weight: 600;
+}
+.cal-mark.holiday .cal-mark-kind {
+  color: var(--holiday);
+}
+.cal-mark.term .cal-mark-kind {
+  color: var(--term);
+}
+.cal-mark.festival .cal-mark-kind {
+  color: var(--festival);
+}
+.cal-items {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.cal-items li + li {
+  margin-top: 8px;
+}
+button.cal-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 12px;
+  border-left: 4px solid var(--ev);
+  background: color-mix(in srgb, var(--ev) 12%, var(--surface));
+  color: var(--text-h);
+  text-align: left;
+}
+.cal-note {
+  font-size: 14px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 新增／編輯事項 ---- */
+
+.cal-dialog {
+  width: min(520px, 100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.cal-dialog::backdrop {
+  background: var(--scrim);
+}
+.cal-dialog h2 {
+  margin: 0;
+}
+.cal-dialog textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+.cal-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.cal-fieldset legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-size: 14px;
+}
+.cal-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+button.cal-swatch {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--ev);
+}
+button.cal-swatch[aria-pressed='true'] {
+  outline: 3px solid var(--text-h);
+  outline-offset: 2px;
+}
+.cal-interval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-h);
+}
+.cal-interval input[type='number'] {
+  flex: 0 1 96px;
+}
+.cal-weekday-picks {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+button.cal-weekday-pick {
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-h);
+}
+button.cal-weekday-pick[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.cal-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cal-dialog-danger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---- 節日一覽、我的事項 ---- */
+
+.cal-table {
+  margin-top: 8px;
+}
+/* 放假日、節日清單：一天一行，窄螢幕也放得下 */
+.cal-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+.cal-list li {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+.cal-list .name {
+  color: var(--text-h);
+}
+.cal-list .name.cal-off-text {
+  color: var(--holiday);
+  font-weight: 600;
+}
+.cal-list .lunar {
+  font-size: 13px;
+  color: var(--text);
+}
+.cal-terms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cal-terms li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.cal-terms strong {
+  color: var(--term);
+}
+.cal-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--ev);
+}
+.cal-empty {
+  margin-top: 16px;
+}
+
+@media (max-width: 1100px) {
+  .cal-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .cal-week {
+    --head: 42px;
+    --bar: 18px;
+  }
+  .cal-num {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+  .cal-label {
+    font-size: 10px;
+  }
+  button.cal-bar {
+    margin: 1px 1px;
+    padding: 0 3px;
+    border-left-width: 2px;
+    font-size: 10px;
+  }
+  /* 橫條和「+N」太小不好點，手機上點下去交給底下的日期格，事項在下方清單點開 */
+  button.cal-bar,
+  button.cal-more {
+    pointer-events: none;
+  }
+  .cal-dialog {
+    padding: 16px;
+  }
+  .cal-dialog-danger {
+    margin-left: 0;
+  }
+  table.responsive td.primary {
+    align-items: center;
+  }
+}

@@ -1,0 +1,295 @@
+/* ---- ASCII 藝術字 ---- */
+
+.aa {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.aa-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 0;
+  min-width: 0;
+}
+
+/* 下拉選單、多行輸入：全站沒有共用樣式，比照 input */
+.aa-select,
+.aa-textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-h);
+  font: inherit;
+  /* 小於 16px 時 iOS 會在聚焦時自動放大畫面 */
+  font-size: 16px;
+}
+.aa-select {
+  cursor: pointer;
+}
+.aa-textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+.aa-select:focus-visible,
+.aa-textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 字型：‹ 選單 › 🎲 ＋ 篩選 */
+.aa-font-row > .aa-font-field {
+  flex: 2 1 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 14px;
+}
+.aa-font-row > .aa-filter-field {
+  flex: 1 1 180px;
+}
+.aa-font-picker {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.aa-font-picker .aa-select {
+  flex: 1;
+}
+button.aa-icon {
+  flex-shrink: 0;
+  min-width: 40px;
+  padding: 0 8px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* 排列、寬度、註解：手機兩個一排 */
+.aa-opts > label {
+  flex: 1 1 140px;
+}
+
+.checks label.aa-check,
+label.aa-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.aa-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* ---- 預覽／總覽切換 ---- */
+
+.aa-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.aa-tabs button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+}
+.aa-tabs button:hover {
+  color: var(--text-h);
+}
+.aa-tabs button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.aa-hint {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--text-h);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 結果 ---- */
+
+.aa-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.aa-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.aa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aa-size {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+}
+label.aa-range {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  white-space: nowrap;
+}
+.aa-range input[type='range'] {
+  flex: none;
+  width: 120px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.aa-num {
+  display: inline-block;
+  min-width: 4.5em;
+  font: 13px var(--mono);
+  color: var(--text);
+}
+
+/* 藝術字本身：只在自己的框裡捲動，整頁不會橫向捲 */
+.aa-art {
+  margin: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-h);
+  font-family: var(--mono);
+  line-height: 1.2;
+  white-space: pre;
+  tab-size: 8;
+  /* JetBrains Mono 的連字會把 -> == 之類的組合畫成一個符號，藝術字會走樣 */
+  font-variant-ligatures: none;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
+}
+.aa-output {
+  min-height: 120px;
+  max-height: 75vh;
+  transition: opacity 0.15s;
+}
+.aa-output.busy {
+  opacity: 0.5;
+}
+.aa-dim {
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  white-space: normal;
+}
+
+/* ---- 字型總覽 ---- */
+
+.aa-gallery {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+@container (min-width: 760px) {
+  .aa-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.aa-gallery-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.aa-gallery-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+.aa-gallery-item.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.aa-gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.aa-gallery-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-h);
+}
+.aa-gallery-head button {
+  flex-shrink: 0;
+  padding: 4px 14px;
+}
+.aa-gallery-item.current .aa-gallery-head button {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.aa-gallery-art {
+  min-height: 48px;
+  max-height: 320px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+button.aa-more {
+  align-self: center;
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .aa-gallery-art {
+    font-size: 8px;
+  }
+}

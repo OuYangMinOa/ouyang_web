@@ -2,10 +2,15 @@ mod common;
 
 use std::sync::atomic::Ordering;
 
-use axum::http::StatusCode;
-use backend::healthcheck;
+use axum::{
+    body::Body,
+    http::{Request, StatusCode, header},
+};
+use backend::{AppState, healthcheck, router};
 use common::app;
+use http_body_util::BodyExt;
 use serde_json::json;
+use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_reports_ok() {
@@ -71,4 +76,33 @@ async fn unknown_api_route_is_json_404() {
     let reply = app.get("/api/nope", None).await;
     assert_eq!(reply.status, StatusCode::NOT_FOUND);
     assert_eq!(reply.body["error"], "not found");
+}
+
+#[tokio::test]
+async fn static_files_use_precompressed_gzip() {
+    let dir = std::env::temp_dir().join(format!("ouyang-static-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(dir.join("index.html"), "<html>").unwrap();
+    std::fs::write(dir.join("assets/app.js"), "plain").unwrap();
+    std::fs::write(dir.join("assets/app.js.gz"), "gzipped").unwrap();
+
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let app = router(AppState::new(pool, "test", "test-sha"), &dir);
+    let fetch = |gzip: bool| {
+        let mut request = Request::builder().uri("/assets/app.js");
+        if gzip {
+            request = request.header(header::ACCEPT_ENCODING, "gzip");
+        }
+        let app = app.clone();
+        async move {
+            let response = app.oneshot(request.body(Body::empty()).unwrap()).await.unwrap();
+            let encoding = response.headers().get(header::CONTENT_ENCODING).map(|v| v.to_str().unwrap().to_owned());
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            (encoding, String::from_utf8(body.to_vec()).unwrap())
+        }
+    };
+
+    assert_eq!(fetch(true).await, (Some("gzip".into()), "gzipped".into()));
+    assert_eq!(fetch(false).await, (None, "plain".into()));
+    std::fs::remove_dir_all(&dir).unwrap();
 }

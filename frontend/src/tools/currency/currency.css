@@ -1,0 +1,391 @@
+/* ---- 匯率計算機 ---- */
+
+.fx {
+  display: flex;
+  flex-direction: column;
+  max-width: 720px;
+}
+.fx > .card:first-child {
+  margin-top: 0;
+}
+
+.fx select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-h);
+  font: inherit;
+  /* 小於 16px 時 iOS 會在聚焦時自動放大畫面 */
+  font-size: 16px;
+  text-overflow: ellipsis;
+}
+.fx select:disabled {
+  opacity: 0.5;
+}
+.fx option,
+.fx optgroup {
+  background: var(--surface);
+  color: var(--text-h);
+}
+.fx select:focus-visible,
+.fx-plot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 只給螢幕閱讀器看的文字 */
+.fx-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 金額與基準貨幣 */
+.fx-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.fx-amount {
+  flex: 1 1 180px;
+}
+.fx-amount input {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.fx-from {
+  flex: 1 1 220px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.fx-from label {
+  flex: 1;
+  min-width: 0;
+}
+button.fx-swap {
+  flex-shrink: 0;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 20px;
+}
+.fx-hint {
+  margin: 6px 0 0;
+  min-height: 1.6em;
+  font-size: 14px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.fx-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0 8px;
+}
+.fx-status p {
+  margin: 0;
+}
+.fx-warn {
+  color: var(--warn);
+  font-size: 14px;
+}
+
+/* 換算結果 */
+.fx-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fx-item {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+button.fx-row {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(64px, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+button.fx-row:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+/* 走勢圖正在看的那一個 */
+button.fx-row.charted {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.fx-flag {
+  font-size: 24px;
+  line-height: 1;
+  min-width: 1px;
+}
+.fx-cur {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fx-cur strong {
+  color: var(--text-h);
+  font-family: var(--mono);
+  font-size: 15px;
+}
+.fx-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-val {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  text-align: right;
+}
+.fx-val strong {
+  color: var(--text-h);
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fx-rate {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+button.fx-remove {
+  flex-shrink: 0;
+  width: 40px;
+  padding: 0;
+  color: var(--text);
+}
+button.fx-remove:hover {
+  color: var(--danger);
+}
+.fx-empty {
+  margin: 8px 0;
+}
+
+.fx-add {
+  margin-top: 8px;
+}
+.fx-add select {
+  color: var(--text);
+  border-style: dashed;
+}
+
+.fx-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.fx-date label {
+  flex: 1 1 180px;
+}
+
+/* 走勢 */
+.fx-trend-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.fx-trend-head h2 {
+  margin: 0;
+}
+.fx-pair {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+.fx-pair select {
+  width: auto;
+  max-width: 220px;
+  font-family: var(--sans);
+}
+
+.fx-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.fx-seg button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.fx-seg button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.fx-chart-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 120px;
+}
+
+.fx-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0 0 8px;
+  min-height: 1.6em;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.fx-readout strong {
+  color: var(--text-h);
+}
+.fx-readout-date {
+  font-family: var(--mono);
+  font-size: 13px;
+  align-self: center;
+}
+
+.fx-plot {
+  position: relative;
+  height: 200px;
+  border-radius: 6px;
+  /* 讓手機上下滑動還是捲頁面，左右才是看讀數 */
+  touch-action: pan-y;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.fx-plot svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.fx-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.fx-area {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.fx-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.fx-extreme,
+.fx-cross,
+.fx-dot {
+  position: absolute;
+  pointer-events: none;
+}
+.fx-extreme {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fx-extreme.top {
+  transform: translateY(-100%);
+}
+.fx-extreme.left {
+  left: 0;
+}
+.fx-extreme.right {
+  right: 0;
+}
+.fx-cross {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text) 60%, transparent);
+  transform: translateX(-0.5px);
+}
+.fx-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  transform: translate(-50%, -50%);
+}
+.fx-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  font: 12px var(--mono);
+  color: var(--text);
+}
+
+.fx-note {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.fx-source {
+  margin-top: 16px;
+  font-size: 13px;
+}
+.fx-source a {
+  color: var(--accent);
+}
+
+@media (max-width: 480px) {
+  .fx-panel,
+  .fx-trend {
+    padding: 14px;
+  }
+  button.fx-row {
+    gap: 8px;
+    padding: 10px;
+  }
+  .fx-val strong {
+    font-size: 17px;
+  }
+}

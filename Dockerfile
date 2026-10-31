@@ -6,7 +6,10 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+# 大於 1 KB 的文字檔與 wasm 另存一份 .gz，後端直接送壓縮版（去背用的 onnxruntime wasm 從 27 MB 降到約 7 MB）
+RUN npm run build \
+ && find dist -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.css' -o -name '*.html' -o -name '*.svg' -o -name '*.json' -o -name '*.wasm' -o -name '*.flf' \) \
+      -size +1k -exec gzip -k -9 {} +
 
 # ---- 後端：cargo-chef 把相依套件獨立成一層，Cargo.lock 沒變就不會重編 ----
 FROM rust:1-bookworm AS chef

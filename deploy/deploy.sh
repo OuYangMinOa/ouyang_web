@@ -6,14 +6,18 @@ set -euo pipefail
 ROLLOUT_VERSION=v0.14
 ROLLOUT_SHA256=cdeaba6ae9eee3b0b606286e585bbda6787283d801a6ad6d9b9d2bc347fda05b
 NETWORK=ouyang-web
+# 除了這次部署的 image，本機再留幾個舊版，回滾時不用重新登入 GHCR 拉
+KEEP_PREVIOUS_IMAGES=2
 
 env_name=$1
 image=$2
 cd "$(dirname "$0")"
 
 # compose 和 docker rollout 都會自動讀同目錄的 .env；之後在伺服器上手動操作也只要 cd 進來就好
+# secrets.env 是手動放在伺服器上的金鑰（例如 CWA_API_KEY=...），不會被部署覆蓋，也不進 git
 {
   cat "$env_name.env"
+  if [ -f secrets.env ]; then cat secrets.env; fi
   echo "COMPOSE_PROJECT_NAME=ouyang-web-$env_name"
   echo "IMAGE=$image"
 } > .env
@@ -44,6 +48,13 @@ port=$(grep '^PUBLIC_PORT=' "$env_name.env" | cut -d= -f2)
 for _ in $(seq 1 15); do
   if curl -fsS "http://127.0.0.1:$port/api/health"; then
     echo
+    # tag 都帶 commit，舊版不是 dangling，image prune 清不到，要自己刪；
+    # 只動這個環境的 tag（staging / prod 在同一台），image ls 由新到舊排
+    repo=${image%:*}
+    docker image ls --filter "reference=$repo:$env_name-*" --format '{{.Repository}}:{{.Tag}}' \
+      | grep -vxF -e "$image" -e "$repo:$env_name-latest" \
+      | tail -n +$((KEEP_PREVIOUS_IMAGES + 1)) \
+      | xargs -r docker image rm >/dev/null || true
     docker image prune -f >/dev/null
     exit 0
   fi

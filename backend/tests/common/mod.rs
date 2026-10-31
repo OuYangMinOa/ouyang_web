@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use axum::{
     Router,
@@ -10,7 +10,7 @@ use axum::{
 use backend::{AppState, router};
 use http_body_util::BodyExt;
 use serde_json::Value;
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use tower::ServiceExt;
 
 pub struct TestApp {
@@ -29,7 +29,19 @@ pub async fn app() -> TestApp {
     // 記憶體資料庫每條連線都是獨立的一份，所以只開一條
     let pool = SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
+    app_on(pool)
+}
+
+/// 共用同一個資料庫的另一個 app，用來模擬重啟後或換版時的另一個容器
+pub fn app_on(pool: SqlitePool) -> TestApp {
     let state = AppState::new(pool, "test", "test-sha");
+    TestApp { router: router(state.clone(), Path::new("does-not-exist")), state }
+}
+
+/// 音樂資料夾指到 `music_dir` 的 app
+pub async fn app_with_music(music_dir: PathBuf) -> TestApp {
+    let mut state = app().await.state;
+    state.music_dir = music_dir;
     TestApp { router: router(state.clone(), Path::new("does-not-exist")), state }
 }
 

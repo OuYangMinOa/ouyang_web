@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { api, errorMessage, PERMISSIONS } from '../api'
+import { appPath, visibleApps } from '../apps/registry'
 import { useAuth } from '../auth'
 import SunStage from '../components/SunStage'
 import TiltCard from '../components/TiltCard'
+import TyphoonHome from '../weather/TyphoonHome'
 import './Home.css'
 
 type Message = { id: number; content: string; created_at: string }
@@ -76,7 +78,7 @@ function Hero() {
             歐陽
           </span>
           <p className="hero-lead">
-            這裡是歐陽的個人平台。Discord 機器人、順手寫的小工具，還有接下來陸續上線的 APP，都住在這裡。
+            歡迎來到歐陽天地。Discord 機器人、順手寫的小工具，還有接下來陸續上線的 APP，都住在這裡。
           </p>
           <div className="hero-actions">
             <a className="btn primary" href="#works">
@@ -96,10 +98,61 @@ function Hero() {
           </div>
           <p className="hero-hint">
             <span className="pulse" aria-hidden="true" />
-            拖曳撥動粒子，點一下讓太陽凝聚成「陽」
+            拖曳撥動粒子，點一下讓太陽凝聚成「歐陽明崴」
           </p>
         </div>
         <SunStage />
+      </div>
+    </section>
+  )
+}
+
+const SKILLS = ['Claude Code', '知識庫', 'Harness 建置']
+const EXPERIENCE = [
+  { title: '推薦系統', body: '從資料到上線的推薦流程' },
+  { title: '棋牌類強化學習', body: '讓 AI 自己對打、自己變強' },
+  { title: '公司 AI 管理方案', body: '把 AI 工具導入團隊並管得住' },
+]
+
+function About() {
+  return (
+    <section id="about" className="home-section">
+      <div className="home-wrap">
+        <Reveal className="section-head">
+          <p className="kicker">
+            <span>02</span> ABOUT
+          </p>
+          <h2>關於我</h2>
+        </Reveal>
+        <div className="about">
+          <Reveal className="about-intro">
+            <p className="about-name">
+              歐陽明崴
+              <span>Software Engineer</span>
+            </p>
+            <p>
+              中央大學物理研究所畢業，現在是軟體工程師。從物理走進程式，喜歡把複雜的問題拆開，再組成真的能用的東西。
+            </p>
+            <ul className="about-skills" aria-label="擅長">
+              {SKILLS.map((skill) => (
+                <li key={skill} className="tag">
+                  {skill}
+                </li>
+              ))}
+            </ul>
+          </Reveal>
+          <Reveal>
+            <p className="about-label">做過</p>
+            <ol className="about-list">
+              {EXPERIENCE.map((item) => (
+                <li key={item.title}>
+                  <strong>{item.title}</strong>
+                  <span>{item.body}</span>
+                </li>
+              ))}
+            </ol>
+          </Reveal>
+        </div>
       </div>
     </section>
   )
@@ -117,7 +170,6 @@ type Work = {
 
 function Works() {
   const { can } = useAuth()
-  const isAdmin = can(PERMISSIONS.adminUsers)
   const works: Work[] = [
     {
       glyph: '俠',
@@ -133,20 +185,15 @@ function Works() {
       tag: '就在下面',
       link: { to: '#guestbook', label: '去留言' },
     },
-    {
-      glyph: '管',
-      title: '系統管理',
-      body: '帳號、角色與權限。之後每個 APP 的權限都從這裡發。',
-      tag: isAdmin ? '已授權' : '需要權限',
-      link: isAdmin ? { to: '/admin', label: '進入' } : { to: '/login', label: '登入' },
-    },
-    {
-      glyph: '？',
-      title: '下一個 APP',
-      body: '還在腦袋裡轉。做好了會出現在這裡。',
-      tag: '製作中',
-      soon: true,
-    },
+    // APP 卡片來自 apps/registry.ts，沒權限的不會出現
+    ...visibleApps(can).map((app) => ({
+      glyph: app.glyph,
+      title: app.name,
+      body: app.blurb,
+      tag: app.tag,
+      live: app.live,
+      link: { to: appPath(app), label: '進入' },
+    })),
   ]
 
   return (
@@ -154,7 +201,7 @@ function Works() {
       <div className="home-wrap">
         <Reveal className="section-head">
           <p className="kicker">
-            <span>02</span> WORKS
+            <span>03</span> WORKS
           </p>
           <h2>作品與工具</h2>
         </Reveal>
@@ -226,7 +273,7 @@ function Guestbook() {
       <div className="home-wrap">
         <Reveal className="section-head">
           <p className="kicker">
-            <span>03</span> GUESTBOOK
+            <span>04</span> GUESTBOOK
           </p>
           <h2>留言牆</h2>
         </Reveal>
@@ -275,7 +322,7 @@ function StatusBar() {
     <footer className="home-section status">
       <div className="home-wrap status-row">
         <p className="kicker">
-          <span>04</span> STATUS
+          <span>05</span> STATUS
         </p>
         <p className="status-line">
           <span className={`dot ${ok ? 'ok' : 'bad'}`} aria-hidden="true" />
@@ -298,6 +345,9 @@ export default function Home() {
   return (
     <div className="home">
       <Hero />
+      {/* 西北太平洋有颱風時才會出現 */}
+      <TyphoonHome />
+      <About />
       <Works />
       <Guestbook />
       <StatusBar />

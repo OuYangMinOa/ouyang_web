@@ -1,0 +1,337 @@
+/* ---- 編碼與雜湊 ---- */
+
+.enc {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* 分頁：桌機一排四個，手機兩排 */
+.enc-tabs .enc-seg-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.enc-seg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.enc-seg-label {
+  font-size: 14px;
+}
+.enc-seg-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.enc-seg-buttons button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.enc-seg-buttons button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 並排的控制項，放不下就換行 */
+.enc-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+.enc-controls > * {
+  flex: 1 1 200px;
+}
+.enc-controls > .enc-grow {
+  flex-grow: 3;
+}
+
+.enc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 14px;
+}
+.enc-field-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.enc-select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  /* 小於 16px 時 iOS 會在聚焦時自動放大畫面 */
+  font-size: 16px;
+}
+.enc-select option,
+.enc-select optgroup {
+  background: var(--surface);
+  color: var(--text-h);
+}
+
+.enc-textarea {
+  width: 100%;
+  min-height: 7.5em;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-h);
+  font: 16px/1.5 var(--mono);
+  resize: vertical;
+  overflow-wrap: anywhere;
+}
+.enc-textarea[readonly] {
+  background: var(--surface);
+}
+.enc-textarea.bad {
+  border-color: var(--danger);
+}
+.enc-textarea::placeholder {
+  color: var(--text);
+  opacity: 0.7;
+}
+.enc-select:focus-visible,
+.enc-textarea:focus-visible,
+.enc-check input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 選項：勾選框與小下拉，自動換行 */
+.enc-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 20px;
+}
+.enc-check,
+.enc-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-h);
+  font-size: 15px;
+}
+.enc-check {
+  cursor: pointer;
+}
+.enc-check input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.enc-inline {
+  flex-wrap: wrap;
+}
+
+.enc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button.enc-copy {
+  flex-shrink: 0;
+  min-width: 5.5em;
+  padding: 6px 12px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.enc-msg {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.enc-warn {
+  color: var(--warn);
+}
+.enc-note {
+  overflow-wrap: anywhere;
+}
+
+/* 全部格式：卡片，手機單欄 */
+.enc-more summary {
+  padding: 8px 0;
+  color: var(--text-h);
+  cursor: pointer;
+}
+.enc-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+.enc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 10px 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.enc-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.enc-value {
+  max-height: 9em;
+  overflow-y: auto;
+  font: 14px/1.5 var(--mono);
+  color: var(--text-h);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 一列一個結果：名稱｜值｜複製；手機上值換到下一行 */
+.enc-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.enc-row {
+  display: grid;
+  grid-template-columns: 10em minmax(0, 1fr) auto;
+  grid-template-areas: 'name value copy';
+  align-items: center;
+  gap: 4px 12px;
+  padding: 6px 8px 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.enc-row-name {
+  grid-area: name;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.enc-row-name .enc-select {
+  width: 100%;
+  font-weight: 400;
+}
+.enc-row-value {
+  grid-area: value;
+  min-width: 0;
+  font: 14px/1.5 var(--mono);
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.enc-row .enc-copy {
+  grid-area: copy;
+}
+.enc-row.current {
+  border-color: var(--accent);
+}
+.enc-row.match {
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, var(--surface));
+}
+.enc-hit {
+  color: var(--ok);
+  white-space: nowrap;
+}
+
+/* 要蓋過全域 input 的 flex: 1，金鑰欄太窄時自己換一行 */
+.enc-options .enc-key {
+  flex: 1 1 200px;
+}
+
+/* 檔案拖放區 */
+.enc-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 16px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.enc-drop.over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.enc-file {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.enc-file-name {
+  max-width: 100%;
+  color: var(--text-h);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.enc-progress {
+  width: min(100%, 360px);
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.enc-progress > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s;
+}
+
+@media (max-width: 640px) {
+  .enc-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name copy'
+      'value value';
+    padding: 8px 8px 10px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .enc-tabs .enc-seg-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

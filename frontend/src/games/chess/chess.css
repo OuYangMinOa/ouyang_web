@@ -1,0 +1,275 @@
+/* ---- 西洋棋 ---- */
+
+.chess-board {
+  /* 用主題的木色調出淺／深格，亮暗主題自動跟著換 */
+  --sq-light: color-mix(in srgb, var(--board) 35%, var(--stone-white));
+  --sq-dark: color-mix(in srgb, var(--board) 72%, var(--board-line));
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px var(--board-line);
+  container-type: inline-size;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chess-sq {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: var(--sq-light);
+}
+.chess-sq.dark {
+  background: var(--sq-dark);
+}
+.chess-board.locked .chess-sq {
+  cursor: default;
+}
+.chess-sq:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+  z-index: 2;
+}
+
+/* 底色標記：上一步、選取、被將軍 */
+.chess-sq::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.chess-sq.last::before {
+  background: color-mix(in srgb, var(--warn) 32%, transparent);
+}
+.chess-sq.selected::before {
+  background: var(--highlight);
+}
+.chess-sq.check::before {
+  background: radial-gradient(
+    circle,
+    var(--danger) 0%,
+    color-mix(in srgb, var(--danger) 55%, transparent) 40%,
+    transparent 72%
+  );
+}
+
+/* 合法落點：空格畫圓點，吃子畫外圈 */
+.chess-sq.move::after,
+.chess-sq.capture::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  z-index: 1;
+}
+.chess-sq.move::after {
+  inset: 36%;
+  background: var(--hint);
+}
+.chess-sq.capture::after {
+  inset: 4%;
+  border: max(3px, 0.9cqw) solid var(--hint);
+}
+
+.chess-coord {
+  position: absolute;
+  font-size: clamp(9px, 2.3cqw, 13px);
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  color: var(--sq-dark);
+}
+.chess-sq.dark .chess-coord {
+  color: var(--sq-light);
+}
+.chess-coord.rank {
+  top: 3px;
+  left: 3px;
+}
+.chess-coord.file {
+  right: 3px;
+  bottom: 3px;
+}
+
+/* ---- 棋子 ---- */
+
+.chess-piece {
+  display: block;
+  stroke-width: 3.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chess-piece.white {
+  fill: var(--stone-white);
+  stroke: var(--stone-black);
+}
+.chess-piece.black {
+  fill: var(--stone-black);
+  stroke: var(--stone-edge);
+}
+.chess-piece.white .chess-detail {
+  stroke: var(--stone-black);
+  fill: var(--stone-black);
+}
+.chess-piece.black .chess-detail {
+  stroke: var(--stone-white);
+  fill: var(--stone-white);
+}
+.chess-sq .chess-piece {
+  position: relative;
+  width: 88%;
+  height: 88%;
+  margin: 6%;
+  z-index: 1;
+  pointer-events: none;
+}
+.chess-sq.arrived .chess-piece {
+  animation: chess-arrive 0.18s ease-out;
+}
+@keyframes chess-arrive {
+  from {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chess-sq.arrived .chess-piece {
+    animation: none;
+  }
+}
+
+/* ---- 升變選擇與結算 ---- */
+
+.chess-promo {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.chess-promo button {
+  width: 64px;
+  height: 64px;
+  padding: 6px;
+  background: var(--surface);
+}
+.chess-promo .chess-piece {
+  width: 100%;
+  height: 100%;
+}
+.chess-result {
+  font-size: 24px;
+}
+
+/* ---- 側欄：棋譜與吃子 ---- */
+
+.chess-record {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.chess-record > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  cursor: pointer;
+  list-style: none;
+}
+.chess-record > summary::-webkit-details-marker {
+  display: none;
+}
+.chess-record > summary::after {
+  content: '▾';
+  margin-left: auto;
+  transition: transform 0.15s;
+}
+.chess-record:not([open]) > summary::after {
+  transform: rotate(-90deg);
+}
+
+.chess-captures {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 14px 10px;
+}
+.chess-captures-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+.chess-captures-label {
+  flex: none;
+  font-size: 13px;
+}
+.chess-captures-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.chess-captures-pieces .chess-piece {
+  width: 22px;
+  height: 22px;
+  margin-right: -4px;
+}
+.chess-lead {
+  margin-left: auto;
+  font: 600 13px var(--mono);
+  color: var(--text-h);
+}
+
+.chess-moves {
+  margin: 0;
+  padding: 8px 6px 10px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  font: 14px/1.4 var(--mono);
+}
+.chess-moves li {
+  display: grid;
+  grid-template-columns: 3em 1fr 1fr;
+  align-items: center;
+}
+.chess-move-no {
+  padding-left: 6px;
+  color: var(--text);
+}
+.chess-move {
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-h);
+}
+.chess-move.current {
+  background: var(--highlight);
+}
+.chess-moves-empty {
+  margin: 0;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* 跟 .game-layout 改成單欄的時機一致 */
+@container (max-width: 680px) {
+  .chess-moves {
+    max-height: 200px;
+  }
+}
