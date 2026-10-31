@@ -337,7 +337,7 @@ fn ago(ttl: Duration) -> String {
     format!("-{} seconds", ttl.as_secs())
 }
 
-fn random_code() -> Result<String, AppError> {
+pub(crate) fn random_code() -> Result<String, AppError> {
     let mut bytes = [0u8; CODE_LEN];
     getrandom::fill(&mut bytes).map_err(|err| AppError::Internal(format!("getrandom: {err}")))?;
     Ok(bytes.iter().map(|b| char::from(CODE_CHARS[usize::from(b % 32)])).collect())
