@@ -75,3 +75,21 @@ export type AccessRequest = {
   user_agent: string
   created_at: string
 }
+
+/** 自行註冊的申請，見後端 registration.rs */
+export type Registration = {
+  id: number
+  username: string
+  note: string
+  ip: string
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  reviewed_at: string | null
+  reviewer: string | null
+}
+
+export type RegistrationReport = {
+  open: boolean
+  pending: Registration[]
+  reviewed: Registration[]
+}
