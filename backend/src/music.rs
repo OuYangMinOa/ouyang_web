@@ -8,6 +8,7 @@ use axum::{
     Json,
     body::Body,
     extract::{self, State},
+    http::{HeaderValue, header},
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
@@ -47,6 +48,52 @@ pub async fn track_file(
     }
     let Ok(response) = ServeFile::new(state.music_dir.join(&name)).oneshot(request).await;
     response.map(Body::new)
+}
+
+/// 分享用的網址：檔名（不含副檔名）的 UTF-8 寫成十六進位，例如 `三蛋一體.mp3` → `E4B889E89B8BE4B880E9AB94.mp3`。
+/// Telegram 遇到路徑裡有中文的網址不產生預覽，全英數字的才會顯示播放條。
+pub async fn shared_file(
+    state: State<AppState>,
+    extract::Path(alias): extract::Path<String>,
+    request: extract::Request,
+) -> Response {
+    let Some(name) = decode_alias(&alias) else {
+        return AppError::NotFound.into_response();
+    };
+    let disposition = format!("inline; filename*=UTF-8''{}", percent_encode(&name));
+    let mut response = track_file(state, extract::Path(name), request).await;
+    // 讓下載和聊天軟體顯示原本的檔名，而不是一串十六進位
+    if response.status().is_success()
+        && let Ok(value) = HeaderValue::from_str(&disposition)
+    {
+        response.headers_mut().insert(header::CONTENT_DISPOSITION, value);
+    }
+    response
+}
+
+fn decode_alias(alias: &str) -> Option<String> {
+    let (stem, ext) = alias.rsplit_once('.')?;
+    if stem.is_empty() || stem.len() % 2 != 0 || !stem.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let bytes = (0..stem.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&stem[i..i + 2], 16).ok())
+        .collect::<Option<Vec<u8>>>()?;
+    Some(format!("{}.{ext}", String::from_utf8(bytes).ok()?))
+}
+
+/// RFC 5987 的 `filename*`：英數字和 `-._~` 以外的位元組都寫成 %XX
+fn percent_encode(text: &str) -> String {
+    text.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                char::from(b).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }
 
 fn read_tracks(dir: &Path) -> Vec<Track> {
