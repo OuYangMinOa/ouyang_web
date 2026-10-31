@@ -2,12 +2,13 @@ pub mod access_log;
 pub mod admin;
 pub mod auth;
 pub mod calendar;
+pub mod game_settings;
 pub mod games;
 pub mod music;
+pub mod puyo_scores;
 pub mod registration;
 pub mod tetris;
 pub mod tetris_scores;
-pub mod tetris_settings;
 pub mod visits;
 pub mod weather;
 
@@ -57,6 +58,8 @@ pub struct AppState {
     pub tetris: Arc<tetris::Arenas>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
     pub tetris_runs: Arc<tetris_scores::Runs>,
+    /// 魔法氣泡單人模式進行中的局
+    pub puyo_runs: Arc<puyo_scores::Runs>,
     /// 音樂資料夾（唯讀），見 music.rs
     pub music_dir: PathBuf,
     /// 天氣與環境：外部資料的快取，以及地震速報的即時連線
@@ -78,6 +81,7 @@ impl AppState {
             rooms: Arc::default(),
             tetris: Arc::default(),
             tetris_runs: Arc::default(),
+            puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
             weather: Arc::default(),
             visit_limiter: Arc::default(),
@@ -118,7 +122,12 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/tetris/runs", post(tetris_scores::start_run))
         .route("/games/tetris/runs/{id}/checkpoints", post(tetris_scores::checkpoint))
         .route("/games/tetris/runs/{id}/finish", post(tetris_scores::finish_run))
-        .route("/games/tetris/settings", get(tetris_settings::get_settings).put(tetris_settings::put_settings))
+        .route("/games/tetris/settings", get(game_settings::get_tetris).put(game_settings::put_tetris))
+        .route("/games/puyo/scores", get(puyo_scores::list_scores))
+        .route("/games/puyo/runs", post(puyo_scores::start_run))
+        .route("/games/puyo/runs/{id}/checkpoints", post(puyo_scores::checkpoint))
+        .route("/games/puyo/runs/{id}/finish", post(puyo_scores::finish_run))
+        .route("/games/puyo/settings", get(game_settings::get_puyo).put(game_settings::put_puyo))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))

@@ -207,3 +207,162 @@
     width: 100%;
   }
 }
+
+/* ---- 即時方塊遊戲共用：說明、盤面上閃過的字、排行榜、自訂快捷鍵 ---- */
+
+.game-help ul {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.game-help li {
+  margin: 2px 0;
+}
+.game-help strong {
+  color: var(--text-h);
+}
+
+.game-flash {
+  position: absolute;
+  top: 18%;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 3;
+}
+.game-flash-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+  text-align: center;
+  animation: game-flash 1.2s ease-out forwards;
+}
+.game-flash-text strong {
+  font: 700 15px var(--mono);
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+.game-flash-sent {
+  font-size: 13px;
+  color: var(--text-h);
+}
+@keyframes game-flash {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.95);
+  }
+  15% {
+    opacity: 1;
+    transform: none;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-flash-text {
+    animation: none;
+  }
+}
+
+/* 單人排行榜（俄羅斯方塊、魔法氣泡共用）：名次、名字、分數一行，行數和等級在下面一行（窄螢幕也不會擠） */
+.game-scores a {
+  color: var(--accent);
+}
+.game-ranks {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.game-rank {
+  display: grid;
+  grid-template-columns: 2em minmax(0, 1fr) auto;
+  column-gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.game-rank-no {
+  grid-row: span 2;
+  align-self: center;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.game-rank-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-h);
+}
+.game-rank-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.game-rank-meta {
+  grid-column: 2 / span 2;
+  font-size: 12px;
+}
+.game-rank.mine {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.game-rank.mine .game-rank-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+.game-rank-gap {
+  text-align: center;
+  line-height: 1;
+}
+
+/* 自訂快捷鍵 */
+.game-help .game-keys {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.game-help .game-keys li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 5.5em));
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.game-key {
+  min-height: 40px;
+  padding: 4px 6px;
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-key.capturing {
+  animation: game-key-blink 1s ease-in-out infinite;
+}
+@keyframes game-key-blink {
+  50% {
+    opacity: 0.6;
+  }
+}
+.game-keys-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}

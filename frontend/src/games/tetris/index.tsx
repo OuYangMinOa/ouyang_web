@@ -2,12 +2,14 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api'
 import { useAuth } from '../../auth'
+import { useFlash } from '../shared/flash'
+import { KeyEditor } from '../shared/KeyEditor'
+import { keyNames } from '../shared/keys'
 import { load, save } from '../shared/storage'
-import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
+import { GameLayout, MusicButton, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
 import type { MiniInfo } from './draw'
 import { badgeCount, describe, Tetris } from './engine'
-import { KeyEditor } from './KeyEditor'
-import { keyNames, useKeys, type Action, type KeySettings } from './keys'
+import { useKeys, type Action, type KeySettings } from './keys'
 import { CHECKPOINT_MS, formatScore, Leaderboard, RunReporter, useLeaderboard, type RunState } from './Leaderboard'
 import { MiniBoards } from './MiniBoards'
 import { useMusic } from './music'
@@ -48,34 +50,6 @@ function stars(points: number): string {
   return '★'.repeat(n) + '☆'.repeat(4 - n)
 }
 
-/** 盤面上方閃一下的字 */
-function useFlash(): [ReactNode, (text: string | null, sent: number) => void] {
-  const [flash, setFlash] = useState<{ id: number; text: string | null; sent: number } | null>(null)
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => () => clearTimeout(timer.current), [])
-  function show(text: string | null, sent: number) {
-    clearTimeout(timer.current)
-    setFlash({ id: Date.now(), text, sent })
-    timer.current = setTimeout(() => setFlash(null), 1200)
-  }
-  const node = flash && (
-    <span key={flash.id} className="tetris-flash-text">
-      {flash.text && <strong>{flash.text}</strong>}
-      {flash.sent > 0 && <span className="tetris-flash-sent">+{flash.sent} 行攻擊</span>}
-    </span>
-  )
-  return [node, show]
-}
-
-/** 背景音樂開關（也可以按快捷鍵，預設是 M） */
-function MusicButton({ music }: { music: ReturnType<typeof useMusic> }) {
-  return (
-    <button type="button" className="secondary" onClick={music.toggle} aria-pressed={music.enabled}>
-      {music.enabled ? '♪ 音樂：開' : '♪ 音樂：關'}
-    </button>
-  )
-}
-
 /** 從收到的毫秒數往下倒數；`stamp` 換了（收到新的狀態）就從現在重新起算 */
 function Countdown({ ms, stamp, children }: { ms: number; stamp: unknown; children: (left: number) => ReactNode }) {
   const [left, setLeft] = useState(ms)
@@ -101,7 +75,7 @@ function Help({ settings, onEdit }: { settings: KeySettings; onEdit?: () => void
   const k = (action: Action) => keyNames(settings.keys, action)
   return (
     <>
-      <div className="tetris-help">
+      <div className="game-help">
         <strong>操作</strong>
         {editing ? (
           <KeyEditor settings={settings} onDone={() => setEditing(false)} />
@@ -137,7 +111,7 @@ function Help({ settings, onEdit }: { settings: KeySettings; onEdit?: () => void
           </>
         )}
       </div>
-      <div className="tetris-help">
+      <div className="game-help">
         <strong>規則</strong>
         <ul>
           <li>一次消 2 / 3 / 4 行送出 1 / 2 / 4 行垃圾；連擊、連續高難度消行（B2B）和全消都有加成。</li>
@@ -312,13 +286,13 @@ function Practice({ onExit }: { onExit: () => void }) {
     if (!g) return
     for (const r of g.events.splice(0)) {
       const label = describe(r)
-      if (label) showFlash(label, 0)
+      if (label) showFlash(label)
     }
     // 每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限，一直快到撐不住為止
     const level = 1 + Math.max(Math.floor(g.lines / LINES_PER_LEVEL), Math.floor(g.clock / MS_PER_LEVEL))
     if (level > g.level) {
       g.level = level
-      showFlash(`LEVEL ${level}`, 0)
+      showFlash(`LEVEL ${level}`)
     }
     if (g.score !== hud.score || g.lines !== hud.lines || g.level !== hud.level)
       setHud({ score: g.score, lines: g.lines, level: g.level })
@@ -466,7 +440,7 @@ function Online() {
           ? `${name(victim)} 出局（第 ${place} 名）`
           : `${killer === you ? '你' : name(killer)} KO 了 ${victim === you ? '你' : name(victim)}`
       const mine = killer === you || victim === you
-      if (killer === you) showFlash('K.O.', 0)
+      if (killer === you) showFlash('K.O.')
       setFeed((prev) => [{ id: Date.now() + Math.random(), text, mine }, ...prev].slice(0, 6))
     },
   })
@@ -516,7 +490,7 @@ function Online() {
     for (const r of g.events.splice(0)) {
       if (r.sent > 0) send({ type: 'attack', lines: r.sent })
       const label = describe(r)
-      if (label || r.sent > 0) showFlash(label, r.sent)
+      if (label || r.sent > 0) showFlash(label, r.sent > 0 ? `+${r.sent} 行攻擊` : null)
       board.current.dirty = true
     }
     if (g.over && running && topoutSent.current !== roundNo) {
