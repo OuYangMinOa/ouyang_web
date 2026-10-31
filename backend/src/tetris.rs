@@ -48,6 +48,8 @@ const KO_CREDIT: Duration = Duration::from_secs(15);
 /// 送給電腦玩家的垃圾行要等這麼久才會升上來（用戶端自己管自己的）
 const BOT_GARBAGE_DELAY: Duration = Duration::from_secs(2);
 const MAX_ATTACK: u32 = 30;
+/// 每這麼多個電腦玩家有一個是強的
+const STRONG_BOTS_PER: usize = 7;
 const ROWS: usize = 20;
 const COLS: usize = 10;
 const MAX_NAME_CHARS: usize = 12;
@@ -327,10 +329,15 @@ impl Arena {
             return;
         }
         self.players.retain(|p| p.conn.is_some());
-        let room = MAX_PLAYERS - self.players.len();
-        for n in 1..=self.bots.min(room) {
+        let count = self.bots.min(MAX_PLAYERS - self.players.len());
+        // 大部分是弱的，前期就會陸續出局；強的只有幾個（至少一個），撐到後面
+        let mut strong = count.div_ceil(STRONG_BOTS_PER);
+        for n in 1..=count {
             let mut bot = self.new_player(None, format!("電腦 {n}"), now);
-            let skill = self.rng.range(0.6, 1.25);
+            // 隨機挑哪幾個是強的，不然強的永遠是前幾號
+            let is_strong = self.rng.below(count + 1 - n) < strong;
+            strong -= usize::from(is_strong);
+            let skill = if is_strong { self.rng.range(1.0, 1.3) } else { self.rng.range(0.3, 0.65) };
             bot.strategy = match self.rng.below(10) {
                 0..=6 => Strategy::Random,
                 7 => Strategy::Ko,
@@ -574,9 +581,10 @@ impl Arena {
         let pace = (1.0 - level * 0.035).max(0.45);
         bot.next_move = now + Duration::from_secs_f64(rng.range(0.7, 1.3) * pace / bot.skill);
 
-        // 放一塊大約是 0.4 行；等級越高越容易失誤留下洞
-        bot.fill += 0.4;
-        if rng.chance(0.012 * level / bot.skill) {
+        // 放一塊大約是 0.4 行，弱的堆得比較亂；等級越高越容易失誤留下洞、越來不及消行，
+        // 不然只剩電腦時誰也打不死誰，一局要拖十幾分鐘（調成大約四分鐘內分出勝負）
+        bot.fill += 0.4 + 0.5 * (1.0 - bot.skill).max(0.0) + 0.015 * (level - 1.0);
+        if rng.chance(0.015 * level / bot.skill) {
             bot.fill += 1.0;
         }
         while bot.fill >= 1.0 {
@@ -591,7 +599,7 @@ impl Arena {
 
         let height = bot.rows.len();
         let mut sent = 0;
-        let clear = (0.08 + height as f64 / ROWS as f64 * 0.9 * bot.skill).min(0.85);
+        let clear = (0.08 + height as f64 / ROWS as f64 * 0.9 * bot.skill).min(0.85 - 0.015 * (level - 1.0));
         if height > 0 && rng.chance(clear) {
             let roll = rng.range(0.0, 1.0);
             let lines = if height >= 4 && roll < 0.12 * bot.skill {
