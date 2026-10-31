@@ -43,7 +43,7 @@ alice                  admin（系統管理員）         admin.users
 - 停用帳號、重設密碼會讓該帳號所有裝置登出；自己改密碼只保留目前這個裝置。
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 
-頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 建立或救回管理員
 
@@ -150,6 +150,23 @@ DELETE /api/calendar/events/{id}
 - **匯率計算機**：瀏覽器直接呼叫 Frankfurter v2（`api.frankfurter.dev/v2`，彙整各國央行匯率，含 TWD），最新匯率存在 localStorage，離線時顯示上次的資料。
 - **ASCII 藝術字**：figlet 的 `.flf` 字型當成靜態檔輸出，選到才 fetch。
 - **Emoji 選擇器**：資料來自 `emojibase-data`（繁中＋英文）。**編碼與雜湊**：雜湊用 `hash-wasm`。
+
+## 隱藏頁面
+
+不在任何選單、首頁或工具清單裡，只有知道網址的人進得來；頁面加了 `noindex`。誰來過記在「系統管理 › 頁面訪客」（`/admin/visits`，需要 `admin.users`）。
+
+- **`/bcs` Data Matrix 生成器**：倉位（SLOC / BIN / STYP）和料件（MODEL / MO / QTY / DC / SER）兩種內容產生 Data Matrix，最愛和歷史存在 localStorage。
+  掃描在支援 BarcodeDetector 的瀏覽器即時掃相機，其他（iOS）改成拍照後解碼，解不出來再用 ZXing。相機和 BarcodeDetector 都只在 HTTPS 能用，HTTP 下一律走拍照。
+
+```
+POST /api/visits/{page}                  {session, action, detail}   action：open / click / scan / error，不用登入
+GET  /api/admin/visits/{page}            統計和最近 300 次瀏覽（每個分頁一次）
+GET  /api/admin/visits/{page}/{session}  那次瀏覽的事件
+```
+
+- 前端用 `useVisitTracking`（`frontend/src/visits.ts`）：進頁面送 open，頁面裡的按鈕被點送 click（名稱取 `data-track` 或按鈕文字），JS 錯誤送 error（每次瀏覽最多 20 筆）。
+- 後端補上來源 IP（Traefik 的 X-Forwarded-For）、登入的帳號和 User-Agent，存在 `page_events`，保留 180 天。同一個 IP 10 分鐘超過 200 筆就不再記。
+- 新增隱藏頁面：在 `backend/src/visits.rs` 的 `PAGES` 加上 id，頁面裡呼叫 `useVisitTracking('<id>', rootRef)`。
 
 ## 音樂
 

@@ -141,7 +141,7 @@ export const APPS: AppInfo[] = [
     name: '系統管理',
     icon: '🛠️',
     glyph: '管',
-    blurb: '帳號、角色與權限。之後每個 APP 的權限都從這裡發。',
+    blurb: '帳號、角色與權限，以及隱藏頁面的訪客紀錄。之後每個 APP 的權限都從這裡發。',
     tag: '僅管理員',
     permission: PERMISSIONS.adminUsers,
     nav: [
@@ -149,6 +149,7 @@ export const APPS: AppInfo[] = [
         items: [
           { to: '/admin/users', label: '使用者', icon: '👤' },
           { to: '/admin/roles', label: '角色與權限', icon: '🔑' },
+          { to: '/admin/visits', label: '頁面訪客', icon: '👁️' },
         ],
       },
     ],

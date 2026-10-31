@@ -21,6 +21,7 @@ import MusicLibrary from './music/MusicLibrary'
 import Account from './pages/Account'
 import AdminRoles from './pages/admin/Roles'
 import AdminUsers from './pages/admin/Users'
+import AdminVisits from './pages/admin/Visits'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import ToolPage from './tools/ToolPage'
@@ -33,6 +34,8 @@ const WeatherHub = lazy(() => import('./weather/WeatherHub'))
 const TyphoonPage = lazy(() => import('./weather/TyphoonPage'))
 const ForecastPage = lazy(() => import('./weather/ForecastPage'))
 const QuakePage = lazy(() => import('./weather/QuakePage'))
+// 隱藏頁面：不在任何選單裡，只有知道網址的人進得來；條碼函式庫也只在這頁下載
+const DataMatrixPage = lazy(() => import('./datamatrix/DataMatrixPage'))
 
 function Lazy({ page: Page }: { page: ComponentType }) {
   return (
@@ -193,6 +196,7 @@ function App() {
                 <Route path="match/:id" element={<MatchPage />} />
               </Route>
             </Route>
+            <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
             <Route path="/login" element={<Login />} />
             <Route
               path="/account"
@@ -213,6 +217,7 @@ function App() {
               <Route index element={<Navigate to="users" replace />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="roles" element={<AdminRoles />} />
+              <Route path="visits" element={<AdminVisits />} />
             </Route>
             <Route path="*" element={<p className="muted">找不到這個頁面。</p>} />
           </Routes>
