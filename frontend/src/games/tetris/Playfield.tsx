@@ -1,6 +1,7 @@
 import { useEffect, useRef, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { drawBoard, drawPreview, readPalette, METER } from './draw'
 import { COLS, PREVIEW, ROWS, type Tetris } from './engine'
+import { actionOf, type Action, type Keys } from './keys'
 
 /** 左右鍵按住多久開始連續移動，以及之後每格的間隔 */
 const DAS_MS = 150
@@ -11,8 +12,8 @@ type Held = { dir: -1 | 1; since: number; acc: number } | null
 export type PlayfieldHooks = {
   /** 每一幀推進完遊戲後呼叫（取走鎖定事件、送出攻擊…） */
   onFrame?: (dt: number) => void
-  /** 其他快捷鍵（換目標策略、暫停…），處理了就回傳 true */
-  onKey?: (code: string) => boolean
+  /** 先交給上層處理的按鍵（暫停、音樂、換目標策略…），處理了就回傳 true；`action` 是這個鍵設定的動作 */
+  onKey?: (code: string, action: Action | undefined) => boolean
 }
 
 export type PlayfieldProps = {
@@ -20,6 +21,8 @@ export type PlayfieldProps = {
   game: RefObject<Tetris | null>
   /** 時間有沒有在走、能不能操作 */
   running: boolean
+  /** 快捷鍵設定 */
+  keys: Keys
   /** 由上層在 effect 裡更新，迴圈每一幀拿最新的版本來呼叫 */
   hooks: RefObject<PlayfieldHooks>
   overlay?: ReactNode
@@ -58,16 +61,16 @@ const BOARD_ASPECT = ROWS / (COLS + METER)
 const HOLD_ASPECT = 0.75
 const NEXT_ASPECT = 0.75 * PREVIEW
 
-export function Playfield({ game, running, hooks, overlay, flash, info }: PlayfieldProps) {
+export function Playfield({ game, running, keys, hooks, overlay, flash, info }: PlayfieldProps) {
   const boardRef = useRef<HTMLCanvasElement>(null)
   const holdRef = useRef<HTMLCanvasElement>(null)
   const nextRef = useRef<HTMLCanvasElement>(null)
   const held = useRef<Held>(null)
 
   // 迴圈與事件只註冊一次，透過 ref 拿最新的 props
-  const latest = useRef({ running })
+  const latest = useRef({ running, keys })
   useEffect(() => {
-    latest.current = { running }
+    latest.current = { running, keys }
   })
 
   function act(fn: (g: Tetris) => void) {
@@ -167,49 +170,44 @@ export function Playfield({ game, running, hooks, overlay, flash, info }: Playfi
       if (e.metaKey || e.altKey || isTyping(e.target)) return
       const c = controls.current
       const code = e.code
+      const action = actionOf(latest.current.keys, code)
       const handled = () => e.preventDefault()
-      if (hooks.current.onKey?.(code)) return handled()
-      if (!latest.current.running) return
+      if (hooks.current.onKey?.(code, action)) return handled()
+      if (!latest.current.running || !action) return
       // 焦點留在按鈕上的話，空白鍵放開時會再按一次那顆按鈕
       if (e.target instanceof HTMLButtonElement) e.target.blur()
       // 按住不放時瀏覽器會一直送 keydown，移動的連發自己算
-      if (e.repeat && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space', 'KeyX', 'KeyZ', 'KeyC'].includes(code)) {
-        return handled()
-      }
-      switch (code) {
-        case 'ArrowLeft':
+      if (e.repeat) return handled()
+      switch (action) {
+        case 'left':
           c.press(-1)
           return handled()
-        case 'ArrowRight':
+        case 'right':
           c.press(1)
           return handled()
-        case 'ArrowDown':
+        case 'soft':
           c.soft(true)
           return handled()
-        case 'Space':
+        case 'hard':
           c.act((g) => g.hardDrop())
           return handled()
-        case 'ArrowUp':
-        case 'KeyX':
+        case 'cw':
           c.act((g) => g.rotate(1))
           return handled()
-        case 'KeyZ':
-        case 'ControlLeft':
-        case 'ControlRight':
+        case 'ccw':
           c.act((g) => g.rotate(-1))
           return handled()
-        case 'KeyC':
-        case 'ShiftLeft':
-        case 'ShiftRight':
+        case 'hold':
           c.act((g) => g.holdPiece())
           return handled()
       }
     }
     const up = (e: KeyboardEvent) => {
       const c = controls.current
-      if (e.code === 'ArrowLeft') c.release(-1)
-      else if (e.code === 'ArrowRight') c.release(1)
-      else if (e.code === 'ArrowDown') c.soft(false)
+      const action = actionOf(latest.current.keys, e.code)
+      if (action === 'left') c.release(-1)
+      else if (action === 'right') c.release(1)
+      else if (action === 'soft') c.soft(false)
     }
     const blur = () => {
       held.current = null

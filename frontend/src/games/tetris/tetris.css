@@ -427,3 +427,42 @@
   text-align: center;
   line-height: 1;
 }
+
+/* 自訂快捷鍵 */
+.tetris-help .tetris-keys {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tetris-help .tetris-keys li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 5.5em));
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.tetris-key {
+  min-height: 40px;
+  padding: 4px 6px;
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tetris-key.capturing {
+  animation: tetris-key-blink 1s ease-in-out infinite;
+}
+@keyframes tetris-key-blink {
+  50% {
+    opacity: 0.6;
+  }
+}
+.tetris-keys-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
