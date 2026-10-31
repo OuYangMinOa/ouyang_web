@@ -1,6 +1,7 @@
 /**
  * 背景音樂：Korobeiniki（俄羅斯民謠，就是大家熟悉的俄羅斯方塊主題），用 Web Audio 即時合成，不需要音檔。
- * 主旋律是方波、低音是三角波；速度跟著等級變快。
+ * 音色走柔和路線：主旋律是三角波、低音是正弦波，每個音像敲鐘琴一樣敲下去就慢慢變小，
+ * 最後過一個低通濾波器把刺耳的高頻削掉，再加一點點回音。速度跟著等級變快。
  *
  * 排程以八分音符為單位，旋律和低音一起走，中途變速也不會對不齊。用「往前看」的做法：每 50ms 檢查一次，把接下來 0.2 秒內要響的音先排進 AudioContext，
  * 計時器有點延遲也不會走音。
@@ -52,14 +53,24 @@ function frequency(name: string): number {
   return 440 * 2 ** ((midi - 69) / 12)
 }
 
-/** 等級 1 是 140 BPM，每升一級快一點，最快 220 */
+/** 等級 1 是 120 BPM，每升一級快一點，最快 180 */
 export function tempo(level: number): number {
-  return Math.min(140 + (level - 1) * 6, 220)
+  return Math.min(120 + (level - 1) * 4, 180)
 }
 
 const LOOKAHEAD_S = 0.2
 const TIMER_MS = 50
-const VOLUME = 0.12
+const VOLUME = 0.14
+/** 低通濾波器的截止頻率：越低越悶、越柔 */
+const LOWPASS_HZ = 2000
+/** 回音：間隔、每次剩多少、混進來多少 */
+const ECHO_S = 0.24
+const ECHO_FEEDBACK = 0.25
+const ECHO_MIX = 0.15
+/** 起音、敲下去後衰減到剩多少、放開後多久消失 */
+const ATTACK_S = 0.012
+const SUSTAIN = 0.35
+const RELEASE_S = 0.12
 
 export class Music {
   private ctx: AudioContext | null = null
@@ -84,9 +95,21 @@ export class Music {
         window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
       if (!Ctx) return
       this.ctx = new Ctx()
-      this.master = this.ctx.createGain()
+      const ctx = this.ctx
+      this.master = ctx.createGain()
       this.master.gain.value = VOLUME
-      this.master.connect(this.ctx.destination)
+      const lowpass = ctx.createBiquadFilter()
+      lowpass.type = 'lowpass'
+      lowpass.frequency.value = LOWPASS_HZ
+      const echo = ctx.createDelay(1)
+      echo.delayTime.value = ECHO_S
+      const feedback = ctx.createGain()
+      feedback.gain.value = ECHO_FEEDBACK
+      const mix = ctx.createGain()
+      mix.gain.value = ECHO_MIX
+      this.master.connect(lowpass).connect(ctx.destination)
+      lowpass.connect(echo).connect(feedback).connect(echo)
+      echo.connect(mix).connect(ctx.destination)
     }
     void this.ctx.resume().catch(() => {})
     // 從停下的那一小節開頭接著播
@@ -118,10 +141,12 @@ export class Music {
     const eighth = 60 / this.bpm / 2
     while (this.time < ctx.currentTime + LOOKAHEAD_S) {
       const note = MELODY_AT.get(this.step)
-      if (note?.[0]) this.tone('square', frequency(note[0]), this.time, note[1] * eighth * 0.9, 0.5)
-      // 低音每個八分音符一下，根音和高八度交替
-      const root = frequency(BASS[Math.floor(this.step / 8)])
-      this.tone('triangle', root * (this.step % 2 ? 2 : 1), this.time, eighth * 0.8, 0.7)
+      if (note?.[0]) this.tone('triangle', frequency(note[0]), this.time, note[1] * eighth * 0.85, 0.6)
+      // 低音每拍（兩個八分音符）一下，根音和高八度交替
+      if (this.step % 2 === 0) {
+        const root = frequency(BASS[Math.floor(this.step / 8)])
+        this.tone('sine', root * (this.step % 4 ? 2 : 1), this.time, eighth * 1.6, 0.8)
+      }
       this.time += eighth
       this.step = (this.step + 1) % STEPS
     }
@@ -133,16 +158,16 @@ export class Music {
     const gain = ctx.createGain()
     osc.type = type
     osc.frequency.value = freq
-    // 很短的起音和收尾，避免喀喀聲
+    // 快速起音後慢慢衰減，放開時再淡出，聽起來像敲出來的而不是一直嗶
     gain.gain.setValueAtTime(0, at)
-    gain.gain.linearRampToValueAtTime(volume, at + 0.01)
-    gain.gain.setValueAtTime(volume, at + Math.max(0.01, duration - 0.03))
-    gain.gain.linearRampToValueAtTime(0, at + duration)
+    gain.gain.linearRampToValueAtTime(volume, at + ATTACK_S)
+    gain.gain.exponentialRampToValueAtTime(volume * SUSTAIN, at + Math.max(ATTACK_S * 2, duration))
+    gain.gain.linearRampToValueAtTime(0, at + duration + RELEASE_S)
     osc.connect(gain).connect(this.master!)
     osc.onended = () => this.sounding.delete(osc)
     this.sounding.add(osc)
     osc.start(at)
-    osc.stop(at + duration + 0.02)
+    osc.stop(at + duration + RELEASE_S + 0.02)
   }
 }
 

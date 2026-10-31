@@ -6,6 +6,8 @@ import { load, save } from '../shared/storage'
 import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
 import type { MiniInfo } from './draw'
 import { badgeCount, describe, Tetris } from './engine'
+import { KeyEditor } from './KeyEditor'
+import { keyNames, useKeys, type Action, type KeySettings } from './keys'
 import { CHECKPOINT_MS, formatScore, Leaderboard, RunReporter, useLeaderboard, type RunState } from './Leaderboard'
 import { MiniBoards } from './MiniBoards'
 import { useMusic } from './music'
@@ -65,7 +67,7 @@ function useFlash(): [ReactNode, (text: string | null, sent: number) => void] {
   return [node, show]
 }
 
-/** 背景音樂開關（也可以按 M） */
+/** 背景音樂開關（也可以按快捷鍵，預設是 M） */
 function MusicButton({ music }: { music: ReturnType<typeof useMusic> }) {
   return (
     <button type="button" className="secondary" onClick={music.toggle} aria-pressed={music.enabled}>
@@ -93,19 +95,47 @@ export default function TetrisGame() {
   return <Menu onPractice={() => setPractice(true)} />
 }
 
-function Help() {
+/** 操作說明和自訂快捷鍵；`onEdit` 在開始改快捷鍵時呼叫（單人模式用來暫停） */
+function Help({ settings, onEdit }: { settings: KeySettings; onEdit?: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const k = (action: Action) => keyNames(settings.keys, action)
   return (
     <>
       <div className="tetris-help">
         <strong>操作</strong>
-        <ul>
-          <li>← →：左右移動（按住連續移動）</li>
-          <li>↓：加速下落；空白鍵：直接落下</li>
-          <li>↑ / X：順時針轉；Z / Ctrl：逆時針轉</li>
-          <li>C / Shift：保留（Hold）</li>
-          <li>1～4：切換攻擊目標；M：背景音樂開關</li>
-        </ul>
-        <p className="muted">手機用盤面下方的按鈕，左右和下可以按住不放。</p>
+        {editing ? (
+          <KeyEditor settings={settings} onDone={() => setEditing(false)} />
+        ) : (
+          <>
+            <ul>
+              <li>
+                {k('left')}、{k('right')}：左右移動（按住連續移動）
+              </li>
+              <li>
+                {k('soft')}：加速下落；{k('hard')}：直接落下
+              </li>
+              <li>
+                {k('cw')}：順時針轉；{k('ccw')}：逆時針轉
+              </li>
+              <li>{k('hold')}：保留（Hold）</li>
+              <li>
+                {k('pause')}：暫停（單人模式）；{k('music')}：背景音樂開關
+              </li>
+              <li>1～4：切換攻擊目標（線上對戰）</li>
+            </ul>
+            <p className="muted">手機用盤面下方的按鈕，左右和下可以按住不放。</p>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setEditing(true)
+                onEdit?.()
+              }}
+            >
+              ⌨ 自訂快捷鍵
+            </button>
+          </>
+        )}
       </div>
       <div className="tetris-help">
         <strong>規則</strong>
@@ -130,6 +160,7 @@ function Menu({ onPractice }: { onPractice: () => void }) {
   const [name, setName] = useState(loadName)
   const [draft, setDraft] = useState('')
   const leaderboard = useLeaderboard()
+  const keys = useKeys()
 
   function changeName(value: string) {
     const next = [...value].slice(0, MAX_NAME).join('')
@@ -147,7 +178,7 @@ function Menu({ onPractice }: { onPractice: () => void }) {
       side={
         <>
           <Leaderboard board={leaderboard.board} error={leaderboard.error} />
-          <Help />
+          <Help settings={keys} />
         </>
       }
     >
@@ -249,6 +280,7 @@ function Practice({ onExit }: { onExit: () => void }) {
   const leaderboard = useLeaderboard()
   const [flash, showFlash] = useFlash()
   const music = useMusic(phase === 'running', hud.level)
+  const keys = useKeys()
 
   function restart() {
     game.current = new Tetris()
@@ -301,12 +333,12 @@ function Practice({ onExit }: { onExit: () => void }) {
     if (g.over && ended.current !== g) finish(g)
   }
 
-  function onKey(code: string): boolean {
-    if (code === 'KeyM') {
+  function onKey(_code: string, action: Action | undefined): boolean {
+    if (action === 'music') {
       music.toggle()
       return true
     }
-    if (code === 'Escape' || code === 'KeyP') {
+    if (action === 'pause') {
       if (phase === 'running') setPhase('paused')
       else if (phase === 'paused') setPhase('running')
       return phase !== 'over'
@@ -365,7 +397,7 @@ function Practice({ onExit }: { onExit: () => void }) {
       side={
         <>
           <Leaderboard board={leaderboard.board} error={leaderboard.error} />
-          <Help />
+          <Help settings={keys} onEdit={() => setPhase((p) => (p === 'running' ? 'paused' : p))} />
         </>
       }
     >
@@ -376,6 +408,7 @@ function Practice({ onExit }: { onExit: () => void }) {
       <Playfield
         game={game}
         running={phase === 'running'}
+        keys={keys.keys}
         hooks={hooks}
         overlay={overlay}
         flash={flash}
@@ -451,6 +484,7 @@ function Online() {
   const mine = local.round === roundNo
   const running = phase === 'playing' && playing && mine
   const music = useMusic(running, state?.level ?? 1)
+  const { keys } = useKeys()
 
   function sendBoard() {
     const g = game.current
@@ -498,13 +532,14 @@ function Online() {
     send({ type: 'strategy', strategy: value })
   }
 
-  function onKey(code: string): boolean {
-    if (code === 'KeyM') {
+  function onKey(code: string, action: Action | undefined): boolean {
+    if (action === 'music') {
       music.toggle()
       return true
     }
+    // 數字鍵被設成別的動作的話，以那個動作為準
     const n = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(code)
-    if (n < 0 || !running) return false
+    if (action || n < 0 || !running) return false
     strategy(STRATEGIES[n].value)
     return true
   }
@@ -620,6 +655,7 @@ function Online() {
         <Playfield
           game={game}
           running={running}
+          keys={keys}
           hooks={hooks}
           overlay={overlay}
           flash={flash}

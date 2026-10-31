@@ -6,6 +6,7 @@ pub mod games;
 pub mod music;
 pub mod tetris;
 pub mod tetris_scores;
+pub mod tetris_settings;
 pub mod visits;
 pub mod weather;
 
@@ -111,6 +112,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/tetris/runs", post(tetris_scores::start_run))
         .route("/games/tetris/runs/{id}/checkpoints", post(tetris_scores::checkpoint))
         .route("/games/tetris/runs/{id}/finish", post(tetris_scores::finish_run))
+        .route("/games/tetris/settings", get(tetris_settings::get_settings).put(tetris_settings::put_settings))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))

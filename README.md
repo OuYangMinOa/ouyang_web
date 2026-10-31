@@ -146,7 +146,15 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
   分數是前端算的，伺服器不重播整局，而是每 5 秒（遊戲時間）檢查一次中間態來確認真的有玩：遊戲時間不能超過實際經過的時間、
   數字只增不減且增加速度合理、盤面沒有滿行且格數等於「方塊數 × 4 − 行數 × 10」。有一次不合理整局作廢。
   進行中的局只放在記憶體，重啟或換版時正在玩的那局無法上傳。
-- 背景音樂是 Korobeiniki（俄羅斯民謠），用 Web Audio 即時合成（`music.ts`），不需要音檔；速度跟著等級變快，按 M 或按鈕開關。
+- 背景音樂是 Korobeiniki（俄羅斯民謠），用 Web Audio 即時合成（`music.ts`），不需要音檔：三角波旋律、正弦波低音，
+  加上低通濾波和一點回音讓聲音柔和；速度跟著等級變快，按 M 或按鈕開關。
+- 快捷鍵可以自訂（`keys.ts`、`KeyEditor.tsx`），每個動作最多兩個鍵。沒登入存在瀏覽器，有登入存在帳號（`backend/src/tetris_settings.rs`），
+  換裝置也一樣；帳號還沒存過時沿用瀏覽器的設定：
+
+  ```
+  GET /api/games/tetris/settings  →  {"keys":{"left":["ArrowLeft"],…}|null}   null 是沒存過（要登入）
+  PUT /api/games/tetris/settings  {"keys":{…}|null}  →  204                   null 是恢復預設
+  ```
 
 ## 日曆
 
