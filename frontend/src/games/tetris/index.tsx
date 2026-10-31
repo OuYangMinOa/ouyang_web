@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
+import { errorMessage } from '../../api'
 import { useAuth } from '../../auth'
 import { load, save } from '../shared/storage'
 import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
 import type { MiniInfo } from './draw'
 import { badgeCount, describe, Tetris } from './engine'
-import { formatScore, Leaderboard, useLeaderboard } from './Leaderboard'
+import { CHECKPOINT_MS, formatScore, Leaderboard, RunReporter, useLeaderboard, type RunState } from './Leaderboard'
 import { MiniBoards } from './MiniBoards'
 import { useMusic } from './music'
 import { Playfield, type PlayfieldHooks } from './Playfield'
@@ -217,6 +218,19 @@ function Menu({ onPractice }: { onPractice: () => void }) {
 
 type PracticePhase = 'running' | 'paused' | 'over'
 
+/** 回報給排行榜伺服器的中間態 */
+function runState(g: Tetris): RunState {
+  return {
+    score: g.score,
+    lines: g.lines,
+    level: g.level,
+    pieces: g.pieces,
+    // 無條件進位：等級是用沒取整的時間算的，送出去的時間不能比它短
+    duration_ms: Math.max(1, Math.ceil(g.clock)),
+    board: g.cells(),
+  }
+}
+
 function Practice({ onExit }: { onExit: () => void }) {
   const { user } = useAuth()
   const [initial] = useState(() => new Tetris())
@@ -227,7 +241,11 @@ function Practice({ onExit }: { onExit: () => void }) {
   const [hud, setHud] = useState({ score: 0, lines: 0, level: 1 })
   const [best, setBest] = useState(() => load<number>('tetris:best-score', 0))
   /** 這局上傳後的結果：null 是還沒（或不用）上傳 */
-  const [result, setResult] = useState<{ rank: number; best: boolean } | 'sending' | 'failed' | null>(null)
+  const [result, setResult] = useState<
+    { rank: number; best: boolean } | { error: string } | 'sending' | null
+  >(null)
+  /** 這局的成績上傳（有登入才有），以及下一次要回報進度的遊戲時間 */
+  const run = useRef<{ game: Tetris; reporter: RunReporter; next: number } | null>(null)
   const leaderboard = useLeaderboard()
   const [flash, showFlash] = useFlash()
   const music = useMusic(phase === 'running', hud.level)
@@ -246,12 +264,15 @@ function Practice({ onExit }: { onExit: () => void }) {
       setBest(g.score)
       save('tetris:best-score', g.score)
     }
-    if (!user || g.score <= 0) return
+    if (run.current?.game !== g || g.score <= 0) return
     setResult('sending')
-    leaderboard
-      .submit({ score: g.score, lines: g.lines, level: g.level, duration_ms: Math.max(1, Math.round(g.clock)) })
-      .then((b) => setResult(b.me ? { rank: b.me.rank, best: !!b.best } : null))
-      .catch(() => setResult('failed'))
+    run.current.reporter
+      .finish(runState(g))
+      .then((b) => {
+        leaderboard.update(b)
+        setResult(b.me ? { rank: b.me.rank, best: !!b.best } : null)
+      })
+      .catch((e) => setResult({ error: errorMessage(e) }))
   }
 
   function frame() {
@@ -269,6 +290,14 @@ function Practice({ onExit }: { onExit: () => void }) {
     }
     if (g.score !== hud.score || g.lines !== hud.lines || g.level !== hud.level)
       setHud({ score: g.score, lines: g.lines, level: g.level })
+    // 登入的人開局就跟伺服器登記，之後定期回報進度（伺服器會比對開局到現在實際經過的時間，所以只在剛開局時登記）
+    if (user && run.current?.game !== g && g.clock < 1000) {
+      run.current = { game: g, reporter: new RunReporter(), next: CHECKPOINT_MS }
+    }
+    if (run.current?.game === g && !g.over && g.clock >= run.current.next) {
+      run.current.reporter.report(runState(g))
+      run.current.next += CHECKPOINT_MS
+    }
     if (g.over && ended.current !== g) finish(g)
   }
 
@@ -316,8 +345,8 @@ function Practice({ onExit }: { onExit: () => void }) {
         <span>{record ? '新紀錄！' : `最高 ${formatScore(best)} 分`}</span>
         {result === 'sending' ? (
           <span className="muted">上傳成績中…</span>
-        ) : result === 'failed' ? (
-          <span className="error">成績上傳失敗</span>
+        ) : result && 'error' in result ? (
+          <span className="error">{result.error}</span>
         ) : result ? (
           <span>
             {result.best ? '刷新個人紀錄，' : ''}排行榜第 {result.rank} 名

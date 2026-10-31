@@ -142,6 +142,8 @@ export class Tetris {
   lines = 0
   /** 單人模式的分數 */
   score = 0
+  /** 放下了幾塊（上傳排行榜時給伺服器核對盤面） */
+  pieces = 0
   sent = 0
   garbage: Garbage[] = []
   events: LockResult[] = []
@@ -370,6 +372,7 @@ export class Tetris {
       if (y >= HIDDEN) visible = true
     }
     this.piece = null
+    this.pieces++
     // 整塊鎖在可見區上方：輸了
     if (!visible) {
       this.over = true
@@ -449,6 +452,11 @@ export class Tetris {
         for (let x = 0; x < COLS; x++) this.board[y * COLS + x] = x === g.hole ? 0 : GARBAGE
       }
     }
+  }
+
+  /** 整個盤面（含上方看不到的列），由上到下每格一個字元 */
+  cells(): string {
+    return this.board.join('')
   }
 
   /** 給其他玩家看的盤面：可見的 20 列，由上到下 */
