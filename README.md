@@ -44,7 +44,17 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+
+### 回報與許願
+
+頁首右上角的「💬 回報 / 許願」進 `/feedback`，每一筆是一串對話，管理員在 `/admin/feedback` 回覆、結案或刪除，雙方可以一直來回留言（`backend/src/feedback.rs`）。
+
+- 不用登入也能送：訪客第一次送出時會拿到 HttpOnly cookie `feedback_<env>`（Path 只到 `/api/feedback`），之後靠它認出自己的對話。登入的人用帳號，也看得到同一個瀏覽器先前以訪客身分送出的。
+- 圖片可以 Ctrl+V 貼上、拖曳或選檔。一貼上就先上傳（`POST /api/feedback/images`，body 是圖片本身，上限 5 MB；太大的前端會先縮小成 WebP），送出留言時才掛上去，一天內沒掛上的會被清掉。
+  後端看檔頭只收 PNG / JPEG / GIF / WebP，圖片存在 SQLite（`feedback_images`），只有對話雙方和管理員看得到。
+- 未讀：雙方各記看到哪一則，頁首的紅點是有新回覆的對話數；管理員的紅點還包含使用者的新留言。頁面開著時每 20 秒看一次有沒有新留言。
+- 同一個 IP 一天最多開 10 串、留 100 則、傳 60 張圖（管理員不受限）。
 
 ### 建立或救回管理員
 

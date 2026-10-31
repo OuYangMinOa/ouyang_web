@@ -9,6 +9,8 @@ import CalendarPage from './calendar/CalendarPage'
 import HolidaysPage from './calendar/HolidaysPage'
 import MyEventsPage from './calendar/MyEventsPage'
 import { useMenu } from './components/useMenu'
+import FeedbackButton from './feedback/FeedbackButton'
+import FeedbackPage from './feedback/FeedbackPage'
 import GamePage from './games/GamePage'
 import GamesHub from './games/GamesHub'
 import LolApp from './lol/LolApp'
@@ -20,6 +22,7 @@ import MusicApp from './music/MusicApp'
 import MusicLibrary from './music/MusicLibrary'
 import Account from './pages/Account'
 import AdminAccess from './pages/admin/Access'
+import AdminFeedback from './pages/admin/Feedback'
 import AdminRegistrations from './pages/admin/Registrations'
 import AdminRoles from './pages/admin/Roles'
 import AdminUsers from './pages/admin/Users'
@@ -136,6 +139,7 @@ function Header() {
       <AppLauncher current={app} />
       {app && <AppMenu app={app} />}
       <div className="header-end">
+        <FeedbackButton />
         <ThemeToggle />
         {user ? (
           <UserMenu user={user} />
@@ -202,6 +206,7 @@ function App() {
             <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/feedback" element={<FeedbackPage />} />
             <Route
               path="/account"
               element={
@@ -222,6 +227,7 @@ function App() {
               <Route path="users" element={<AdminUsers />} />
               <Route path="roles" element={<AdminRoles />} />
               <Route path="registrations" element={<AdminRegistrations />} />
+              <Route path="feedback" element={<AdminFeedback />} />
               <Route path="access" element={<AdminAccess />} />
               <Route path="visits" element={<AdminVisits />} />
             </Route>
