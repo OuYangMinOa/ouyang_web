@@ -288,6 +288,12 @@ textarea {
   min-height: 40px;
   box-sizing: border-box;
 }
+/* 展開的選項清單：select 是透明底，Windows 上清單會變成白底，深色主題的淺色字就看不到 */
+option,
+optgroup {
+  background: var(--surface);
+  color: var(--text-h);
+}
 
 button {
   font: inherit;
