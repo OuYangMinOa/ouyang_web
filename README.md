@@ -88,7 +88,7 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
    ```
    桌機會有可收合的側邊欄，窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
 
-> 目前 staging / prod 都還是 HTTP，密碼和 cookie 在網路上是明文傳送。接上 HTTPS 前不要在公共網路登入重要帳號；接上之後在 `<env>.env` 加 `COOKIE_SECURE=true`。
+> prod（`https://music.ouyangminwei.com`）走 HTTPS，`prod.env` 設了 `COOKIE_SECURE=true`。staging（`:8102`）還是 HTTP，密碼和 cookie 在網路上是明文傳送，不要在公共網路登入重要帳號。
 
 ## 小遊戲線上對戰
 
@@ -197,6 +197,9 @@ GET /api/music/files/{name}    檔案本身，支援 Range（拖曳進度）
 - 只認最上層、不是隱藏檔、副檔名是 mp3 / m4a / aac / ogg / oga / opus / wav / flac / webm 的檔案，其他一律 404。
 - 本機開發用 `MUSIC_DIR` 指定資料夾，沒設就讀 `backend/data/music`，不存在就是空清單。
 - 收藏、音量、隨機和循環設定存在瀏覽器的 localStorage，不跟帳號走。播放器放在 APP 的外層，切換「全部」「收藏」不會中斷，離開音樂 APP 才會停。
+- 每首歌的分享鈕給的是音檔本身的網址（`/api/music/files/…`）：Telegram、Discord 只有直接連到音檔才會在聊天室裡顯示播放條，
+  連到網頁的話不會。手機用系統的分享選單，電腦直接複製。網址裡的中文保留原樣，空白和符號才編碼。
+  Telegram 只幫網域產生預覽，貼 IP 的網址不會有播放條。
 
 ## 天氣與環境
 
@@ -263,7 +266,7 @@ ddragon.leagueoflegends.com                                      英雄頭像與
 | 環境 | 觸發 | Image tag | 伺服器 port |
 |---|---|---|---|
 | staging | merge / push 到 `dev` | `staging-<commit>`、`staging-latest` | 8102 |
-| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | 443（目前是 HTTP，之後接 HTTPS） |
+| prod | merge 到 `main` | `prod-<commit>`、`prod-latest` | 443（HTTPS，`music.ouyangminwei.com`） |
 
 分支流程：
 
@@ -279,8 +282,14 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 ### 不斷線部署（Traefik + docker-rollout）
 
 ```
-外部 ─▶ Traefik（:8102 → staging、:443 → prod）─▶ app 容器（不直接對外綁 port）
+外部 ─▶ Traefik（:8102 → staging、:443 → prod、:80 → 轉到 https）─▶ app 容器（不直接對外綁 port）
 ```
+
+HTTPS 憑證由 Traefik 向 Let's Encrypt 申請（HTTP-01，走 :80），到期前自動續約，存在 volume `ouyang-web-traefik_letsencrypt`。
+`ouyangminwei.com` 在 Hostinger（WordPress 也在那裡），DNS 加了一筆 `music` 的 A 紀錄指到伺服器。
+AWS 安全群組要開 80、443、8102。
+之後若把 DNS 搬到 Cloudflare 並開代理（橘色雲朵），Traefik 看到的來源 IP 會變成 Cloudflare 的，
+登入限制和訪客紀錄都會算錯，要先讓 Traefik 信任 Cloudflare 的 IP 範圍。
 
 `deploy.sh` 用 `docker rollout` 換版：先啟動新容器 → 等 healthcheck 通過 → 再等 3 秒讓 Traefik 接上 → 停掉舊容器。
 

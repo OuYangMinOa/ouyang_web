@@ -18,6 +18,15 @@ export function trackUrl(name: string) {
   return `/api/music/files/${encodeURIComponent(name)}`
 }
 
+/**
+ * 分享用的完整網址，直接指向音檔：貼到 Telegram、Discord 會顯示可以直接播的播放條。
+ * 中文字保留原樣比較好讀；空白、符號和全形標點照樣編碼，聊天軟體才不會把網址截斷。
+ */
+export function shareUrl(name: string) {
+  const path = [...name].map((c) => (c > '\x7f' && /[\p{L}\p{N}\p{M}]/u.test(c) ? c : encodeURIComponent(c))).join('')
+  return `${location.origin}/api/music/files/${path}`
+}
+
 /** 顯示用的名稱：去掉副檔名 */
 export function trackTitle(name: string) {
   const dot = name.lastIndexOf('.')
