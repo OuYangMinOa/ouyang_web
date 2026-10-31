@@ -2,6 +2,7 @@ pub mod access_log;
 pub mod admin;
 pub mod auth;
 pub mod calendar;
+pub mod feedback;
 pub mod game_settings;
 pub mod games;
 pub mod music;
@@ -25,7 +26,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -109,9 +110,19 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/registrations/{id}/reject", post(registration::reject))
         .route("/admin/access", get(access_log::report))
         .route("/admin/access/requests", get(access_log::requests))
+        .route("/admin/feedback", get(feedback::admin_list))
+        .route("/admin/feedback/{id}", get(feedback::admin_get).delete(feedback::admin_delete))
+        .route("/admin/feedback/{id}/messages", post(feedback::admin_reply))
+        .route("/admin/feedback/{id}/status", put(feedback::admin_set_status))
         .route("/admin/visits/{page}", get(visits::list_sessions))
         .route("/admin/visits/{page}/{session}", get(visits::session_events))
         .route("/visits/{page}", post(visits::track))
+        .route("/feedback", get(feedback::list_mine).post(feedback::create_thread))
+        .route("/feedback/unread", get(feedback::unread))
+        .route("/feedback/images", post(feedback::upload_image).layer(DefaultBodyLimit::max(feedback::MAX_IMAGE_BYTES)))
+        .route("/feedback/images/{id}", get(feedback::image))
+        .route("/feedback/{id}", get(feedback::get_mine))
+        .route("/feedback/{id}/messages", post(feedback::reply_mine))
         .route("/calendar/events", get(calendar::list_events).post(calendar::create_event))
         .route("/calendar/events/{id}", put(calendar::update_event).delete(calendar::delete_event))
         .route("/games/rooms", post(games::create_room))
