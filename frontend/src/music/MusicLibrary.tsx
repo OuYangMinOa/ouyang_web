@@ -1,12 +1,34 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { copyToClipboard } from '../clipboard'
 import { usePlayer } from './context'
 import Icon from './Icon'
-import { formatDate, isNew, load, matches, save, sortTracks, trackTitle, type Sort } from './tracks'
+import { formatDate, isNew, load, matches, save, shareUrl, sortTracks, trackTitle, type Sort } from './tracks'
 
 const SORTS: { value: Sort; label: string }[] = [
   { value: 'name', label: '依名稱' },
   { value: 'newest', label: '最新加入' },
 ]
+
+const TOAST_MS = 2500
+
+/**
+ * 手機用系統的分享選單，可以直接選 Telegram；電腦上那個選單不好用，直接複製連結。
+ * 回傳要顯示的提示，使用者自己取消分享就不顯示。
+ */
+async function share(name: string): Promise<string | null> {
+  const url = shareUrl(name)
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try {
+      await navigator.share({ url })
+      return null
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return null
+      // 其他失敗（例如瀏覽器不讓分享）就改成複製
+    }
+  }
+  await copyToClipboard(url)
+  return '已複製連結，貼到 Telegram 或 Discord 就能直接播放'
+}
 
 /** 跳動的音量條，表示這首正在播 */
 function Bars() {
@@ -24,6 +46,13 @@ export default function MusicLibrary({ favoritesOnly = false }: { favoritesOnly?
   const { tracks, loadError, current, playing, play, playAll, toggle, favorites, toggleFavorite } = usePlayer()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>(() => load('sort', 'name'))
+  const [toast, setToast] = useState<{ message: string; id: number } | null>(null)
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), TOAST_MS)
+    return () => clearTimeout(timer)
+  }, [toast])
 
   const shown = useMemo(
     () => sortTracks((tracks ?? []).filter((t) => (!favoritesOnly || favorites.has(t.name)) && matches(t, query)), sort),
@@ -120,10 +149,27 @@ export default function MusicLibrary({ favoritesOnly = false }: { favoritesOnly?
               >
                 {favorite ? '★' : '☆'}
               </button>
+              <button
+                type="button"
+                className="music-share"
+                onClick={() =>
+                  share(track.name).then((message) => message && setToast({ message, id: Date.now() }))
+                }
+                aria-label={`分享 ${title}`}
+                title="分享"
+              >
+                <Icon name="share" />
+              </button>
             </li>
           )
         })}
       </ol>
+
+      {toast && (
+        <div key={toast.id} className="music-toast" role="status">
+          {toast.message}
+        </div>
+      )}
     </>
   )
 }

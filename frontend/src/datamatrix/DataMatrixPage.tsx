@@ -1,5 +1,6 @@
 import { datamatrix } from 'bwip-js/browser'
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type HTMLAttributes } from 'react'
+import { copyToClipboard } from '../clipboard'
 import { useVisitTracking } from '../visits'
 import { encode, pad5, parseScanned, type FieldId, type Fields, type Mode } from './format'
 import { canScanLive, decodeImageFile, liveDetector } from './scanner'
@@ -109,23 +110,6 @@ function entryOf(mode: Mode, fields: Fields): Entry {
 
 function sameEntry(mode: Mode, a: Entry, b: Entry) {
   return QUICK_KEYS[mode].every((id) => (a[id] ?? '') === (b[id] ?? ''))
-}
-
-/** 手機上 http 網站沒有 navigator.clipboard，改用隱藏的 textarea */
-async function copyToClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.style.position = 'fixed'
-    ta.style.opacity = '0'
-    document.body.appendChild(ta)
-    ta.focus()
-    ta.select()
-    document.execCommand('copy')
-    ta.remove()
-  }
 }
 
 function CameraIcon() {
