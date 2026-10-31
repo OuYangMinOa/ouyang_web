@@ -201,6 +201,29 @@ chmod 600 ~/ouyang_web/prod/secrets.env
 有金鑰才會抓的資料：颱風路徑 `W-C0034-005`（含中文名稱）、顯著與小區域有感地震報告 `E-A0015-001`／`E-A0016-001`。
 本機開發直接 `CWA_API_KEY=... cargo run`。
 
+## LoL 世界賽
+
+`/lol` 賽況（正在打的比賽：直播＋即時數據，沒有比賽時是下一場倒數）、`/lol/schedule` 賽程、`/lol/standings` 戰績（瑞士輪、淘汰賽對戰表、入圍賽）、`/lol/match/{id}` 單場的每一局。
+
+後端不參與，瀏覽器直接呼叫 lolesports.com 自己用的 API（都開放 CORS），程式在 `frontend/src/lol/api.ts`：
+
+```
+esports-api.lolesports.com/persisted/gw   要帶 x-api-key（lolesports.com 前端內建的公開金鑰）
+  getTournamentsForLeague   取最新一屆
+  getSchedule               整屆賽程（分頁，往前往後翻到超出這屆的日期）
+  getStandings              各階段有哪些比賽（只用來分類，排名由前端從比賽結果算）
+  getLive                   正在打的比賽與直播來源，30 秒更新
+  getEventDetails           單場的每一局、VOD、直播來源
+feed.lolesports.com/livestats/v1/window/{gameId}?startingTime=   即時數據，時間要對齊 10 秒
+ddragon.leagueoflegends.com                                      英雄頭像與中文名稱
+```
+
+- 賽程、直播狀態在 APP 外層（`LolApp`）抓，一分鐘更新一次（API 本身有一分鐘的 CDN 快取）；分頁切到背景時暫停。
+- 即時數據查太接近現在的時間會回 400，所以查一分鐘前的，畫面上會註明延遲。
+  已結束的局要找終局數據：從開場往後二分搜尋還查得到的最後一段（約 10 次請求），結果存在 localStorage（最多 40 局）。
+- 直播和 VOD 預設繁中，其次英文。YouTube 直接嵌入；Twitch 只讓 HTTPS 網站嵌入，網站還是 HTTP 時改顯示連結。
+- 這些都是非公開 API，Riot 改版時可能要跟著調整。
+
 ## 部署
 
 | 環境 | 觸發 | Image tag | 伺服器 port |

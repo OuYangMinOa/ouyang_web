@@ -119,6 +119,24 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'lol',
+    name: 'LoL 世界賽',
+    icon: '🏆',
+    glyph: '賽',
+    blurb: '英雄聯盟世界大賽的賽程、瑞士輪戰績和淘汰賽對戰表。比賽進行中可以直接看直播和即時數據，打完的每一局都有重播。',
+    tag: '直播 · 賽程',
+    live: true,
+    nav: [
+      {
+        items: [
+          { to: '/lol', label: '賽況', icon: '●' },
+          { to: '/lol/schedule', label: '賽程', icon: '▦' },
+          { to: '/lol/standings', label: '戰績', icon: '🏆' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     name: '系統管理',
     icon: '🛠️',
