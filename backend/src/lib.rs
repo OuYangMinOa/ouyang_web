@@ -6,6 +6,7 @@ pub mod bigtwo;
 pub mod calendar;
 pub mod draw;
 pub mod feedback;
+pub mod game_monitor;
 pub mod game_settings;
 pub mod games;
 pub mod minesrace;
@@ -132,6 +133,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/feedback/{id}", get(feedback::admin_get).delete(feedback::admin_delete))
         .route("/admin/feedback/{id}/messages", post(feedback::admin_reply))
         .route("/admin/feedback/{id}/status", put(feedback::admin_set_status))
+        .route("/admin/games", get(game_monitor::report))
         .route("/admin/visits/{page}", get(visits::list_sessions))
         .route("/admin/visits/{page}/{session}", get(visits::session_events))
         .route("/visits/{page}", post(visits::track))
