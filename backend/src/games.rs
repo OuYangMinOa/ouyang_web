@@ -36,7 +36,7 @@ use tokio::{
 
 use crate::{AppError, AppState, auth::CurrentUser};
 
-const GAMES: [&str; 5] = ["gomoku", "xiangqi", "chess", "reversi", "connect4"];
+const GAMES: [&str; 6] = ["gomoku", "xiangqi", "chess", "reversi", "connect4", "ab"];
 /// 去掉容易看錯的 I、O、0、1；剛好 32 個字，`byte % 32` 不會有偏差
 const CODE_CHARS: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LEN: usize = 5;
