@@ -377,3 +377,27 @@ async fn idle_rooms_expire_and_are_cleaned_up() {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+#[tokio::test]
+async fn battleship_rooms_relay_like_the_board_games() {
+    let (app, addr) = serve().await;
+    let code = create_room(&app, "battleship").await;
+
+    let mut a = Client::connect(&addr, &code, "battleship", "alice").await;
+    assert_eq!(a.next().await["seat"], 0);
+    let mut b = Client::connect(&addr, &code, "battleship", "bob").await;
+    assert_eq!(b.next().await["seat"], 1);
+    assert_eq!(a.next().await, json!({ "type": "peer", "online": true }));
+
+    // 伺服器不懂海戰棋，只看得到雜湊；佈局留在各自的瀏覽器
+    let commit = json!({ "type": "commit", "hash": "ab".repeat(32) });
+    a.send_msg(commit.clone()).await;
+    for client in [&mut a, &mut b] {
+        assert_eq!(client.next().await, json!({ "type": "msg", "seat": 0, "data": commit }));
+    }
+
+    // 其他遊戲的房間不能用海戰棋的名義連進來
+    let gomoku = create_room(&app, "gomoku").await;
+    let mut c = Client::connect(&addr, &gomoku, "battleship", "carol").await;
+    c.expect_error("game_mismatch").await;
+}

@@ -113,6 +113,10 @@
   --puyo-bg: #efe9dd;
   --puyo-eye: #ffffff;
   --puyo-pupil: #1c1917;
+  /* 海戰棋：海面、船身、沒打中的水花 */
+  --sea: #d3e2e5;
+  --ship: #57534e;
+  --splash: #3f7482;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -227,6 +231,9 @@
     --puyo-bg: #0b0a09;
     --puyo-eye: #ffffff;
     --puyo-pupil: #1c1917;
+    --sea: #132328;
+    --ship: #a8a29e;
+    --splash: #7fb3c0;
     color-scheme: dark;
   }
 }
@@ -331,6 +338,9 @@
   --puyo-bg: #0b0a09;
   --puyo-eye: #ffffff;
   --puyo-pupil: #1c1917;
+  --sea: #132328;
+  --ship: #a8a29e;
+  --splash: #7fb3c0;
   color-scheme: dark;
 }
 

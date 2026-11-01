@@ -107,7 +107,7 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 後端只負責轉送訊息，不懂遊戲規則；規則由兩端各自執行（`frontend/src/games/shared/useRoom.ts`、`backend/src/games.rs`）。不需要登入，但登入後會用帳號認座位。
 
 ```
-POST /api/games/rooms  {"game":"gomoku"}  →  201 {"code":"ABCDE"}      game：gomoku / xiangqi / chess / reversi
+POST /api/games/rooms  {"game":"gomoku"}  →  201 {"code":"ABCDE"}      game：gomoku / xiangqi / chess / reversi / battleship
 GET  /api/games/rooms/{code}/ws?game=<id>&player=<id>                  升級成 WebSocket（登入時 player 可省略）
 
 client → server  {type:"msg", data}
@@ -130,7 +130,15 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
 - 換版的幾秒內新舊容器可能各有同一個房間的連線：座位用條件式 UPDATE 搶，事件用 `(room_code, seq)` 主鍵擋重複序號。
   寫入時序號撞到，就關掉那個容器裡這個房間的連線，前端重連後從資料庫重新載入，送出的那一步要重下。
 
-### 俄羅斯方塊 99
+### 海戰棋
+
+`/games/battleship`：也用上面的轉送房間，但佈局是祕密，不能放進會廣播給雙方的訊息（`frontend/src/games/battleship/`）：
+
+- 開局各自送出 `commit = SHA-256(佈局 + 隨機 salt)`，佈局和 salt 只存在自己的瀏覽器（localStorage，用房間、座位、局數和雜湊當 key，重連時拿回來）。
+  雜湊用 `hash-wasm`，因為 `crypto.subtle` 只在 HTTPS 能用。
+- 每一砲由被打的一方自己算出「沒中／擊中／擊沉」回報，擊沉時公布那艘船的位置；位置不合理（和先前的回報對不上）當場判亂報的一方輸。
+- 結束後雙方自動公開佈局和 salt，前端驗證雜湊和過程中的每一次回報，對不上就判對方輸。換裝置或清掉瀏覽器資料就拿不回佈局，只能認輸。
+
 
 `/games/tetris`：參考 Tetris 99 的大逃殺，一間最多 99 人，人不夠由電腦補位。和上面的棋類不同，伺服器懂一部分規則
 （`backend/src/arena.rs`，和魔法氣泡共用；俄羅斯方塊的盤面格式和電腦玩家在 `tetris.rs`。協定寫在 `frontend/src/games/shared/useArena.ts`）：
