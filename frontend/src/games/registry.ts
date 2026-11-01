@@ -99,6 +99,15 @@ export const GAMES: GameInfo[] = [
     component: lazy(() => import('./reversi')),
   },
   {
+    id: 'battleship',
+    name: '海戰棋',
+    icon: '🚢',
+    blurb: '各自擺好 5 艘船，輪流朝對方海域開砲，先擊沉整支艦隊的人獲勝。線上對戰的佈局不經過伺服器。',
+    tags: ['電腦', '本地', '線上'],
+    category: '棋類對戰',
+    component: lazy(() => import('./battleship')),
+  },
+  {
     id: 'ab',
     name: '1A2B 猜數字',
     icon: '🔢',
