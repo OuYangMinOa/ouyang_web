@@ -23,7 +23,7 @@ use axum::{
         Path, Query, State,
         ws::{Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::Response,
 };
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,11 @@ use tokio::{
     time::Instant,
 };
 
-use crate::{AppError, AppState, auth::CurrentUser};
+use crate::{
+    AppError, AppState,
+    auth::{CurrentUser, client_key},
+    game_monitor::{PlayerInfo, RoomInfo},
+};
 
 const GAMES: [&str; 7] = ["gomoku", "xiangqi", "chess", "reversi", "connect4", "ab", "battleship"];
 /// 去掉容易看錯的 I、O、0、1；剛好 32 個字，`byte % 32` 不會有偏差
@@ -96,6 +100,9 @@ struct Seat {
 struct Conn {
     id: u64,
     tx: mpsc::UnboundedSender<Utf8Bytes>,
+    /// 給系統管理看的：來源 IP 和連上的時間
+    ip: String,
+    since: Instant,
 }
 
 #[derive(Serialize)]
@@ -158,6 +165,7 @@ impl Rooms {
         game: &str,
         player: &str,
         tx: mpsc::UnboundedSender<Utf8Bytes>,
+        ip: String,
     ) -> Result<(Slot, usize, u64), Reject> {
         loop {
             let (slot, fresh) = {
@@ -198,7 +206,7 @@ impl Rooms {
             }
             let seat = take_seat(pool, code, room, player).await?;
             let id = self.next_conn.fetch_add(1, Ordering::Relaxed) + 1;
-            if let Some(old) = room.seats[seat].conn.replace(Conn { id, tx }) {
+            if let Some(old) = room.seats[seat].conn.replace(Conn { id, tx, ip, since: Instant::now() }) {
                 // 舊連線收到這則錯誤後就不會再自動重連，兩邊才不會一直互踢
                 let _ = old.tx.send(error_text(REPLACED));
             }
@@ -269,6 +277,71 @@ impl Rooms {
         if let Err(err) = touched {
             tracing::warn!(%code, error = %err, "touch game room");
         }
+    }
+
+    /// 給系統管理看（game_monitor.rs）：資料庫裡還沒過期的房間，加上記憶體裡誰連著線
+    pub(crate) async fn snapshot(&self, pool: &SqlitePool, now: Instant) -> Result<Vec<RoomInfo>, AppError> {
+        let live: HashMap<String, Slot> = self.live.lock().unwrap().clone();
+        let codes: Vec<&String> = live.keys().collect();
+        let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, i64, i64)>(
+            "SELECT r.code, r.game, r.seat0, r.seat1,
+                CAST(strftime('%s', 'now') AS INTEGER) - CAST(strftime('%s', r.created_at) AS INTEGER),
+                (SELECT COUNT(*) FROM game_events e WHERE e.room_code = r.code)
+             FROM game_rooms r
+             WHERE r.code IN (SELECT value FROM json_each(?))
+             OR (r.created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?)
+                 AND r.updated_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?))",
+        )
+        .bind(json!(codes).to_string())
+        .bind(ago(ROOM_TTL))
+        .bind(ago(EMPTY_TTL))
+        .fetch_all(pool)
+        .await?;
+
+        let mut rooms = Vec::with_capacity(rows.len());
+        for (code, game, seat0, seat1, age, events) in rows {
+            // 記憶體裡的比資料庫新，連線狀態也只在記憶體裡
+            let mut seats = [seat0, seat1];
+            let mut conns = [None, None];
+            let mut events = events as usize;
+            if let Some(slot) = live.get(&code)
+                && let Some(room) = slot.lock().await.as_ref()
+            {
+                for (i, seat) in room.seats.iter().enumerate() {
+                    seats[i] = seat.player.clone();
+                    conns[i] = seat.conn.as_ref().map(|c| (c.ip.clone(), c.since));
+                }
+                events = room.history.len();
+            }
+            let online = conns.iter().flatten().count();
+            let taken = seats.iter().flatten().count();
+            let players = (0..2)
+                .filter_map(|i| {
+                    let conn = conns[i].as_ref().map(|(ip, since)| (ip.as_str(), *since));
+                    Some(
+                        PlayerInfo::new(seats[i].as_ref()?, String::new(), conn, now).status(format!("座位 {}", i + 1)),
+                    )
+                })
+                .collect();
+            rooms.push(RoomInfo {
+                kind: "duel",
+                game: GAMES.into_iter().find(|g| *g == game).unwrap_or("unknown"),
+                code,
+                phase: match (online, taken) {
+                    (0, _) => "idle",
+                    (_, 2) => "playing",
+                    _ => "waiting",
+                },
+                round: 0,
+                age_secs: age.max(0) as u64,
+                bots: 0,
+                public: false,
+                events: Some(events),
+                alive: None,
+                players,
+            });
+        }
+        Ok(rooms)
     }
 
     /// 從表裡移除；表裡已經換成別的房間物件（關掉後又有人重新載入）就不動
@@ -382,9 +455,11 @@ pub async fn connect(
     State(state): State<AppState>,
     Path(code): Path<String>,
     Query(query): Query<JoinQuery>,
+    headers: HeaderMap,
     user: Option<CurrentUser>,
 ) -> Response {
     let code = code.to_ascii_uppercase();
+    let ip = client_key(&headers);
     let player = match (user, query.player) {
         (Some(user), _) => Some(format!("user:{}", user.id)),
         (None, Some(player)) if !player.is_empty() && player.chars().count() <= MAX_PLAYER_LEN => {
@@ -392,14 +467,21 @@ pub async fn connect(
         }
         _ => None,
     };
-    ws.max_message_size(MAX_FRAME_BYTES).on_upgrade(move |socket| session(socket, state, code, query.game, player))
+    ws.max_message_size(MAX_FRAME_BYTES).on_upgrade(move |socket| session(socket, state, code, query.game, player, ip))
 }
 
-async fn session(mut socket: WebSocket, state: AppState, code: String, game: Option<String>, player: Option<String>) {
+async fn session(
+    mut socket: WebSocket,
+    state: AppState,
+    code: String,
+    game: Option<String>,
+    player: Option<String>,
+    ip: String,
+) {
     let rooms = &state.rooms;
     let (tx, mut rx) = mpsc::unbounded_channel();
     let joined = match (game.as_deref(), player.as_deref()) {
-        (Some(game), Some(player)) => rooms.join(&state.pool, &code, game, player, tx).await,
+        (Some(game), Some(player)) => rooms.join(&state.pool, &code, game, player, tx, ip).await,
         _ => Err(("bad_request", "缺少 game 或 player，或 player 太長")),
     };
     let (slot, seat, id) = match joined {
