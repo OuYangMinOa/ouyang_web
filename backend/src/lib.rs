@@ -13,6 +13,7 @@ pub mod puyo_scores;
 pub mod registration;
 pub mod tetris;
 pub mod tetris_scores;
+pub mod undercover;
 pub mod visits;
 pub mod weather;
 
@@ -61,6 +62,8 @@ pub struct AppState {
     /// 俄羅斯方塊大逃殺的房間（只在記憶體裡）
     pub tetris: Arc<arena::Arenas<tetris::Tetris>>,
     pub puyo: Arc<arena::Arenas<puyo::Puyo>>,
+    /// 派對遊戲的房間（只在記憶體裡，見 party.rs）
+    pub undercover: Arc<party::Parties<undercover::Undercover>>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
     pub tetris_runs: Arc<tetris_scores::Runs>,
     /// 魔法氣泡單人模式進行中的局
@@ -86,6 +89,7 @@ impl AppState {
             rooms: Arc::default(),
             tetris: Arc::default(),
             puyo: Arc::default(),
+            undercover: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
@@ -146,6 +150,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/puyo/runs/{id}/checkpoints", post(puyo_scores::checkpoint))
         .route("/games/puyo/runs/{id}/finish", post(puyo_scores::finish_run))
         .route("/games/puyo/settings", get(game_settings::get_puyo).put(game_settings::put_puyo))
+        .route("/games/undercover/party", post(party::create::<undercover::Undercover>))
+        .route("/games/undercover/party/{code}/ws", get(party::connect::<undercover::Undercover>))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))

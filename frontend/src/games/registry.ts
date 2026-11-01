@@ -1,7 +1,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 
 /** 側邊欄的分組，順序就是顯示順序 */
-export const GAME_CATEGORIES = ['多人對戰', '棋類對戰', '單人'] as const
+export const GAME_CATEGORIES = ['多人對戰', '派對', '棋類對戰', '單人'] as const
 
 export type GameInfo = {
   /** 網址用的 id：/games/<id> */
@@ -34,6 +34,15 @@ export const GAMES: GameInfo[] = [
     tags: ['單人', '電腦', '多人', '線上'],
     category: '多人對戰',
     component: lazy(() => import('./puyo')),
+  },
+  {
+    id: 'undercover',
+    name: '誰是臥底',
+    icon: '🕵️',
+    blurb: '大家拿到相近的兩個詞，輪流用一句話描述，再投票找出臥底。3～10 人，可以加電腦，也能當面玩。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazy(() => import('./undercover')),
   },
   {
     id: 'snake',
