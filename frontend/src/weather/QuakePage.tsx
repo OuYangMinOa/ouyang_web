@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ACTIVE_MS,
   CITY_POINTS,
+  cityPoint,
   depthLevel,
   EEW_SOURCES,
-  estimateIntensity,
-  hypocentralKm,
+  eewAtCity,
   intensityLevel,
   intensityUnit,
+  latestPerSource,
   P_WAVE_KMS,
+  QUAKE_CITY_KEY,
   S_WAVE_KMS,
   taipeiTime,
   timeAgo,
+  useNow,
   usePreference,
   useRemote,
   type Eew,
@@ -18,11 +22,9 @@ import {
   type QuakeSnapshot,
 } from './data'
 import { L, TAIWAN_CENTER, useLayers, useLeafletMap } from './map'
+import { useQuakeFeed } from './quakeFeed'
 import { SourceList } from './WeatherHub'
 import './weather.css'
-
-/** 速報在發震後這麼久內都算「進行中」，顯示在最上面 */
-const ACTIVE_MS = 3 * 60 * 1000
 
 const LIST_TABS: { id: string; label: string; source: string }[] = [
   { id: 'cwa', label: '台灣（氣象署）', source: 'cwa' },
@@ -31,79 +33,6 @@ const LIST_TABS: { id: string; label: string; source: string }[] = [
   { id: 'cenc', label: '中國', source: 'cenc' },
   { id: 'usgs_global', label: '全球 M4.5+', source: 'usgs' },
 ]
-
-/** 每個來源只留最新的一筆（比發震時間，同一個地震再比第幾報） */
-function latestPerSource(list: Eew[]) {
-  const latest = new Map<string, Eew>()
-  for (const eew of list) {
-    const prev = latest.get(eew.source)
-    const newer =
-      !prev ||
-      Date.parse(eew.origin_time) > Date.parse(prev.origin_time) ||
-      (prev.event_id === eew.event_id && (eew.serial ?? 0) >= (prev.serial ?? 0))
-    if (newer) latest.set(eew.source, eew)
-  }
-  return [...latest.values()].sort((a, b) => Date.parse(b.origin_time) - Date.parse(a.origin_time))
-}
-
-type Feed = { eew: Eew[]; lists: Record<string, QuakeReport[]>; live: boolean }
-
-/** 連到 /api/weather/quakes/ws 收即時速報，斷線就自動重連；和 HTTP 抓到的快照合在一起 */
-function useQuakeFeed(initial: QuakeSnapshot | null): Feed {
-  const [pushed, setPushed] = useState<Eew[]>([])
-  const [live, setLive] = useState(false)
-
-  useEffect(() => {
-    let socket: WebSocket | null = null
-    let retry: ReturnType<typeof setTimeout> | undefined
-    let delay = 2000
-    let stopped = false
-
-    function connect() {
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      socket = new WebSocket(`${protocol}//${location.host}/api/weather/quakes/ws`)
-      socket.onopen = () => {
-        setLive(true)
-        delay = 2000
-      }
-      socket.onmessage = (event) => {
-        let message
-        try {
-          message = JSON.parse(event.data)
-        } catch {
-          return
-        }
-        if (message.type === 'snapshot') setPushed((prev) => latestPerSource([...prev, ...message.eew]))
-        if (message.type === 'eew') setPushed((prev) => latestPerSource([...prev, message.eew]))
-      }
-      socket.onclose = () => {
-        setLive(false)
-        if (stopped) return
-        retry = setTimeout(connect, delay)
-        delay = Math.min(delay * 2, 30000)
-      }
-    }
-
-    connect()
-    return () => {
-      stopped = true
-      clearTimeout(retry)
-      socket?.close()
-    }
-  }, [])
-
-  const eew = useMemo(() => latestPerSource([...(initial?.eew ?? []), ...pushed]), [initial, pushed])
-  return { eew, lists: initial?.lists ?? {}, live }
-}
-
-function useNow(active: boolean) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), active ? 250 : 15000)
-    return () => clearInterval(timer)
-  }, [active])
-  return now
-}
 
 function IntensityBadge({ value, source }: { value?: string; source: string }) {
   if (!value) return <span className="muted">—</span>
@@ -125,12 +54,9 @@ function ActiveAlert({
   cityId: string
   onCity: (id: string) => void
 }) {
-  const city = CITY_POINTS.find((c) => c.id === cityId) ?? CITY_POINTS[1]
-  const origin = Date.parse(eew.origin_time)
-  const distance = hypocentralKm(eew, city.lat, city.lon)
-  const sArrival = origin + (distance / S_WAVE_KMS) * 1000
+  const city = cityPoint(cityId)
+  const { distance, sArrival, estimate } = eewAtCity(eew, city)
   const remaining = Math.ceil((sArrival - now) / 1000)
-  const estimate = eew.magnitude !== undefined ? estimateIntensity(eew.magnitude, distance) : undefined
   const level = intensityLevel(eew.max_intensity, eew.source)
 
   return (
@@ -321,13 +247,14 @@ function QuakeTable({
 
 export default function QuakePage() {
   const { data, error } = useRemote<QuakeSnapshot>('/weather/quakes', 3 * 60 * 1000)
-  const feed = useQuakeFeed(data)
-  const [test, setTest] = useState<Eew | null>(null)
-  const [cityId, setCityId] = usePreference<string>('quake-city', 'taipei')
+  // 即時速報走全站共用的連線（頁首的速報警報也用同一條），再和 HTTP 抓到的快照合在一起
+  const { eew: pushed, live, simulate } = useQuakeFeed()
+  const [cityId, setCityId] = usePreference<string>(QUAKE_CITY_KEY, 'taipei')
   const [tab, setTab] = useState<string>()
   const [focus, setFocus] = useState<QuakeReport>()
 
-  const allEew = useMemo(() => (test ? latestPerSource([...feed.eew, test]) : feed.eew), [feed.eew, test])
+  const allEew = useMemo(() => latestPerSource([...(data?.eew ?? []), ...pushed]), [data, pushed])
+  const lists = data?.lists ?? {}
   const roughNow = useNow(false)
   const active = useMemo(
     () => allEew.filter((e) => roughNow - Date.parse(e.origin_time) < ACTIVE_MS && !e.is_cancel),
@@ -335,12 +262,13 @@ export default function QuakePage() {
   )
   const now = useNow(active.length > 0)
 
-  const tabs = LIST_TABS.filter((t) => t.id !== 'cwa' || feed.lists.cwa)
+  const tabs = LIST_TABS.filter((t) => t.id !== 'cwa' || lists.cwa)
   const current = tabs.find((t) => t.id === tab) ?? tabs[0]
-  const items = feed.lists[current.id] ?? []
+  const items = lists[current.id] ?? []
 
+  /** 只在這個分頁裡模擬一筆；離開地震頁後，頁首也會跳出這筆測試速報 */
   function runTest() {
-    setTest({
+    simulate({
       source: 'cwa',
       event_id: `test-${Date.now()}`,
       serial: 1,
@@ -363,7 +291,7 @@ export default function QuakePage() {
     <div className="weather-page">
       <div className="weather-head">
         <h1>地震</h1>
-        <span className={`live-dot ${feed.live ? 'on' : ''}`}>{feed.live ? '即時連線中' : '重新連線中…'}</span>
+        <span className={`live-dot ${live ? 'on' : ''}`}>{live ? '即時連線中' : '重新連線中…'}</span>
       </div>
 
       {active.map((eew) => (
@@ -458,7 +386,7 @@ export default function QuakePage() {
       )}
       <p className="muted fineprint">
         速報來自 <a href="https://wolfx.jp/">wolfx</a> 轉發的各國地震速報；地震報告來自 USGS、日本氣象廳、中國地震台網
-        {feed.lists.cwa ? '與中央氣象署' : ''}。S 波抵達時間與當地震度都只是估計，請以官方警報為準。
+        {lists.cwa ? '與中央氣象署' : ''}。S 波抵達時間與當地震度都只是估計，請以官方警報為準。
       </p>
     </div>
   )
