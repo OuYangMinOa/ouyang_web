@@ -117,6 +117,23 @@ async fn create_room_returns_code() {
 }
 
 #[tokio::test]
+async fn connect4_room_relays_moves() {
+    let (app, addr) = serve().await;
+    let code = create_room(&app, "connect4").await;
+
+    let mut a = Client::connect(&addr, &code, "connect4", "alice").await;
+    assert_eq!(a.next().await["seat"], 0);
+    let mut b = Client::connect(&addr, &code, "connect4", "bob").await;
+    assert_eq!(b.next().await["seat"], 1);
+    assert_eq!(a.next().await, json!({ "type": "peer", "online": true }));
+
+    a.send_msg(json!({ "type": "move", "col": 3 })).await;
+    let relayed = json!({ "type": "msg", "seat": 0, "data": { "type": "move", "col": 3 } });
+    assert_eq!(a.next().await, relayed);
+    assert_eq!(b.next().await, relayed);
+}
+
+#[tokio::test]
 async fn too_many_rooms_is_503() {
     let app = app().await;
     for _ in 0..1000 {

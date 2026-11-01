@@ -63,6 +63,15 @@ export const GAMES: GameInfo[] = [
     component: lazy(() => import('./gomoku')),
   },
   {
+    id: 'connect4',
+    name: '四子棋',
+    icon: '🔴',
+    blurb: '棋子從上方落下，先在橫、直、斜連成四子的一方獲勝。',
+    tags: ['電腦', '本地', '線上'],
+    category: '棋類對戰',
+    component: lazy(() => import('./connect4')),
+  },
+  {
     id: 'xiangqi',
     name: '象棋',
     icon: '🀄',
