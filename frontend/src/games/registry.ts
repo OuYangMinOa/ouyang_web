@@ -1,7 +1,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 
 /** 側邊欄的分組，順序就是顯示順序 */
-export const GAME_CATEGORIES = ['多人對戰', '派對', '棋類對戰', '單人'] as const
+export const GAME_CATEGORIES = ['多人對戰', '派對', '雙人對戰', '單人'] as const
 
 export type GameInfo = {
   /** 網址用的 id：/games/<id> */
@@ -59,7 +59,7 @@ export const GAMES: GameInfo[] = [
     icon: '⚫',
     blurb: '先連成五子的一方獲勝。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./gomoku')),
   },
   {
@@ -68,7 +68,7 @@ export const GAMES: GameInfo[] = [
     icon: '🔴',
     blurb: '棋子從上方落下，先在橫、直、斜連成四子的一方獲勝。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./connect4')),
   },
   {
@@ -77,7 +77,7 @@ export const GAMES: GameInfo[] = [
     icon: '🀄',
     blurb: '楚河漢界，將死對方的帥／將。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./xiangqi')),
   },
   {
@@ -86,7 +86,7 @@ export const GAMES: GameInfo[] = [
     icon: '♟️',
     blurb: '完整規則：入堡、吃過路兵、升變。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./chess')),
   },
   {
@@ -95,7 +95,7 @@ export const GAMES: GameInfo[] = [
     icon: '⚪',
     blurb: '夾住就翻面，最後棋子多的一方獲勝。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./reversi')),
   },
   {
@@ -104,7 +104,7 @@ export const GAMES: GameInfo[] = [
     icon: '🚢',
     blurb: '各自擺好 5 艘船，輪流朝對方海域開砲，先擊沉整支艦隊的人獲勝。線上對戰的佈局不經過伺服器。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./battleship')),
   },
   {
@@ -113,7 +113,7 @@ export const GAMES: GameInfo[] = [
     icon: '🔢',
     blurb: '根據 A／B 提示推理四位不重複數字，結束後分析你的每一步。也能各藏一組數字，和電腦或朋友線上對戰。',
     tags: ['你猜', '電腦猜', '對戰', '線上'],
-    category: '單人',
+    category: '雙人對戰',
     component: lazy(() => import('./ab')),
   },
   {
