@@ -133,3 +133,69 @@ export type SoloRun = {
 }
 
 export type GamesReport = { rooms: LiveRoom[]; solo: SoloRun[] }
+
+/** 系統管理的主機監控，見後端 monitor.rs */
+export type MonitorProcess = {
+  pid: number
+  cmd: string
+  /** 佔整台主機的 % */
+  cpu: number
+  rss: number
+  threads: number
+  /** Unix 秒 */
+  started_at: number
+}
+
+export type MonitorGroup = {
+  kind: 'service' | 'container' | 'session' | 'self' | 'other'
+  name: string
+  cgroup: string
+  cpu: number
+  rss: number
+  started_at: number
+  processes: MonitorProcess[]
+}
+
+export type MonitorSnapshot = {
+  sampled_at: number
+  kernel: string
+  cpu_model: string
+  cpus: number
+  uptime_secs: number
+  load: [number, number, number]
+  cpu: { busy: number; iowait: number; steal: number } | null
+  memory: { total: number; available: number; swap_total: number; swap_free: number }
+  disk: { total: number; used: number; available: number; data_bytes: number } | null
+  disk_io: { read_bps: number; write_bps: number } | null
+  net: { rx_bps: number; tx_bps: number } | null
+  groups: MonitorGroup[]
+}
+
+export type MonitorTarget = {
+  id: number
+  label: string
+  pattern: string
+  processes: number
+  cpu: number
+  rss: number
+  started_at: number | null
+}
+
+export type MonitorStatus = {
+  snapshot: MonitorSnapshot | null
+  error: string | null
+  targets: MonitorTarget[]
+}
+
+export type MonitorPoint = {
+  t: number
+  cpu: number
+  mem_used: number
+  rx_bps: number
+  tx_bps: number
+  read_bps: number
+  write_bps: number
+  targets: { id: number; cpu: number; rss: number; processes: number }[]
+}
+
+export type MonitorHistory = { step_secs: number; points: MonitorPoint[] }

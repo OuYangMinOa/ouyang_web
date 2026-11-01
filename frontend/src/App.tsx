@@ -26,6 +26,7 @@ import AdminFeedback from './pages/admin/Feedback'
 import AdminGames from './pages/admin/Games'
 import AdminRegistrations from './pages/admin/Registrations'
 import AdminRoles from './pages/admin/Roles'
+import AdminSystem from './pages/admin/System'
 import AdminUsers from './pages/admin/Users'
 import AdminVisits from './pages/admin/Visits'
 import Home from './pages/Home'
@@ -263,6 +264,7 @@ function App() {
                 <Route path="feedback" element={<AdminFeedback />} />
                 <Route path="access" element={<AdminAccess />} />
                 <Route path="visits" element={<AdminVisits />} />
+                <Route path="system" element={<AdminSystem />} />
                 <Route path="games" element={<AdminGames />} />
               </Route>
               <Route path="*" element={<p className="muted">找不到這個頁面。</p>} />
