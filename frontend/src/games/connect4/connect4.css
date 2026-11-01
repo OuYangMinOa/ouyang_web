@@ -1,0 +1,153 @@
+/* 棋盤是 7 × 7 單位（6 列 + 上面一列預覽），比例接近正方形，沿用 .board-box 的寬度限制 */
+.c4-box {
+  max-width: 560px;
+}
+
+.c4-board {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  overflow: visible;
+  /* 避免點兩下放大、長按選字與點擊時的灰色閃爍 */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 8px;
+}
+.c4-board.interactive {
+  cursor: pointer;
+}
+/* 觸控點一下也會讓棋盤取得焦點，瀏覽器預設會畫一圈外框；只在用鍵盤操作時才顯示 */
+.c4-board:focus {
+  outline: none;
+}
+.c4-board:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.c4-frame {
+  fill: var(--c4-board);
+}
+.c4-rim {
+  fill: none;
+  stroke: color-mix(in srgb, var(--c4-board) 70%, var(--stone-black));
+  stroke-width: 0.04;
+  pointer-events: none;
+}
+
+.c4-disc.red {
+  fill: var(--c4-red);
+}
+.c4-disc.yellow {
+  fill: var(--c4-yellow);
+}
+.c4-disc-inner {
+  fill: none;
+  stroke-width: 0.05;
+  opacity: 0.6;
+}
+.c4-disc.red .c4-disc-inner {
+  stroke: color-mix(in srgb, var(--c4-red) 65%, var(--stone-black));
+}
+.c4-disc.yellow .c4-disc-inner {
+  stroke: color-mix(in srgb, var(--c4-yellow) 65%, var(--stone-black));
+}
+/* 棋子從預覽列往下掉，距離越遠掉越久；SVG 裡的 px 就是棋盤的單位（1 格） */
+.c4-disc.dropping {
+  animation: c4-drop calc(0.12s + var(--drop) * 0.05s) cubic-bezier(0.55, 0, 1, 0.45) both;
+}
+.c4-disc.dim {
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+.c4-disc.ghost {
+  pointer-events: none;
+}
+.c4-disc.ghost.hover {
+  opacity: 0.45;
+}
+.c4-disc.ghost.pending {
+  animation: c4-pulse 0.9s ease-in-out infinite alternate;
+}
+
+.c4-landing {
+  fill: none;
+  stroke: var(--text-h);
+  stroke-width: 0.06;
+  stroke-dasharray: 0.16 0.12;
+  opacity: 0.8;
+  pointer-events: none;
+}
+.c4-landing.pending {
+  stroke: var(--accent);
+  stroke-width: 0.09;
+  opacity: 1;
+}
+
+.c4-win {
+  fill: none;
+  stroke: var(--text-h);
+  stroke-width: 0.1;
+  pointer-events: none;
+}
+.c4-last {
+  fill: var(--stone-black);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.c4-chip {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.4em;
+  vertical-align: -0.1em;
+  border-radius: 50%;
+}
+.c4-chip.red {
+  background: var(--c4-red);
+}
+.c4-chip.yellow {
+  background: var(--c4-yellow);
+}
+
+.c4-option {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.c4-option input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+@keyframes c4-drop {
+  from {
+    transform: translateY(calc(var(--drop) * -1px));
+  }
+}
+@keyframes c4-pulse {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c4-disc.dropping,
+  .c4-disc.ghost.pending {
+    animation: none;
+  }
+  .c4-disc.dim {
+    transition: none;
+  }
+}

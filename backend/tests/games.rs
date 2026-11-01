@@ -117,6 +117,43 @@ async fn create_room_returns_code() {
 }
 
 #[tokio::test]
+async fn connect4_room_relays_moves() {
+    let (app, addr) = serve().await;
+    let code = create_room(&app, "connect4").await;
+
+    let mut a = Client::connect(&addr, &code, "connect4", "alice").await;
+    assert_eq!(a.next().await["seat"], 0);
+    let mut b = Client::connect(&addr, &code, "connect4", "bob").await;
+    assert_eq!(b.next().await["seat"], 1);
+    assert_eq!(a.next().await, json!({ "type": "peer", "online": true }));
+
+    a.send_msg(json!({ "type": "move", "col": 3 })).await;
+    let relayed = json!({ "type": "msg", "seat": 0, "data": { "type": "move", "col": 3 } });
+    assert_eq!(a.next().await, relayed);
+    assert_eq!(b.next().await, relayed);
+}
+
+#[tokio::test]
+async fn ab_versus_rooms_relay_commits() {
+    let (app, addr) = serve().await;
+    let code = create_room(&app, "ab").await;
+    let mut a = Client::connect(&addr, &code, "ab", "alice").await;
+    a.next().await;
+    let mut b = Client::connect(&addr, &code, "ab", "bob").await;
+    b.next().await;
+    a.next().await; // peer online
+
+    // 1A2B 對戰只送 commit（數字的雜湊），伺服器照樣轉送給兩邊
+    let commit = json!({ "type": "commit", "round": 0, "hash": "9f86d081884c7d65" });
+    a.send_msg(commit.clone()).await;
+    let expected = json!({ "type": "msg", "seat": 0, "data": commit });
+    assert_eq!(a.next().await, expected);
+    assert_eq!(b.next().await, expected);
+
+    Client::connect(&addr, &code, "gomoku", "carol").await.expect_error("game_mismatch").await;
+}
+
+#[tokio::test]
 async fn too_many_rooms_is_503() {
     let app = app().await;
     for _ in 0..1000 {
@@ -376,4 +413,28 @@ async fn idle_rooms_expire_and_are_cleaned_up() {
         .await
         .unwrap();
     assert_eq!(left, 0);
+}
+
+#[tokio::test]
+async fn battleship_rooms_relay_like_the_board_games() {
+    let (app, addr) = serve().await;
+    let code = create_room(&app, "battleship").await;
+
+    let mut a = Client::connect(&addr, &code, "battleship", "alice").await;
+    assert_eq!(a.next().await["seat"], 0);
+    let mut b = Client::connect(&addr, &code, "battleship", "bob").await;
+    assert_eq!(b.next().await["seat"], 1);
+    assert_eq!(a.next().await, json!({ "type": "peer", "online": true }));
+
+    // 伺服器不懂海戰棋，只看得到雜湊；佈局留在各自的瀏覽器
+    let commit = json!({ "type": "commit", "hash": "ab".repeat(32) });
+    a.send_msg(commit.clone()).await;
+    for client in [&mut a, &mut b] {
+        assert_eq!(client.next().await, json!({ "type": "msg", "seat": 0, "data": commit }));
+    }
+
+    // 其他遊戲的房間不能用海戰棋的名義連進來
+    let gomoku = create_room(&app, "gomoku").await;
+    let mut c = Client::connect(&addr, &gomoku, "battleship", "carol").await;
+    c.expect_error("game_mismatch").await;
 }

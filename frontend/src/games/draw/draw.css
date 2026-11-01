@@ -1,0 +1,346 @@
+/* ---- 你畫我猜 ---- */
+
+.dg {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dg-play {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.dg-play .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+}
+.dg-turn {
+  margin: 0;
+  text-align: center;
+}
+
+/* 選題：三個大按鈕，窄螢幕直排 */
+.dg-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.dg-choices button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  min-height: 72px;
+  min-width: 0;
+  background: var(--surface);
+  color: var(--text-h);
+  border: 2px solid var(--accent);
+}
+.dg-choices button strong {
+  font: 700 clamp(18px, 5vw, 22px) var(--serif);
+  overflow-wrap: anywhere;
+}
+.dg-choices .chip {
+  margin: 0;
+}
+
+/* 題目列：答案或每個字一格的提示 */
+.dg-word {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 10px;
+  min-height: 44px;
+}
+.dg-word .chip {
+  margin: 0;
+}
+.dg-word.known strong {
+  font: 700 26px var(--serif);
+  color: var(--text-h);
+  letter-spacing: 0.08em;
+}
+.dg-blanks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dg-blanks span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-bottom: 3px solid var(--text-h);
+  border-radius: 6px;
+  background: var(--surface);
+  font: 700 22px var(--serif);
+  color: var(--text-h);
+}
+.dg-blanks span.open {
+  color: var(--accent);
+}
+.dg-level.easy {
+  background: var(--ok);
+}
+.dg-level.medium {
+  background: var(--warn);
+}
+.dg-level.hard {
+  background: var(--danger);
+}
+
+/* 畫布：撐滿可用寬度，但不超過視窗高度（扣掉頁首、狀態列和工具列），4:3 */
+.dg-sketch {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 760px, calc((100dvh - 240px) * 4 / 3));
+  min-width: min(100%, 280px);
+  margin: 0 auto;
+}
+.dg-paper {
+  position: relative;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  line-height: 0;
+  /* 畫布是「紙」，固定白色（和 types.ts 的 PAPER 一樣），不跟主題 */
+  background: #fff;
+}
+.dg-paper.drawing {
+  border-color: var(--accent);
+}
+.dg-paper canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  /* 在手機上畫的時候頁面不能跟著捲動、也不要跳出長按選單 */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.dg-paper.drawing canvas {
+  cursor: crosshair;
+}
+.dg-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--scrim);
+  line-height: 1.4;
+  pointer-events: none;
+}
+.dg-overlay p {
+  margin: 0;
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-h);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.dg-overlay strong {
+  display: block;
+  font: 700 clamp(26px, 7vw, 40px) var(--serif);
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}
+
+/* 工具列 */
+.dg-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dg-tools .error {
+  margin: 0;
+}
+.dg-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+}
+.dg-swatch {
+  min-height: 40px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+}
+.dg-swatch.active {
+  border-color: var(--surface);
+  outline: 3px solid var(--accent);
+}
+.dg-tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dg-widths {
+  display: flex;
+  gap: 6px;
+}
+.dg-width {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+}
+.dg-width span {
+  display: block;
+  border-radius: 50%;
+  background: currentColor;
+}
+.dg-tool {
+  flex: 1 1 auto;
+  padding-inline: 12px;
+}
+
+/* 手機上猜的人在畫布正下方打字；桌機的聊天室就在旁邊，不用 */
+.dg-guess {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+}
+@container (max-width: 680px) {
+  .dg-guess {
+    display: flex;
+  }
+}
+.dg-guess-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.dg-guess-log li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dg-guess-log strong {
+  margin-right: 6px;
+  color: var(--accent);
+}
+.dg-guess-log .tone-ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+.dg-guess-log .tone-accent {
+  color: var(--accent);
+  font-weight: 700;
+}
+.dg-guess .inline-form input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 分數 */
+.dg-scores h3,
+.dg-results h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-h);
+}
+.dg-scores ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dg-scores li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.dg-scores li.me {
+  border-color: var(--accent);
+}
+.dg-scores li.offline {
+  opacity: 0.6;
+}
+.dg-score-name {
+  color: var(--text-h);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.dg-score-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+}
+.dg-score-chips .chip {
+  margin: 0;
+}
+.dg-guessed {
+  background: var(--ok);
+}
+.dg-plus {
+  color: var(--ok);
+  font-weight: 700;
+}
+.dg-score {
+  margin-left: auto;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 結算 */
+.dg-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.dg-rank tr.me td {
+  color: var(--accent);
+  font-weight: 700;
+}
+.dg-done {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dg-done li strong {
+  margin-right: 8px;
+  color: var(--text-h);
+}
+
+.dg-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dg-options p {
+  margin: 0;
+}

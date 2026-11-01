@@ -1,0 +1,259 @@
+/* ---- 誰是臥底 ---- */
+
+.uc {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.uc-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.uc-board .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.uc-lineup {
+  text-align: center;
+}
+
+/* 自己的詞：點一下遮住 */
+.uc-word {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 16px;
+  border: 2px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: center;
+  box-sizing: border-box;
+}
+.uc-word strong {
+  font: 700 clamp(28px, 8vw, 40px) var(--serif);
+  letter-spacing: 0.06em;
+  overflow-wrap: anywhere;
+}
+.uc-word.hidden {
+  border-style: dashed;
+  border-color: var(--border);
+}
+.uc-word.hidden strong {
+  color: var(--text);
+}
+.uc-word-label,
+.uc-word-hint {
+  font-size: 13px;
+  color: var(--text);
+}
+.uc-word.spectator {
+  margin: 0;
+  border: 1px dashed var(--border);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.uc-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.uc-actions p {
+  margin: 0;
+}
+.uc-actions label > span {
+  color: var(--text-h);
+}
+.uc-actions > button {
+  min-height: 44px;
+}
+.uc-actions > button.secondary {
+  align-self: flex-start;
+  min-height: 40px;
+}
+.uc-vote-hint {
+  color: var(--text-h);
+  text-align: center;
+}
+
+.uc-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 玩家：桌機三四欄，手機兩欄；投票時整張卡片就是按鈕 */
+.uc-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.uc-seat-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: left;
+}
+button.uc-seat-body {
+  border-color: var(--accent);
+  cursor: pointer;
+}
+button.uc-seat-body:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.uc-seat.chosen .uc-seat-body {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.uc-seat.chosen .chip.subtle {
+  color: var(--on-accent);
+  border-color: color-mix(in srgb, var(--on-accent) 50%, transparent);
+}
+.uc-seat.speaking .uc-seat-body {
+  border: 2px solid var(--accent);
+}
+.uc-seat.me .uc-seat-name {
+  color: var(--accent);
+}
+.uc-seat.chosen.me .uc-seat-name {
+  color: var(--on-accent);
+}
+.uc-seat.dead .uc-seat-body {
+  opacity: 0.55;
+}
+.uc-seat-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.uc-seat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.uc-seat-chips .chip {
+  margin: 0;
+}
+.uc-seat-points {
+  font-size: 12px;
+  color: var(--text);
+}
+.uc-seat.chosen .uc-seat-points {
+  color: var(--on-accent);
+}
+
+/* 身分：平民綠、臥底紅、白板灰 */
+.chip.uc-role.civilian {
+  background: var(--ok);
+  color: var(--on-accent);
+}
+.chip.uc-role.undercover {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+.chip.uc-role.blank {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.uc-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 2px solid var(--ok);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.uc-result p {
+  margin: 0;
+}
+.uc-result strong {
+  color: var(--text-h);
+}
+.uc-roles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.uc-roles li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--text-h);
+}
+.uc-roles .chip {
+  margin: 0;
+}
+
+.uc-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.uc-log-round {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.uc-log-round h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+.uc-log-round ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.uc-log-round li {
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.uc-log-round li strong {
+  margin-right: 8px;
+}
+.uc-tally {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.uc-tally-out {
+  font-weight: 600;
+}

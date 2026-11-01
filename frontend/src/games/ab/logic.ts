@@ -145,6 +145,23 @@ export function chooseGuess(pool: number[], random: () => number = Math.random):
   return ties[Math.floor(random() * ties.length)]
 }
 
+export type Level = 'easy' | 'normal' | 'hard'
+
+/** 普通難度每一步有這個機率不走最佳步，改猜池裡隨便一個 */
+const NORMAL_SLIP = 0.35
+
+/**
+ * 對戰模式的電腦：簡單只猜「跟提示對得上」的隨便一個，普通偶爾改猜池裡隨便一個，困難每一步都用 chooseGuess
+ * （和「電腦猜」模式一樣，有時會猜池外的數字當探測，換到更多資訊）。
+ */
+export function chooseGuessAt(pool: number[], level: Level, random: () => number = Math.random): number {
+  if (pool.length === 0) return -1
+  if (level === 'easy' || (level === 'normal' && random() < NORMAL_SLIP)) {
+    return pool[Math.floor(random() * pool.length)]
+  }
+  return chooseGuess(pool, random)
+}
+
 // ---- 賽後分析 ----
 
 export type Violation = { step: number; guess: string; expected: string; actual: string }
@@ -254,8 +271,12 @@ export function analyzeStep(clues: Clue[], k: number, pool: number[]): StepAnaly
   }
 }
 
-/** 整局分析；solved 表示最後一次是 4A0B，否則是放棄 */
-export function summarize(steps: StepAnalysis[], solved: boolean, hidden: boolean): Summary {
+/**
+ * 整局分析；solved 表示最後一次是 4A0B，否則是放棄。
+ * `hidden` 是玩家把「可能組合」清單藏起來了；`versus` 是對戰模式：畫面上沒有那份清單，
+ * 沒猜中也不是放棄，而是被對手先猜中。
+ */
+export function summarize(steps: StepAnalysis[], solved: boolean, hidden: boolean, versus = false): Summary {
   const total = steps.length
   const outOfPool = steps.filter((s) => !s.inPool).map((s) => s.step)
   const wasted = steps.filter((s) => s.verdict === 'wasted').map((s) => s.step)
@@ -267,8 +288,8 @@ export function summarize(steps: StepAnalysis[], solved: boolean, hidden: boolea
   if (wasted.length) {
     tips.push(
       `${joinSteps(wasted)}猜了不可能是答案的數字，而且切分效果也不如當時的可能組合。` +
-        (hidden ? '可以打開「可能組合」清單參考，' : '建議參考右側的可能組合，') +
-        '或在送出前先確認新的猜測跟之前每一次的提示都對得上。',
+        (versus ? '可以' : hidden ? '可以打開「可能組合」清單參考，或' : '建議參考右側的可能組合，或') +
+        '在送出前先確認新的猜測跟之前每一次的提示都對得上。',
     )
   }
   const lateMiss = steps.filter((s) => !s.inPool && s.before <= 2)
@@ -293,7 +314,7 @@ export function summarize(steps: StepAnalysis[], solved: boolean, hidden: boolea
     tips.push(`${joinSteps(probes)}雖然不可能是答案，但把可能組合切得跟池內任何猜測一樣好甚至更好，是聰明的探測。`)
   }
   if (!solved) {
-    tips.push(`放棄時還剩 ${remaining} 種可能${remaining <= 10 ? '，其實已經很接近了，下次再撐一下！' : '。'}`)
+    tips.push(`${versus ? '對局結束時' : '放棄時'}還剩 ${remaining} 種可能${remaining <= 10 ? '，其實已經很接近了，下次再撐一下！' : '。'}`)
   } else if (total > 7) {
     tips.push(`這局用了 ${total} 次；照「期望剩餘數最小」的策略，平均大約 ${COMPUTER_AVERAGE} 次就能猜中。`)
   }

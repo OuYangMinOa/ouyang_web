@@ -1,7 +1,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 
 /** 側邊欄的分組，順序就是顯示順序 */
-export const GAME_CATEGORIES = ['多人對戰', '棋類對戰', '單人'] as const
+export const GAME_CATEGORIES = ['多人對戰', '派對', '雙人對戰', '單人'] as const
 
 export type GameInfo = {
   /** 網址用的 id：/games/<id> */
@@ -36,6 +36,33 @@ export const GAMES: GameInfo[] = [
     component: lazy(() => import('./puyo')),
   },
   {
+    id: 'undercover',
+    name: '誰是臥底',
+    icon: '🕵️',
+    blurb: '大家拿到相近的兩個詞，輪流用一句話描述，再投票找出臥底。3～10 人，可以加電腦，也能當面玩。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazy(() => import('./undercover')),
+  },
+  {
+    id: 'bigtwo',
+    name: '大老二',
+    icon: '🃏',
+    blurb: '台灣玩法的大老二：4 人輪流出牌，先出完的人贏。開房間邀朋友，人不夠由電腦補位，規則細節可以調。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazy(() => import('./bigtwo')),
+  },
+  {
+    id: 'draw',
+    name: '你畫我猜',
+    icon: '🎨',
+    blurb: '輪流畫圖，其他人在聊天室猜答案，越早猜中分數越高。2～10 人，手機也能畫。',
+    tags: ['多人', '線上'],
+    category: '派對',
+    component: lazy(() => import('./draw')),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',
@@ -50,8 +77,17 @@ export const GAMES: GameInfo[] = [
     icon: '⚫',
     blurb: '先連成五子的一方獲勝。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./gomoku')),
+  },
+  {
+    id: 'connect4',
+    name: '四子棋',
+    icon: '🔴',
+    blurb: '棋子從上方落下，先在橫、直、斜連成四子的一方獲勝。',
+    tags: ['電腦', '本地', '線上'],
+    category: '雙人對戰',
+    component: lazy(() => import('./connect4')),
   },
   {
     id: 'xiangqi',
@@ -59,7 +95,7 @@ export const GAMES: GameInfo[] = [
     icon: '🀄',
     blurb: '楚河漢界，將死對方的帥／將。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./xiangqi')),
   },
   {
@@ -68,7 +104,7 @@ export const GAMES: GameInfo[] = [
     icon: '♟️',
     blurb: '完整規則：入堡、吃過路兵、升變。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./chess')),
   },
   {
@@ -77,16 +113,25 @@ export const GAMES: GameInfo[] = [
     icon: '⚪',
     blurb: '夾住就翻面，最後棋子多的一方獲勝。',
     tags: ['電腦', '本地', '線上'],
-    category: '棋類對戰',
+    category: '雙人對戰',
     component: lazy(() => import('./reversi')),
+  },
+  {
+    id: 'battleship',
+    name: '海戰棋',
+    icon: '🚢',
+    blurb: '各自擺好 5 艘船，輪流朝對方海域開砲，先擊沉整支艦隊的人獲勝。線上對戰的佈局不經過伺服器。',
+    tags: ['電腦', '本地', '線上'],
+    category: '雙人對戰',
+    component: lazy(() => import('./battleship')),
   },
   {
     id: 'ab',
     name: '1A2B 猜數字',
     icon: '🔢',
-    blurb: '根據 A／B 提示推理四位不重複數字，結束後分析你的每一步。',
-    tags: ['你猜', '電腦猜'],
-    category: '單人',
+    blurb: '根據 A／B 提示推理四位不重複數字，結束後分析你的每一步。也能各藏一組數字，和電腦或朋友線上對戰。',
+    tags: ['你猜', '電腦猜', '對戰', '線上'],
+    category: '雙人對戰',
     component: lazy(() => import('./ab')),
   },
   {
@@ -102,9 +147,9 @@ export const GAMES: GameInfo[] = [
     id: 'minesweeper',
     name: '踩地雷',
     icon: '💣',
-    blurb: '第一下保證安全，手機可切換插旗模式。',
-    tags: ['單人'],
-    category: '單人',
+    blurb: '第一下保證安全，手機可切換插旗模式。也能開房間線上競速：大家同一個盤面、地雷只在伺服器上，比誰先解開。',
+    tags: ['單人', '線上', '電腦'],
+    category: '多人對戰',
     component: lazy(() => import('./minesweeper')),
   },
 ]

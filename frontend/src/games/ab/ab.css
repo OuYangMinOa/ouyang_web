@@ -251,6 +251,153 @@
   color: var(--danger);
 }
 
+/* 對戰 */
+.ab-slots.idle .ab-slot {
+  color: var(--text);
+  border-style: dashed;
+}
+/* 筆記標過的數字：排除的變淡、確定的變綠（鍵盤和筆記列共用） */
+.ab-keypad button.mark-out:not(:disabled),
+.ab-notes-grid button.mark-out {
+  color: var(--text);
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+.ab-keypad button.mark-in:not(:disabled),
+.ab-notes-grid button.mark-in {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.ab-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+}
+.ab-secret strong {
+  font-size: 22px;
+  color: var(--text-h);
+}
+.ab-secret button {
+  padding: 4px 12px;
+}
+
+.ab-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(100%, 420px);
+  margin: 0 auto;
+}
+.ab-notes-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  font-size: 14px;
+}
+.ab-notes-head button {
+  padding: 4px 12px;
+}
+.ab-notes-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+  touch-action: manipulation;
+}
+.ab-notes-grid button {
+  padding: 0;
+  font: 600 17px var(--mono);
+}
+
+.ab-vs-logs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.ab-vs-log {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.ab-vs-log.active {
+  border-color: var(--accent);
+}
+.ab-vs-log h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.ab-vs-log h3 .chip {
+  margin: 0;
+}
+.ab-vs-log p {
+  margin: 0;
+  font-size: 14px;
+}
+.ab-vs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 15px;
+}
+.ab-vs-list li {
+  display: grid;
+  grid-template-columns: 1.6em auto auto;
+  justify-content: start;
+  gap: 10px;
+  padding: 2px 0;
+}
+.ab-vs-list li + li {
+  border-top: 1px solid var(--border);
+}
+.ab-vs-no {
+  color: var(--text);
+  text-align: right;
+}
+
+.ab-vs-reveal {
+  margin-top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 32px;
+  text-align: center;
+}
+.ab-vs-reveal > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ab-vs-reveal strong {
+  font-size: 26px;
+  color: var(--text-h);
+}
+.ab-vs-reveal p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.ab-vs-analysis summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  font-weight: 600;
+  color: var(--text-h);
+  cursor: pointer;
+}
+.ab-vs-rules p {
+  margin: 0 0 6px;
+}
+
 @media (max-width: 640px) {
   .ab-slot {
     width: 52px;
@@ -259,5 +406,14 @@
   }
   .ab-stats dd {
     font-size: 18px;
+  }
+  .ab-notes-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .ab-vs-log {
+    padding: 8px;
+  }
+  .ab-vs-list li {
+    gap: 6px;
   }
 }
