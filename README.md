@@ -107,7 +107,7 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 後端只負責轉送訊息，不懂遊戲規則；規則由兩端各自執行（`frontend/src/games/shared/useRoom.ts`、`backend/src/games.rs`）。不需要登入，但登入後會用帳號認座位。
 
 ```
-POST /api/games/rooms  {"game":"gomoku"}  →  201 {"code":"ABCDE"}      game：gomoku / xiangqi / chess / reversi
+POST /api/games/rooms  {"game":"gomoku"}  →  201 {"code":"ABCDE"}      game：gomoku / xiangqi / chess / reversi / ab
 GET  /api/games/rooms/{code}/ws?game=<id>&player=<id>                  升級成 WebSocket（登入時 player 可省略）
 
 client → server  {type:"msg", data}
@@ -129,6 +129,15 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
 - 房間、座位和歷史存在資料庫（`game_rooms`、`game_events`），記憶體只放有人連線中的房間。重啟或換版後，前端自動重連就能接著下。
 - 換版的幾秒內新舊容器可能各有同一個房間的連線：座位用條件式 UPDATE 搶，事件用 `(room_code, seq)` 主鍵擋重複序號。
   寫入時序號撞到，就關掉那個容器裡這個房間的連線，前端重連後從資料庫重新載入，送出的那一步要重下。
+
+### 1A2B 對戰
+
+`/games/ab` 的「對戰」：雙方各藏一組數字輪流猜，可以對電腦（三種難度）或線上。線上一樣走上面的轉送房間，
+但轉送伺服器會把訊息給雙方看，所以祕密數字絕對不送出去（`frontend/src/games/ab/versusRules.ts`）：
+
+- 開局各自送 `commit = SHA-256("數字:salt")`（salt 是 16 bytes 亂數，不能靠 5040 種窮舉回推；用 `hash-wasm`，http 的 staging 也能算）。
+- 對方猜了，由被猜的那一方的瀏覽器用自己的數字算 A／B 自動回報；數字和 salt 存在 localStorage（連 commit 一起存），重連後重播歷史也回報得了。
+- 分出勝負後雙方公開數字和 salt，用戶端驗證雜湊和每一次回報，對不上就判那一方輸。換了裝置找不到自己的數字時只能認輸。
 
 ### 俄羅斯方塊 99
 

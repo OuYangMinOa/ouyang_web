@@ -117,6 +117,26 @@ async fn create_room_returns_code() {
 }
 
 #[tokio::test]
+async fn ab_versus_rooms_relay_commits() {
+    let (app, addr) = serve().await;
+    let code = create_room(&app, "ab").await;
+    let mut a = Client::connect(&addr, &code, "ab", "alice").await;
+    a.next().await;
+    let mut b = Client::connect(&addr, &code, "ab", "bob").await;
+    b.next().await;
+    a.next().await; // peer online
+
+    // 1A2B 對戰只送 commit（數字的雜湊），伺服器照樣轉送給兩邊
+    let commit = json!({ "type": "commit", "round": 0, "hash": "9f86d081884c7d65" });
+    a.send_msg(commit.clone()).await;
+    let expected = json!({ "type": "msg", "seat": 0, "data": commit });
+    assert_eq!(a.next().await, expected);
+    assert_eq!(b.next().await, expected);
+
+    Client::connect(&addr, &code, "gomoku", "carol").await.expect_error("game_mismatch").await;
+}
+
+#[tokio::test]
 async fn too_many_rooms_is_503() {
     let app = app().await;
     for _ in 0..1000 {
