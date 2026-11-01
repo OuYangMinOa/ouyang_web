@@ -140,7 +140,7 @@ export const GAMES: GameInfo[] = [
     icon: '💣',
     blurb: '第一下保證安全，手機可切換插旗模式。也能開房間線上競速：大家同一個盤面、地雷只在伺服器上，比誰先解開。',
     tags: ['單人', '線上', '電腦'],
-    category: '單人',
+    category: '多人對戰',
     component: lazy(() => import('./minesweeper')),
   },
 ]
