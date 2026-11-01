@@ -113,6 +113,10 @@
   --puyo-bg: #efe9dd;
   --puyo-eye: #ffffff;
   --puyo-pupil: #1c1917;
+  /* 四子棋：直立的棋盤、紅棋與黃棋 */
+  --c4-board: #2b56b8;
+  --c4-red: #dc2626;
+  --c4-yellow: #eab308;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -227,6 +231,9 @@
     --puyo-bg: #0b0a09;
     --puyo-eye: #ffffff;
     --puyo-pupil: #1c1917;
+    --c4-board: #23408a;
+    --c4-red: #f25555;
+    --c4-yellow: #facc15;
     color-scheme: dark;
   }
 }
@@ -331,6 +338,9 @@
   --puyo-bg: #0b0a09;
   --puyo-eye: #ffffff;
   --puyo-pupil: #1c1917;
+  --c4-board: #23408a;
+  --c4-red: #f25555;
+  --c4-yellow: #facc15;
   color-scheme: dark;
 }
 
