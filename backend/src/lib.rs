@@ -7,6 +7,7 @@ pub mod feedback;
 pub mod game_settings;
 pub mod games;
 pub mod music;
+pub mod party;
 pub mod puyo;
 pub mod puyo_scores;
 pub mod registration;

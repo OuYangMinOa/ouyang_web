@@ -1,0 +1,198 @@
+/* ---- 派對房間共用（誰是臥底、大老二…）：進房、房間列、大廳、聊天 ---- */
+
+.party-entry,
+.party-lobby {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-sizing: border-box;
+  min-width: 0;
+}
+.party-entry p,
+.party-lobby p {
+  margin: 0;
+}
+.party-entry > button,
+.party-lobby > button.party-start {
+  min-height: 44px;
+}
+.party-lobby > button.secondary {
+  align-self: flex-start;
+}
+.party-lobby h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-h);
+}
+.party-entry a,
+.party-lobby a {
+  color: var(--accent);
+}
+
+.party-name {
+  max-width: 320px;
+}
+
+.party-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.party-header .room-code {
+  flex-wrap: wrap;
+}
+.party-header .game-toolbar {
+  flex: 0 1 auto;
+}
+.party-header .error {
+  flex-basis: 100%;
+}
+@media (max-width: 480px) {
+  .party-header .game-toolbar {
+    flex: 1 1 100%;
+  }
+  .party-header .game-toolbar > button {
+    flex: 1 1 0;
+    min-width: fit-content;
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+}
+
+.party-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.party-roster li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 0 0 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-h);
+  max-width: 100%;
+}
+.party-roster li.me {
+  border-color: var(--accent);
+}
+.party-roster li.offline .party-roster-name {
+  color: var(--text);
+}
+.party-roster-name {
+  overflow-wrap: anywhere;
+}
+.party-roster .chip {
+  margin: 0;
+}
+.party-roster li:not(:has(.party-kick)) {
+  padding-right: 12px;
+}
+.party-kick {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+}
+.party-kick:hover {
+  color: var(--danger);
+}
+
+/* 倒數：剩 5 秒內變紅 */
+.party-timer {
+  font: 600 15px var(--mono);
+  color: var(--text-h);
+  white-space: nowrap;
+}
+.party-timer.urgent {
+  color: var(--danger);
+}
+
+.party-notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+
+.party-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.party-chat-log {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.party-chat-log li {
+  color: var(--text-h);
+  line-height: 1.5;
+}
+.party-chat-log li strong {
+  margin-right: 6px;
+  color: var(--text-h);
+}
+.party-chat-log li.mine strong {
+  color: var(--accent);
+}
+.party-chat-log li.system {
+  color: var(--text);
+  font-size: 13px;
+}
+.party-chat-log li.tone-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+.party-chat-log li.tone-accent {
+  color: var(--accent);
+  font-weight: 600;
+}
+.party-chat-log li.tone-danger {
+  color: var(--danger);
+  font-weight: 600;
+}
+.party-chat-private {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .party-chat-log {
+    height: 200px;
+  }
+}
