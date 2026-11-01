@@ -10,6 +10,7 @@ pub mod game_monitor;
 pub mod game_settings;
 pub mod games;
 pub mod minesrace;
+pub mod monitor;
 pub mod music;
 pub mod party;
 pub mod puyo;
@@ -38,7 +39,7 @@ use axum::{
     http::StatusCode,
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -82,6 +83,8 @@ pub struct AppState {
     pub visit_limiter: Arc<visits::VisitLimiter>,
     /// 全站的 IP 訪問紀錄，背景整批寫進資料庫（見 access_log.rs）
     pub access_log: Arc<access_log::AccessLog>,
+    /// 主機監控：背景取樣的 CPU、記憶體、磁碟和各服務的用量（見 monitor.rs）
+    pub monitor: Arc<monitor::Monitor>,
 }
 
 impl AppState {
@@ -106,6 +109,7 @@ impl AppState {
             weather: Arc::default(),
             visit_limiter: Arc::default(),
             access_log: Arc::default(),
+            monitor: Arc::default(),
         }
     }
 }
@@ -134,6 +138,10 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/feedback/{id}/messages", post(feedback::admin_reply))
         .route("/admin/feedback/{id}/status", put(feedback::admin_set_status))
         .route("/admin/games", get(game_monitor::report))
+        .route("/admin/system", get(monitor::status))
+        .route("/admin/system/history", get(monitor::history))
+        .route("/admin/system/targets", post(monitor::create_target))
+        .route("/admin/system/targets/{id}", delete(monitor::delete_target))
         .route("/admin/visits/{page}", get(visits::list_sessions))
         .route("/admin/visits/{page}/{session}", get(visits::session_events))
         .route("/visits/{page}", post(visits::track))

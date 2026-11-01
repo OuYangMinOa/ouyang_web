@@ -14,12 +14,16 @@ services:
       EEW_RELAY_URL: ${EEW_RELAY_URL:-ws://host.docker.internal:8080/relay}
       # 中央氣象署開放資料的授權碼，放在伺服器上的 secrets.env（不進 git）；沒設定就不抓氣象署的資料
       CWA_API_KEY: ${CWA_API_KEY:-}
+      # 系統管理的主機監控讀主機的 /proc（整台的 CPU、記憶體、網路，以及主機上每個服務和 bot 的行程）
+      HOST_PROC: /host/proc
     extra_hosts:
       - host.docker.internal:host-gateway
     volumes:
       - data:/data
       # 音樂 APP 的檔案由 Discord bot（Xiao-Xia）放進這個資料夾，容器只讀不寫
       - ${MUSIC_HOST_DIR:?MUSIC_HOST_DIR is required}:/music:ro
+      # 唯讀；容器是 nonroot，只讀得到一般使用者也讀得到的部分（看不到別的行程的環境變數）
+      - /proc:/host/proc:ro
     networks:
       - ouyang-web
     mem_limit: ${MEM_LIMIT:-256m}
