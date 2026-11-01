@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { Link, useParams } from 'react-router'
 import { findGame } from './registry'
+import { PageMusic } from './shared/PageMusic'
 import './games.css'
 
 export default function GamePage() {
@@ -26,6 +27,7 @@ export default function GamePage() {
         <h1>
           <span aria-hidden="true">{game.icon}</span> {game.name}
         </h1>
+        {game.music && <PageMusic key={game.id} game={game.id} load={game.music} />}
       </div>
       <Suspense fallback={<p className="muted">載入中…</p>}>
         {/* key：從一個遊戲切到另一個時整個重來，不沿用狀態 */}

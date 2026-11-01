@@ -1,4 +1,5 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
+import type { Song } from './shared/music'
 
 /** 側邊欄的分組，順序就是顯示順序 */
 export const GAME_CATEGORIES = ['多人對戰', '派對', '雙人對戰', '單人'] as const
@@ -13,6 +14,8 @@ export type GameInfo = {
   tags: string[]
   category: (typeof GAME_CATEGORIES)[number]
   component: LazyExoticComponent<ComponentType>
+  /** 背景音樂（標題旁有開關）；俄羅斯方塊、魔法氣泡在遊戲裡自己播，不用填 */
+  music?: () => Promise<{ default: Song }>
 }
 
 // 每個遊戲各自打包，進到那一頁才下載
@@ -43,6 +46,7 @@ export const GAMES: GameInfo[] = [
     tags: ['多人', '線上', '電腦'],
     category: '派對',
     component: lazy(() => import('./undercover')),
+    music: () => import('./undercover/song'),
   },
   {
     id: 'bigtwo',
@@ -52,6 +56,7 @@ export const GAMES: GameInfo[] = [
     tags: ['多人', '線上', '電腦'],
     category: '派對',
     component: lazy(() => import('./bigtwo')),
+    music: () => import('./bigtwo/song'),
   },
   {
     id: 'draw',
@@ -61,6 +66,7 @@ export const GAMES: GameInfo[] = [
     tags: ['多人', '線上'],
     category: '派對',
     component: lazy(() => import('./draw')),
+    music: () => import('./draw/song'),
   },
   {
     id: 'snake',
@@ -70,6 +76,7 @@ export const GAMES: GameInfo[] = [
     tags: ['單人'],
     category: '單人',
     component: lazy(() => import('./snake')),
+    music: () => import('./snake/song'),
   },
   {
     id: 'gomoku',
@@ -79,6 +86,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazy(() => import('./gomoku')),
+    music: () => import('./gomoku/song'),
   },
   {
     id: 'connect4',
@@ -88,6 +96,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazy(() => import('./connect4')),
+    music: () => import('./connect4/song'),
   },
   {
     id: 'xiangqi',
@@ -97,6 +106,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazy(() => import('./xiangqi')),
+    music: () => import('./xiangqi/song'),
   },
   {
     id: 'chess',
@@ -106,6 +116,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazy(() => import('./chess')),
+    music: () => import('./chess/song'),
   },
   {
     id: 'reversi',
@@ -115,6 +126,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazy(() => import('./reversi')),
+    music: () => import('./reversi/song'),
   },
   {
     id: 'battleship',
@@ -124,6 +136,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazy(() => import('./battleship')),
+    music: () => import('./battleship/song'),
   },
   {
     id: 'ab',
@@ -133,6 +146,7 @@ export const GAMES: GameInfo[] = [
     tags: ['你猜', '電腦猜', '對戰', '線上'],
     category: '雙人對戰',
     component: lazy(() => import('./ab')),
+    music: () => import('./ab/song'),
   },
   {
     id: 'sudoku',
@@ -142,6 +156,7 @@ export const GAMES: GameInfo[] = [
     tags: ['單人'],
     category: '單人',
     component: lazy(() => import('./sudoku')),
+    music: () => import('./sudoku/song'),
   },
   {
     id: 'minesweeper',
@@ -151,6 +166,7 @@ export const GAMES: GameInfo[] = [
     tags: ['單人', '線上', '電腦'],
     category: '多人對戰',
     component: lazy(() => import('./minesweeper')),
+    music: () => import('./minesweeper/song'),
   },
 ]
 
