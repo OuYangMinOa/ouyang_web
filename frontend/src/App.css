@@ -9,6 +9,18 @@ main:has(.app-layout) {
 
 /* ---- 頁首：品牌、切換 APP、（手機）APP 選單、主題、帳號 ---- */
 
+/* 頁首（和底下的地震速報）固定在畫面上方；高度由 App.tsx 寫進 --site-top-h */
+.site-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+}
+/* 跳到頁內錨點時不要被頁首蓋住 */
+:root {
+  scroll-padding-top: var(--site-top-h, 0px);
+}
+
 .site-header {
   /* 手機版的下拉選單以頁首為基準展開，也要蓋在遊戲畫面上 */
   position: relative;

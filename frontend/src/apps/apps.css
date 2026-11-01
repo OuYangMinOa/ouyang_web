@@ -23,11 +23,13 @@
 
 .app-sidebar {
   position: sticky;
-  top: 16px;
+  /* 讓出固定在上方的頁首 */
+  top: calc(var(--site-top-h, 0px) + 16px);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: calc(100dvh - 32px);
+  /* 上面讓 16px、下面留 main 的 64px 下邊距：捲到底時側邊欄才不會被往上頂進頁首底下 */
+  max-height: calc(100dvh - var(--site-top-h, 0px) - 80px);
   overflow: hidden auto;
 }
 
