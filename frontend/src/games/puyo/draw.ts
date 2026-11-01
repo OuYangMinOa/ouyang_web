@@ -9,6 +9,11 @@ export type Palette = {
   pupil: string
   danger: string
   warn: string
+  /** 大逃殺的小盤面用 */
+  text: string
+  muted: string
+  accent: string
+  scrim: string
 }
 
 /** Canvas 不認得 CSS 變數，只能從計算後的樣式讀出實際顏色（主題切換時要重讀） */
@@ -23,6 +28,10 @@ export function readPalette(): Palette {
     pupil: v('--puyo-pupil'),
     danger: v('--danger'),
     warn: v('--warn'),
+    text: v('--text-h'),
+    muted: v('--text'),
+    accent: v('--accent'),
+    scrim: v('--scrim'),
   }
 }
 

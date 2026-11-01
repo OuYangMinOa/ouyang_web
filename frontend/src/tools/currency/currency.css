@@ -27,11 +27,6 @@
 .fx select:disabled {
   opacity: 0.5;
 }
-.fx option,
-.fx optgroup {
-  background: var(--surface);
-  color: var(--text-h);
-}
 .fx select:focus-visible,
 .fx-plot:focus-visible {
   outline: 2px solid var(--accent);

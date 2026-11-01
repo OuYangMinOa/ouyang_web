@@ -8,6 +8,8 @@
  * 規則核心（`settle`、`findGroups`、`chainScore`…）是不改狀態的純函式，電腦玩家模擬落點也用同一套。
  */
 
+import { withBadges } from '../shared/badges'
+
 export const COLS = 6
 export const ROWS = 12
 /** 可見區上方的第 13 列：可以放氣泡，但不會被消掉 */
@@ -224,6 +226,8 @@ export class Puyo {
   pending = 0
   /** 送出的干擾泡總數 */
   sent = 0
+  /** 大逃殺的徽章點數，讓送出的干擾泡變多 */
+  badges = 0
   events: GameEvent[] = []
   /** 遊戲時間（毫秒） */
   clock = 0
@@ -507,6 +511,7 @@ export class Puyo {
       n += ALL_CLEAR_NUISANCE
       this.allClearBonus = false
     }
+    n = withBadges(n, this.badges)
     const cancel = Math.min(n, this.pending)
     this.pending -= cancel
     this.outgoing += n - cancel

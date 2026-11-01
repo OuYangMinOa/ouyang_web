@@ -44,7 +44,17 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+
+### 回報與許願
+
+頁首右上角的「💬 回報 / 許願」進 `/feedback`，每一筆是一串對話，管理員在 `/admin/feedback` 回覆、結案或刪除，雙方可以一直來回留言（`backend/src/feedback.rs`）。
+
+- 不用登入也能送：訪客第一次送出時會拿到 HttpOnly cookie `feedback_<env>`（Path 只到 `/api/feedback`），之後靠它認出自己的對話。登入的人用帳號，也看得到同一個瀏覽器先前以訪客身分送出的。
+- 圖片可以 Ctrl+V 貼上、拖曳或選檔。一貼上就先上傳（`POST /api/feedback/images`，body 是圖片本身，上限 5 MB；太大的前端會先縮小成 WebP），送出留言時才掛上去，一天內沒掛上的會被清掉。
+  後端看檔頭只收 PNG / JPEG / GIF / WebP，圖片存在 SQLite（`feedback_images`），只有對話雙方和管理員看得到。
+- 未讀：雙方各記看到哪一則，頁首的紅點是有新回覆的對話數；管理員的紅點還包含使用者的新留言。頁面開著時每 20 秒看一次有沒有新留言。
+- 同一個 IP 一天最多開 10 串、留 100 則、傳 60 張圖（管理員不受限）。
 
 ### 建立或救回管理員
 
@@ -123,7 +133,7 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
 ### 俄羅斯方塊 99
 
 `/games/tetris`：參考 Tetris 99 的大逃殺，一間最多 99 人，人不夠由電腦補位。和上面的棋類不同，伺服器懂一部分規則
-（`backend/src/tetris.rs`，協定寫在 `frontend/src/games/tetris/useArena.ts`）：
+（`backend/src/arena.rs`，和魔法氣泡共用；俄羅斯方塊的盤面格式和電腦玩家在 `tetris.rs`。協定寫在 `frontend/src/games/shared/useArena.ts`）：
 
 ```
 POST /api/games/tetris/rooms  {"public":true}  →  201 {"code":"ABCDE"}   public：快速配對，加入正在等人的公開房間，沒有就開一間
@@ -133,6 +143,8 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 - 每個人的盤面在自己的瀏覽器裡跑（`engine.ts`：SRS、7-bag、T／L／J／S／Z／I 的 spin、連擊、B2B），伺服器只收攻擊行數、盤面快照和出局，
   負責選目標（隨機／快輸的／徽章／反擊，或手動點小盤面）、轉送垃圾行、算 KO、徽章、名次與速度等級，以及模擬電腦玩家。
 - 房間每 250ms 推進一次，這段時間的狀態和盤面變化合併成一則廣播。
+- 電腦玩家沒有真的在下方塊，是用機率模擬放塊、消行和被攻擊推高。大部分是弱的，前期就會陸續出局；每 7 個有 1 個強的（至少一個）撐到後面。
+  等級越高越容易失誤，只剩電腦時大約四、五分鐘分出勝負。調整時用 `cargo test --release pacing -- --ignored --nocapture` 看每個時間點出局了幾個。
 - 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
 - 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
 - 單人模式每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限；分數照官方規則（消行、spin、B2B、連擊、全消乘上等級，加上下落格數）。
@@ -160,8 +172,8 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 
 ### 魔法氣泡
 
-`/games/puyo`：參考ぷよぷよ通的規則，單人模式和一對一對戰電腦，全部在瀏覽器裡跑（`frontend/src/games/puyo/`）。
-和俄羅斯方塊共用快捷鍵、背景音樂合成器和排行榜元件（`games/shared/`）。
+`/games/puyo`：參考ぷよぷよ通的規則，有單人模式、一對一對戰電腦（全部在瀏覽器裡跑，`frontend/src/games/puyo/`），
+以及和俄羅斯方塊一樣的大逃殺。和俄羅斯方塊共用快捷鍵、背景音樂合成器、排行榜和大逃殺的元件（`games/shared/`）。
 
 - 規則（`engine.ts`）：6 × 12 的盤面加上看不到的第 13 列，兩顆一組、四種顏色，同色 4 顆以上相連就消掉，可以連鎖。
   分數照官方公式：10 × 消掉的顆數 × (連鎖倍率 + 連結加成 + 顏色加成)。第 3 欄最上面被堵住就輸。
@@ -181,6 +193,16 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 
   伺服器檢查：盤面沒有懸空的氣泡、沒有該消沒消的四連、顆數等於「組數 × 2 − 消掉的 − 疊出界的」；
   分數增加不超過「消掉的顆數 × 9990」（倍率上限 999）加上下落與全消的分數。前端只在有一組在操作時回報（連鎖途中的盤面還沒算完）。
+- 大逃殺（`backend/src/puyo.rs`）：房間、選目標、KO 和徽章和俄羅斯方塊共用 `arena.rs`，只能用房間代碼或邀請連結加入（沒有快速配對）。
+  攻擊單位是干擾泡顆數，盤面是 13 × 6 個 `0`～`5`（含看不到的第 13 列，`5` 是干擾泡）；速度等級最多用到 10：
+
+  ```
+  POST /api/games/puyo/rooms  →  201 {"code":"ABCDE"}
+  GET  /api/games/puyo/rooms/{code}/ws?player=<id>&name=<暱稱>
+  ```
+
+  電腦玩家每一手放兩顆，其中一部分「有用」，存夠了就引爆一串連鎖（強的打得比較長），干擾泡照前端的公式換算（含加時）；
+  弱的放得亂，沒用的氣泡越積越高。
 - 背景音樂是另外寫的一段輕快小曲（`puyo/music.ts`），不是原作配樂。快捷鍵存在 `/api/games/puyo/settings`（格式同俄羅斯方塊）。
 
 ## 日曆
@@ -228,6 +250,7 @@ GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可
 
 - 用 middleware 記錄，IP 跟登入限制一樣取 Traefik 的 X-Forwarded-For。前端打包出來的靜態檔（`STATIC_DIR` 最上層有的檔案和資料夾）、
   `/api/health` 和這個頁面自己的查詢不記；不存在的路徑（掃描器找的 `/wp-login.php`、`/.env`）會記。
+  前端沒有點開頭的路徑，所以 `/.env`、`/.git/config` 這類直接回 404，不會拿到 index.html（`lib.rs` 的 `hide_dot_paths`）。
 - 請求本身不碰資料庫：先放在記憶體，背景每 2 秒整批寫進 `access_logs`，帳號也是那時才從 session 查（登入那一次還沒有 cookie、
   登出那一次 session 已刪，都算訪客）。關機時會寫完剩下的，被強制結束的話最後幾秒會遺失。
 - 保留 30 天，每小時清一次。同一個 IP 10 分鐘超過 1000 筆的部分不記，避免被灌爆。

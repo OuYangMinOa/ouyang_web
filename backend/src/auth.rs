@@ -208,7 +208,7 @@ pub async fn upsert_admin(pool: &SqlitePool, username: &str, password: String) -
 
 // ---- session ----
 
-fn random_token() -> Result<String, AppError> {
+pub(crate) fn random_token() -> Result<String, AppError> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|err| AppError::Internal(format!("getrandom: {err}")))?;
     Ok(hex(&bytes))

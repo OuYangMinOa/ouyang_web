@@ -1,65 +1,26 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { errorMessage } from '../../api'
 import { useAuth } from '../../auth'
+import { ArenaIdentity, ArenaScreen, JoinForm, MAX_PLAYERS } from '../shared/Arena'
 import { useFlash } from '../shared/flash'
 import { KeyEditor } from '../shared/KeyEditor'
 import { keyNames } from '../shared/keys'
 import { load, save } from '../shared/storage'
-import { GameLayout, MusicButton, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
-import type { MiniInfo } from './draw'
-import { badgeCount, describe, Tetris } from './engine'
+import { GameLayout, MusicButton, Overlay, StatusLine, Toolbar } from '../shared/ui'
+import { useArena } from '../shared/useArena'
+import { useArenaMatch, type ArenaEngine } from '../shared/useArenaMatch'
+import { readPalette } from './draw'
+import { COLS, describe, Tetris } from './engine'
 import { useKeys, type Action, type KeySettings } from './keys'
 import { CHECKPOINT_MS, formatScore, Leaderboard, RunReporter, useLeaderboard, type RunState } from './Leaderboard'
-import { MiniBoards } from './MiniBoards'
 import { useMusic } from './music'
 import { Playfield, type PlayfieldHooks } from './Playfield'
-import {
-  MAX_NAME,
-  loadName,
-  saveName,
-  useArena,
-  type Arena,
-  type ArenaPlayer,
-  type ArenaState,
-  type Strategy,
-} from './useArena'
 import './tetris.css'
-
-const MAX_PLAYERS = 99
-/** 盤面送給伺服器的最短間隔 */
-const BOARD_EVERY_MS = 150
-/** 內容區比這寬時，小盤面放在主盤面兩側 */
-const WIDE_PX = 760
-
-const STRATEGIES: { value: Strategy; label: string; hint: string }[] = [
-  { value: 'random', label: '隨機', hint: '每隔幾秒隨機換一個目標' },
-  { value: 'ko', label: '快輸的', hint: '瞄準盤面最高、快被頂到的人，搶 KO' },
-  { value: 'badges', label: '徽章', hint: '瞄準徽章最多的人，KO 他可以拿走他的徽章' },
-  { value: 'attackers', label: '反擊', hint: '同時反擊所有正在打你的人' },
-]
-
-const BOT_OPTIONS = [0, 10, 30, 60, 98]
 
 /** 單人模式每消這麼多行、或每玩這麼久就升一級（後端檢查分數時用一樣的規則） */
 const LINES_PER_LEVEL = 10
 const MS_PER_LEVEL = 60_000
-
-function stars(points: number): string {
-  const n = badgeCount(points)
-  return '★'.repeat(n) + '☆'.repeat(4 - n)
-}
-
-/** 從收到的毫秒數往下倒數；`stamp` 換了（收到新的狀態）就從現在重新起算 */
-function Countdown({ ms, stamp, children }: { ms: number; stamp: unknown; children: (left: number) => ReactNode }) {
-  const [left, setLeft] = useState(ms)
-  useEffect(() => {
-    const end = performance.now() + ms
-    const id = setInterval(() => setLeft(Math.max(0, end - performance.now())), 100)
-    return () => clearInterval(id)
-  }, [ms, stamp])
-  return <>{children(left)}</>
-}
 
 export default function TetrisGame() {
   const [params] = useSearchParams()
@@ -128,24 +89,10 @@ function Help({ settings, onEdit }: { settings: KeySettings; onEdit?: () => void
 }
 
 function Menu({ onPractice }: { onPractice: () => void }) {
-  const arena = useArena({})
-  const { user, loading } = useAuth()
-  const location = useLocation()
-  const [name, setName] = useState(loadName)
-  const [draft, setDraft] = useState('')
+  const arena = useArena('tetris', {})
+  const { loading } = useAuth()
   const leaderboard = useLeaderboard()
   const keys = useKeys()
-
-  function changeName(value: string) {
-    const next = [...value].slice(0, MAX_NAME).join('')
-    setName(next)
-    saveName(next.trim())
-  }
-
-  function submit(e: FormEvent) {
-    e.preventDefault()
-    if (draft.trim()) arena.join(draft)
-  }
 
   return (
     <GameLayout
@@ -161,32 +108,7 @@ function Menu({ onPractice }: { onPractice: () => void }) {
           最多 {MAX_PLAYERS} 人同場的俄羅斯方塊大逃殺。消行會變成垃圾行送給你瞄準的對手，把別人頂到出局就能拿徽章、讓攻擊更強，
           活到最後的人獲勝。人不夠時由電腦補位，一個人也能玩。
         </p>
-        {user ? (
-          <p className="muted">
-            以 <strong>{user.username}</strong> 的名義參加。
-          </p>
-        ) : (
-          !loading && (
-            <>
-              <label className="tetris-name">
-                <span>暱稱</span>
-                <input
-                  value={name}
-                  onChange={(e) => changeName(e.target.value)}
-                  placeholder="訪客"
-                  maxLength={MAX_NAME * 2}
-                  autoComplete="nickname"
-                />
-              </label>
-              <p className="muted">
-                <Link to="/login" state={{ from: location.pathname + location.search }}>
-                  登入
-                </Link>
-                後會用帳號名稱，換分頁或裝置也回得到同一局。
-              </p>
-            </>
-          )
-        )}
+        <ArenaIdentity game="tetris" />
         <div className="tetris-menu-actions">
           <button type="button" onClick={() => arena.create(true)} disabled={arena.busy || loading}>
             快速配對
@@ -198,20 +120,7 @@ function Menu({ onPractice }: { onPractice: () => void }) {
             單人模式
           </button>
         </div>
-        <form className="inline-form" onSubmit={submit}>
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value.toUpperCase())}
-            placeholder="房間代碼"
-            maxLength={8}
-            autoCapitalize="characters"
-            autoComplete="off"
-            aria-label="房間代碼"
-          />
-          <button type="submit" className="secondary" disabled={!draft.trim()}>
-            加入
-          </button>
-        </form>
+        <JoinForm arena={arena} />
         {arena.error && <p className="error">{arena.error}</p>}
         <p className="muted">
           快速配對會加入正在等人的公開房間，兩個人以上就開始 20 秒倒數；私人房間把代碼或邀請連結給朋友，由房主決定電腦人數和開始時間。
@@ -408,389 +317,66 @@ function Practice({ onExit }: { onExit: () => void }) {
   )
 }
 
-type Feed = { id: number; text: string; mine: boolean }
+const ENGINE: ArenaEngine<Tetris> = {
+  game: 'tetris',
+  unit: '行',
+  shareTitle: '一起來玩俄羅斯方塊',
+  shape: { cols: COLS, hidden: 0 },
+  readPalette,
+  create: () => new Tetris(),
+  over: (g) => g.over,
+  sent: (g) => g.sent,
+  receive: (g, lines) => g.receive(lines),
+  sync: (g, level, badges) => {
+    g.level = level
+    g.badges = badges
+  },
+  drain: (g, flash) => {
+    const events = g.events.splice(0)
+    if (events.length === 0) return null
+    return events.map((r) => {
+      const label = describe(r)
+      if (label || r.sent > 0) flash(label, r.sent > 0 ? `+${r.sent} 行攻擊` : null)
+      return r.sent
+    })
+  },
+  snapshot: (g) => ({ rows: g.snapshot(), pending: g.pending() }),
+}
 
 function Online() {
-  const game = useRef<Tetris | null>(null)
-  /** 手上這局是伺服器的第幾局 */
-  const round = useRef(0)
-  const topoutSent = useRef(0)
-  const board = useRef({ last: 0, dirty: false })
-  const stateRef = useRef<ArenaState | null>(null)
-  const youRef = useRef<number | null>(null)
-  const [flash, showFlash] = useFlash()
-  const [feed, setFeed] = useState<Feed[]>([])
-  /** 畫面用：手上這局的局數和送出的行數 */
-  const [local, setLocal] = useState({ round: 0, sent: 0 })
-
-  const arena = useArena({
-    onGarbage: (lines) => {
-      const g = game.current
-      if (g && !g.over && round.current === stateRef.current?.round) {
-        g.receive(lines)
-        board.current.dirty = true
-      }
-    },
-    onKo: ({ victim, killer, place }) => {
-      const players = stateRef.current?.players ?? []
-      const name = (pid: number | null) => players.find((p) => p.pid === pid)?.name ?? '?'
-      const you = youRef.current
-      const text =
-        killer === null
-          ? `${name(victim)} 出局（第 ${place} 名）`
-          : `${killer === you ? '你' : name(killer)} KO 了 ${victim === you ? '你' : name(victim)}`
-      const mine = killer === you || victim === you
-      if (killer === you) showFlash('K.O.')
-      setFeed((prev) => [{ id: Date.now() + Math.random(), text, mine }, ...prev].slice(0, 6))
-    },
-  })
-  const { state, you } = arena
-  const me = state?.players.find((p) => p.pid === you) ?? null
-  useEffect(() => {
-    stateRef.current = state
-    youRef.current = you
-  })
-
-  const send = arena.send
-  const roundNo = state?.round ?? 0
-  const phase = state?.phase
-  const playing = !!me?.inRound && !!me.alive
-  const mine = local.round === roundNo
-  const running = phase === 'playing' && playing && mine
-  const music = useMusic(running, state?.level ?? 1)
+  const match = useArenaMatch(ENGINE)
+  const music = useMusic(match.running, match.state?.level ?? 1)
   const { keys } = useKeys()
-
-  function sendBoard() {
-    const g = game.current
-    if (!g) return
-    board.current = { last: performance.now(), dirty: false }
-    send({ type: 'board', rows: g.snapshot(), pending: g.pending() })
-  }
-
-  function frame() {
-    if (!state || !me) return
-    // 新的一局開始倒數時開新盤面；重連回來發現手上沒有這局的盤面（重新整理過），就只能認輸
-    if (playing && round.current !== roundNo) {
-      if (phase === 'countdown') {
-        game.current = new Tetris()
-        round.current = roundNo
-        topoutSent.current = 0
-        setLocal({ round: roundNo, sent: 0 })
-      } else if (phase === 'playing' && topoutSent.current !== roundNo) {
-        topoutSent.current = roundNo
-        send({ type: 'topout' })
-      }
-      return
-    }
-    const g = game.current
-    if (!g || !mine) return
-    if (g.sent !== local.sent) setLocal({ round: roundNo, sent: g.sent })
-    g.level = state.level
-    g.badges = me.badges
-    for (const r of g.events.splice(0)) {
-      if (r.sent > 0) send({ type: 'attack', lines: r.sent })
-      const label = describe(r)
-      if (label || r.sent > 0) showFlash(label, r.sent > 0 ? `+${r.sent} 行攻擊` : null)
-      board.current.dirty = true
-    }
-    if (g.over && running && topoutSent.current !== roundNo) {
-      sendBoard()
-      topoutSent.current = roundNo
-      send({ type: 'topout' })
-      return
-    }
-    if (running && board.current.dirty && performance.now() - board.current.last >= BOARD_EVERY_MS) sendBoard()
-  }
-
-  function strategy(value: Strategy) {
-    send({ type: 'strategy', strategy: value })
-  }
-
-  function onKey(code: string, action: Action | undefined): boolean {
-    if (action === 'music') {
-      music.toggle()
-      return true
-    }
-    // 數字鍵被設成別的動作的話，以那個動作為準
-    const n = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(code)
-    if (action || n < 0 || !running) return false
-    strategy(STRATEGIES[n].value)
-    return true
-  }
 
   const hooks = useRef<PlayfieldHooks>({})
   useEffect(() => {
-    hooks.current = { onFrame: frame, onKey }
+    hooks.current = {
+      onFrame: match.frame,
+      onKey: (code, action) => {
+        if (action === 'music') {
+          music.toggle()
+          return true
+        }
+        return match.onKey(code, !!action)
+      },
+    }
   })
 
-  const wrap = useRef<HTMLDivElement>(null)
-  const [wide, setWide] = useState(false)
-  useEffect(() => {
-    const el = wrap.current
-    if (!el) return
-    const ro = new ResizeObserver(() => setWide(el.clientWidth >= WIDE_PX))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  const header = <RoomHeader arena={arena} extra={<MusicButton music={music} />} />
-
-  if (!state || !me) {
-    return (
-      <div ref={wrap} className="tetris-online">
-        {header}
-        {!arena.error && <p className="muted">連線中…</p>}
-      </div>
-    )
-  }
-
-  const opponents = state.players.filter((p) => p.pid !== you)
-  const attackers = opponents.filter((p) => p.alive && p.target === you)
-  const minis: MiniInfo[] = opponents.map((p) => ({
-    pid: p.pid,
-    alive: p.alive,
-    place: p.place,
-    targeted: me.alive && me.target === p.pid,
-    attacker: me.alive && p.alive && p.target === you,
-    waiting: !p.inRound,
-  }))
-  const pick = (pid: number) => {
-    if (running && opponents.some((p) => p.pid === pid && p.alive)) send({ type: 'target', pid })
-  }
-  const half = Math.ceil(minis.length / 2)
-  const inRound = state.players.filter((p) => p.inRound)
-  const alive = inRound.filter((p) => p.alive).length
-
-  if (phase === 'lobby') {
-    return (
-      <div ref={wrap} className="tetris-online">
-        {header}
-        <Lobby arena={arena} state={state} me={me} />
-      </div>
-    )
-  }
-
-  let overlay: ReactNode = null
-  if (!me.inRound) {
-    overlay = (
-      <Overlay>
-        <strong className="tetris-overlay-title">對局進行中</strong>
-        <span>下一局開始時就會加入，先看看大家打得怎樣。</span>
-      </Overlay>
-    )
-  } else if (phase === 'countdown') {
-    overlay = (
-      <Overlay>
-        <Countdown ms={state.endsIn ?? 0} stamp={state}>
-          {(left) => <strong className="tetris-countdown">{Math.max(1, Math.ceil(left / 1000))}</strong>}
-        </Countdown>
-        <span>{inRound.length} 人參戰</span>
-      </Overlay>
-    )
-  } else if (!me.alive && me.place !== null) {
-    overlay = (
-      <Overlay>
-        <strong className="tetris-overlay-title">{me.place === 1 ? '🏆 第 1 名！' : `第 ${me.place} 名`}</strong>
-        <span>
-          共 {inRound.length} 人 · KO {me.kos} 人 · 送出 {mine ? local.sent : 0} 行
-        </span>
-        {phase === 'playing' && <span className="muted">還剩 {alive} 人，可以繼續觀戰</span>}
-      </Overlay>
-    )
-  }
-
-  const current = me.manual ? null : me.strategy
-  const hint = STRATEGIES.find((s) => s.value === current)?.hint ?? '手動指定的目標'
-
   return (
-    <div ref={wrap} className="tetris-online">
-      {header}
-      <StatusLine tone={me.place === 1 ? 'ok' : undefined}>
-        {phase === 'results' ? '這局結束' : `剩 ${alive} / ${inRound.length} 人`} · 速度 {state.level}
-        {me.inRound && (
-          <span className="tetris-muted">
-            {' '}
-            · KO {me.kos} · <span className="tetris-stars">{stars(me.badges)}</span>
-          </span>
-        )}
-      </StatusLine>
-
-      <div className={`tetris-arena${wide ? ' wide' : ''}`}>
-        {wide && (
-          <MiniBoards
-            minis={minis.slice(0, half)}
-            boards={arena.boards}
-            version={arena.boardsVersion}
-            fill
-            onPick={pick}
-            label="其他玩家（左半）"
-          />
-        )}
+    <ArenaScreen
+      match={match}
+      extra={<MusicButton music={music} />}
+      playfield={({ overlay, info, flash }) => (
         <Playfield
-          game={game}
-          running={running}
+          game={match.game}
+          running={match.running}
           keys={keys}
           hooks={hooks}
           overlay={overlay}
           flash={flash}
-          info={
-            me.inRound && (
-              <div className="tetris-info">
-                <span className="tetris-stars">{stars(me.badges)}</span>
-                <span>+{badgeCount(me.badges) * 25}%</span>
-                {attackers.length > 0 && me.alive && <span className="tetris-danger">⚠ {attackers.length} 人瞄準你</span>}
-              </div>
-            )
-          }
-        />
-        {wide && (
-          <MiniBoards
-            minis={minis.slice(half)}
-            boards={arena.boards}
-            version={arena.boardsVersion}
-            fill
-            onPick={pick}
-            label="其他玩家（右半）"
-          />
-        )}
-      </div>
-
-      {running && (
-        <div className="tetris-strategy">
-          <Segmented
-            label="攻擊目標（1～4，或點小盤面指定）"
-            value={(current ?? 'manual') as Strategy}
-            options={STRATEGIES.map((s) => ({ value: s.value, label: s.label }))}
-            onChange={strategy}
-          />
-          <span className="muted">{hint}</span>
-        </div>
-      )}
-
-      {!wide && (
-        <MiniBoards
-          minis={minis}
-          boards={arena.boards}
-          version={arena.boardsVersion}
-          fill={false}
-          onPick={pick}
-          label="其他玩家"
+          info={info}
         />
       )}
-
-      {feed.length > 0 && (
-        <ul className="tetris-feed" aria-live="polite">
-          {feed.map((f) => (
-            <li key={f.id} className={f.mine ? 'mine' : ''}>
-              {f.text}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {phase === 'results' && <Lobby arena={arena} state={state} me={me} />}
-    </div>
-  )
-}
-
-/** 房間代碼、邀請與離開，以及連線錯誤 */
-function RoomHeader({ arena, extra }: { arena: Arena; extra?: ReactNode }) {
-  const [copied, setCopied] = useState(false)
-
-  async function share() {
-    if (!arena.inviteUrl) return
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: '一起來玩俄羅斯方塊', url: arena.inviteUrl })
-        return
-      } catch {
-        // 使用者取消分享，改成複製
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(arena.inviteUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      window.prompt('複製這個連結給朋友：', arena.inviteUrl)
-    }
-  }
-
-  return (
-    <div className="tetris-room">
-      <div className="room-code">
-        <span className="muted">房間</span>
-        <strong>{arena.code}</strong>
-        {arena.state?.public && <span className="chip subtle">公開配對</span>}
-        {arena.code && !arena.connected && !arena.error && <span className="muted">連線中…</span>}
-      </div>
-      <div className="game-toolbar">
-        {arena.errorCode === 'replaced' && (
-          <button type="button" onClick={arena.reconnect}>
-            在這裡繼續
-          </button>
-        )}
-        {extra}
-        <button type="button" className="secondary" onClick={share}>
-          {copied ? '已複製連結' : '邀請朋友'}
-        </button>
-        <button type="button" className="secondary" onClick={arena.leave}>
-          離開房間
-        </button>
-      </div>
-      {arena.error && <p className="error">{arena.error}</p>}
-    </div>
-  )
-}
-
-function Lobby({ arena, state, me }: { arena: Arena; state: ArenaState; me: ArenaPlayer }) {
-  const humans = state.players.filter((p) => !p.bot)
-  const host = state.host === me.pid
-  const room = MAX_PLAYERS - humans.length
-  const bots = Math.min(state.bots, room)
-  const canStart = humans.length + bots >= 2
-
-  return (
-    <section className="tetris-lobby">
-      <h2>{state.phase === 'results' ? '下一局' : '等待開始'}</h2>
-      <p>
-        {humans.length} 位玩家 + {bots} 位電腦，共 <strong>{humans.length + bots}</strong> 人
-      </p>
-      <ul className="tetris-roster">
-        {humans.map((p) => (
-          <li key={p.pid} className={p.pid === me.pid ? 'me' : ''}>
-            {p.name}
-            {p.pid === state.host && <span className="chip subtle">房主</span>}
-            {p.pid === me.pid && <span className="chip subtle">你</span>}
-          </li>
-        ))}
-      </ul>
-      {host ? (
-        <Segmented
-          label="電腦玩家"
-          value={BOT_OPTIONS.includes(state.bots) ? state.bots : -1}
-          options={BOT_OPTIONS.map((n) => ({ value: n, label: n === 98 ? '補滿 99 人' : `${n} 位`, disabled: n > room }))}
-          onChange={(count) => arena.send({ type: 'bots', count })}
-        />
-      ) : (
-        <p className="muted">電腦玩家由房主決定。</p>
-      )}
-      {state.public && state.endsIn !== null && (
-        <Countdown ms={state.endsIn} stamp={state}>
-          {(left) => <p className="tetris-auto">{Math.ceil(left / 1000)} 秒後自動開始</p>}
-        </Countdown>
-      )}
-      {state.public && state.endsIn === null && humans.length < 2 && (
-        <p className="muted">再一個人加入就開始 20 秒倒數；不想等可以直接開始，和電腦對戰。</p>
-      )}
-      {host ? (
-        <button type="button" onClick={() => arena.send({ type: 'start' })} disabled={!canStart || !arena.connected}>
-          {state.phase === 'results' ? '再來一局' : '開始'}
-        </button>
-      ) : (
-        <p className="muted">等房主開始…</p>
-      )}
-      {host && !canStart && <p className="muted">至少要兩個人，或加上電腦玩家。</p>}
-    </section>
+    />
   )
 }

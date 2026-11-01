@@ -2,28 +2,28 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, errorMessage } from '../../api'
 import { useAuth } from '../../auth'
-import { load, save } from '../shared/storage'
-import { normalizeCode, playerId } from '../shared/useRoom'
+import { load, save } from './storage'
+import { normalizeCode, playerId } from './useRoom'
 
 /**
- * 俄羅斯方塊大逃殺的連線（後端見 `backend/src/tetris.rs`）。
+ * 大逃殺的連線（俄羅斯方塊、魔法氣泡共用，後端見 `backend/src/arena.rs`）。
  *
  * 和棋類的 useRoom 不同，伺服器懂規則：負責開局、選目標、轉送攻擊、算 KO 與名次，還有電腦玩家。
  * 每個人的盤面在自己的瀏覽器裡跑，只把結果告訴伺服器。房間只在記憶體裡，換版時對局會中斷。
  *
- * 協定（JSON over WebSocket，`/api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>`，
+ * 協定（JSON over WebSocket，`/api/games/<game>/rooms/{code}/ws?player=<id>&name=<暱稱>`，
  * 登入時 player 和 name 會被忽略，改用帳號）：
  *   client → server  { type: 'bots', count }            房主在開局前調整電腦人數
  *                    { type: 'start' }                   房主開局
  *                    { type: 'strategy', strategy }      自動選目標的方式
  *                    { type: 'target', pid }             手動指定目標
- *                    { type: 'attack', lines }           抵銷完自己的垃圾後要送出的行數
- *                    { type: 'board', rows, pending }    盤面（200 個 0～8）與待升的垃圾行數
+ *                    { type: 'attack', lines }           抵銷完自己的之後要送出的攻擊（俄羅斯方塊是行數，魔法氣泡是干擾泡顆數）
+ *                    { type: 'board', rows, pending }    盤面（俄羅斯方塊 200 個 0～8，魔法氣泡 78 個 0～5）與待落下的攻擊
  *                    { type: 'topout' }                  我輸了
  *   server → client  { type: 'welcome', you, round }
  *                    { type: 'state', ... }               見 ArenaState，有變化時最多每 250ms 一則
  *                    { type: 'boards', boards }           有變化的盤面 { pid: rows }
- *                    { type: 'garbage', lines, from }     被攻擊
+ *                    { type: 'garbage', lines, from }     被攻擊（單位同 attack）
  *                    { type: 'ko', victim, killer, place }
  *                    { type: 'error', code, message }     之後伺服器會關閉連線，不要再重連
  */
@@ -90,16 +90,17 @@ type RoomError = { code: string | null; message: string }
 
 export const MAX_NAME = 12
 
-/** 訪客的暱稱（登入的人用帳號名稱） */
-export function loadName(): string {
-  return load<string>('tetris:name', '')
+/** 訪客的暱稱（登入的人用帳號名稱），每個遊戲各記各的 */
+export function loadName(game: string): string {
+  return load<string>(`${game}:name`, '')
 }
 
-export function saveName(name: string) {
-  save('tetris:name', name)
+export function saveName(game: string, name: string) {
+  save(`${game}:name`, name)
 }
 
-export function useArena(handlers: ArenaHandlers) {
+/** `game` 是網址上的遊戲 id：`/api/games/<game>/rooms` */
+export function useArena(game: string, handlers: ArenaHandlers) {
   const [params, setParams] = useSearchParams()
   const code = params.get('room')
   const { user, loading } = useAuth()
@@ -148,10 +149,10 @@ export function useArena(handlers: ArenaHandlers) {
     let ws: WebSocket | null = null
 
     function connect() {
-      const url = new URL(`/api/games/tetris/rooms/${encodeURIComponent(code!)}/ws`, window.location.href)
+      const url = new URL(`/api/games/${game}/rooms/${encodeURIComponent(code!)}/ws`, window.location.href)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       url.searchParams.set('player', playerId())
-      url.searchParams.set('name', loadName())
+      url.searchParams.set('name', loadName(game))
       ws = new WebSocket(url)
       socket.current = ws
 
@@ -215,15 +216,15 @@ export function useArena(handlers: ArenaHandlers) {
       clearTimeout(timer)
       ws?.close()
     }
-  }, [code, key, attempt, boards])
+  }, [game, code, key, attempt, boards])
 
-  /** public：快速配對（加入正在等人的公開房間，沒有就開一間） */
+  /** public：快速配對（只有俄羅斯方塊有）（加入正在等人的公開房間，沒有就開一間） */
   const create = useCallback(
     async (isPublic: boolean) => {
       setBusy(true)
       setError(null)
       try {
-        const room = await api<{ code: string }>('/games/tetris/rooms', {
+        const room = await api<{ code: string }>(`/games/${game}/rooms`, {
           method: 'POST',
           body: JSON.stringify({ public: isPublic }),
         })
@@ -234,7 +235,7 @@ export function useArena(handlers: ArenaHandlers) {
         setBusy(false)
       }
     },
-    [setCode],
+    [game, setCode],
   )
 
   const join = useCallback(

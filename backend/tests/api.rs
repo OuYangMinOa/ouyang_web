@@ -106,3 +106,24 @@ async fn static_files_use_precompressed_gzip() {
     assert_eq!(fetch(false).await, (None, "plain".into()));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[tokio::test]
+async fn dot_paths_are_404_instead_of_index() {
+    let dir = std::env::temp_dir().join(format!("ouyang-dot-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("index.html"), "<html>").unwrap();
+
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let app = router(AppState::new(pool, "test", "test-sha"), &dir);
+    let status = |path: &'static str| {
+        let app = app.clone();
+        async move { app.oneshot(Request::builder().uri(path).body(Body::empty()).unwrap()).await.unwrap().status() }
+    };
+
+    for path in ["/.env", "/.git/config", "/.vscode/sftp.json", "/foo/.env"] {
+        assert_eq!(status(path).await, StatusCode::NOT_FOUND, "{path}");
+    }
+    // 前端路由照樣拿到 index.html
+    assert_eq!(status("/games/tetris").await, StatusCode::OK);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
