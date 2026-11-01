@@ -54,6 +54,15 @@ export const GAMES: GameInfo[] = [
     component: lazy(() => import('./bigtwo')),
   },
   {
+    id: 'draw',
+    name: '你畫我猜',
+    icon: '🎨',
+    blurb: '輪流畫圖，其他人在聊天室猜答案，越早猜中分數越高。2～10 人，手機也能畫。',
+    tags: ['多人', '線上'],
+    category: '派對',
+    component: lazy(() => import('./draw')),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',

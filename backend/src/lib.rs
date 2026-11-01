@@ -4,6 +4,7 @@ pub mod arena;
 pub mod auth;
 pub mod bigtwo;
 pub mod calendar;
+pub mod draw;
 pub mod feedback;
 pub mod game_settings;
 pub mod games;
@@ -68,6 +69,7 @@ pub struct AppState {
     pub undercover: Arc<party::Parties<undercover::Undercover>>,
     pub bigtwo: Arc<party::Parties<bigtwo::BigTwo>>,
     pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
+    pub draw: Arc<party::Parties<draw::Draw>>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
     pub tetris_runs: Arc<tetris_scores::Runs>,
     /// 魔法氣泡單人模式進行中的局
@@ -96,6 +98,7 @@ impl AppState {
             undercover: Arc::default(),
             bigtwo: Arc::default(),
             minesrace: Arc::default(),
+            draw: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
@@ -162,6 +165,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/bigtwo/party/{code}/ws", get(party::connect::<bigtwo::BigTwo>))
         .route("/games/minesrace/party", post(party::create::<minesrace::MinesRace>))
         .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
+        .route("/games/draw/party", post(party::create::<draw::Draw>))
+        .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))
