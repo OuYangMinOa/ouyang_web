@@ -45,6 +45,15 @@ export const GAMES: GameInfo[] = [
     component: lazy(() => import('./undercover')),
   },
   {
+    id: 'bigtwo',
+    name: '大老二',
+    icon: '🃏',
+    blurb: '台灣玩法的大老二：4 人輪流出牌，先出完的人贏。開房間邀朋友，人不夠由電腦補位，規則細節可以調。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazy(() => import('./bigtwo')),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',

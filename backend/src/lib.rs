@@ -2,6 +2,7 @@ pub mod access_log;
 pub mod admin;
 pub mod arena;
 pub mod auth;
+pub mod bigtwo;
 pub mod calendar;
 pub mod feedback;
 pub mod game_settings;
@@ -64,6 +65,7 @@ pub struct AppState {
     pub puyo: Arc<arena::Arenas<puyo::Puyo>>,
     /// 派對遊戲的房間（只在記憶體裡，見 party.rs）
     pub undercover: Arc<party::Parties<undercover::Undercover>>,
+    pub bigtwo: Arc<party::Parties<bigtwo::BigTwo>>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
     pub tetris_runs: Arc<tetris_scores::Runs>,
     /// 魔法氣泡單人模式進行中的局
@@ -90,6 +92,7 @@ impl AppState {
             tetris: Arc::default(),
             puyo: Arc::default(),
             undercover: Arc::default(),
+            bigtwo: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
@@ -152,6 +155,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/puyo/settings", get(game_settings::get_puyo).put(game_settings::put_puyo))
         .route("/games/undercover/party", post(party::create::<undercover::Undercover>))
         .route("/games/undercover/party/{code}/ws", get(party::connect::<undercover::Undercover>))
+        .route("/games/bigtwo/party", post(party::create::<bigtwo::BigTwo>))
+        .route("/games/bigtwo/party/{code}/ws", get(party::connect::<bigtwo::BigTwo>))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))
