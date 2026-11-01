@@ -139,3 +139,176 @@
   color: var(--text-h);
   font-weight: 600;
 }
+
+/* ---- 線上競速 ---- */
+
+.ms-race,
+.ms-race-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ms-race-progress {
+  font: 600 16px var(--mono);
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.ms-race-left {
+  margin: 0;
+  text-align: center;
+}
+
+/* 倒數中、凍結中：看得到盤面但點不了 */
+.ms-board.waiting,
+.ms-board.frozen {
+  cursor: not-allowed;
+}
+.ms-board.waiting .ms-cell,
+.ms-board.frozen .ms-cell {
+  cursor: not-allowed;
+}
+.ms-board.frozen {
+  background: var(--danger);
+}
+.ms-board.frozen .ms-cell {
+  opacity: 0.6;
+}
+
+.ms-race-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ms-race-options p {
+  margin: 0;
+}
+
+.ms-race-chat > summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: var(--text-h);
+  cursor: pointer;
+}
+/* 收合的標題已經寫了「聊天」 */
+.ms-race-chat .party-chat > h3 {
+  display: none;
+}
+
+.ms-race-standings h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-h);
+}
+.ms-race-standings ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ms-race-standings li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  min-width: 0;
+}
+.ms-race-standings li.me {
+  border-color: var(--accent);
+}
+.ms-race-who {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ms-race-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.ms-race-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-h);
+}
+.ms-race-place {
+  font: 700 14px var(--mono);
+  color: var(--accent);
+}
+.ms-race-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--cell);
+  overflow: hidden;
+}
+.ms-race-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.ms-race-bar > span.done {
+  background: var(--ok);
+}
+.ms-race-bar > span.out {
+  background: var(--danger);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ms-race-bar > span {
+    transition: none;
+  }
+}
+.ms-race-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 13px;
+}
+.ms-race-meta .ok {
+  color: var(--ok);
+}
+.ms-race-meta .danger {
+  color: var(--danger);
+}
+
+/* 對手的小盤面：完整縮圖（.o 是打開的格子）或每 3×3 一塊的熱度（.h0～.h3） */
+.ms-mini {
+  display: grid;
+  grid-template-columns: repeat(var(--mc), 1fr);
+  grid-template-rows: repeat(var(--mr), 1fr);
+  flex: 0 0 auto;
+  width: 72px;
+  max-height: 96px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--cell);
+  outline: 1px solid color-mix(in srgb, var(--text) 25%, transparent);
+}
+.ms-mini > span {
+  min-width: 0;
+  min-height: 0;
+}
+/* 打開的部分用強調色，兩個主題下都比 --cell-open 和 --cell 的差別明顯 */
+.ms-mini > span.o,
+.ms-mini.heat > span.h3 {
+  background: color-mix(in srgb, var(--accent) 80%, var(--cell));
+}
+.ms-mini.heat > span.h1 {
+  background: color-mix(in srgb, var(--accent) 25%, var(--cell));
+}
+.ms-mini.heat > span.h2 {
+  background: color-mix(in srgb, var(--accent) 50%, var(--cell));
+}

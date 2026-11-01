@@ -29,7 +29,7 @@ export const APPS: AppInfo[] = [
     name: '小遊戲',
     icon: '🎮',
     glyph: '戲',
-    blurb: `${GAMES.map((g) => g.name).join('、')}。棋類可以跟電腦下，也能開房間線上對戰。`,
+    blurb: `${GAMES.map((g) => g.name).join('、')}。雙人遊戲可以跟電腦下或開房間線上對戰，派對遊戲開個房間就能和朋友一起玩。`,
     tag: `${GAMES.length} 款`,
     live: true,
     nav: [
