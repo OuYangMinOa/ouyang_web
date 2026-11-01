@@ -44,7 +44,7 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/games` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 回報與許願
 
@@ -302,6 +302,22 @@ GET  /api/games/<遊戲>/party/{code}/ws?player=<id>&name=<暱稱>
   一棒最多 600 筆、2 萬個點，一則訊息最多 200 個點；這款遊戲的限速放寬到每秒 50 則、一則 8 KB。
 - 詞庫在 `backend/src/draw_words.txt`（680 多個詞，分難度和分類）。
 
+### 遊戲狀態
+
+「系統管理 › 遊戲狀態」（`/admin/games`，需要 `admin.users`）：現在開著的線上房間、裡面有誰，以及正在玩單人排行榜的帳號，頁面每 5 秒更新一次
+（`backend/src/game_monitor.rs`，三種房間各自的 `snapshot` 提供資料）。
+
+```
+GET /api/admin/games  →  {"rooms":[{kind,game,code,phase,round,age_secs,bots,public,events,alive,players:[{who,name,username,online,host,status,ip,online_secs}]}],
+                          "solo":[{game,username,score,level,duration_ms,age_secs,idle_secs}]}
+```
+
+- 棋類房間列出資料庫裡還沒過期的（包含沒人連著、30 分鐘內還回得來的），另外兩種列出記憶體裡的。電腦玩家只算數量，不列出來。
+- 連線時記下來源 IP（和 IP 訪問紀錄一樣取 X-Forwarded-For）與連上的時間，只放在記憶體，斷線就沒了。
+- 訪客用來拿回座位的 id 不會送出去，`who` 是它雜湊後的前 8 碼，只用來把同一個人在不同房間的列合在一起。
+- 單人排行榜的局 5 分鐘沒回報中間態就不列（暫停、關掉分頁都不會通知伺服器）。對電腦、同一台輪流下、沒登入的單人遊戲只在瀏覽器裡跑，看不到。
+- 只看得到接到這個請求的容器：換版的那幾秒新舊容器各有一部分房間。
+
 ## 日曆
 
 `/calendar`：月曆（農曆、節氣、節日、放假日標紅）、`/calendar/holidays` 整年的節日與節氣、`/calendar/events` 我的事項。
@@ -412,6 +428,10 @@ GET /api/weather/quakes/ws     即時速報  server → client  {type:"snapshot"
   沒設 `EEW_RELAY_URL`（本機開發）就直接連 wolfx。台灣速報的 HTTP 版被 Cloudflare 擋，啟動後要等推送才有資料。
 - **地震報告**：USGS（台灣附近 M3+、全球 M4.5+）、wolfx 轉的日本氣象廳與中國地震台網清單、中央氣象署（要金鑰）。
 - 地震頁的 S 波倒數與當地震度是用 3.5 km/s 和台灣常用的 PGA 衰減式粗估，「測試速報畫面」按鈕只在自己的瀏覽器裡模擬一筆。
+- **全站速報**：每一頁都連著 `/api/weather/quakes/ws`（`weather/quakeFeed.tsx`，整個分頁共用一條，地震頁也用它），
+  速報會跳在固定的頁首底下（`weather/QuakeAlert.tsx`）。不分來源，依使用者選的縣市（和地震頁同一個設定）判斷：
+  震央在 60 km 內一律跳（和 eew_linebot 一樣），再遠的看預估當地震度，2 級以上才跳；距離算到震源（含深度），深層地震才不會高估。
+  發震 3 分鐘後或按 ✕ 就收起來，地震頁本身有完整的速報卡所以不重複顯示。按「測試速報畫面」後切到別頁，可以看頁首的樣子。
 
 ### 中央氣象署的金鑰
 

@@ -31,6 +31,7 @@ const MARGIN_STEP: Duration = Duration::from_secs(16);
 pub struct Puyo;
 
 impl Rules for Puyo {
+    const ID: &'static str = "puyo";
     /// 13 × 6（含看不到的第 13 列），每格 `0`（空）、`1`～`4`（顏色）、`5`（干擾泡）
     const ROWS: usize = ROWS;
     const COLS: usize = COLS;

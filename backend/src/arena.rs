@@ -24,17 +24,24 @@ use axum::{
         Path, Query, State,
         ws::{Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::Response,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::{sync::mpsc, time::Instant};
 
-use crate::{AppError, AppState, auth::CurrentUser, games::random_code};
+use crate::{
+    AppError, AppState,
+    auth::{CurrentUser, client_key},
+    game_monitor::{PlayerInfo, RoomInfo},
+    games::random_code,
+};
 
 /// 每個遊戲不一樣的地方
 pub trait Rules: Send + Sized + 'static {
+    /// 遊戲 id（系統管理的遊戲狀態用），和網址上的一樣
+    const ID: &'static str;
     /// 盤面由上到下、每格一個字元 `'0'`（空）～`MAX_CELL`
     const ROWS: usize;
     const COLS: usize;
@@ -160,10 +167,15 @@ struct Player<B> {
 struct Conn {
     id: u64,
     tx: mpsc::UnboundedSender<Utf8Bytes>,
+    /// 給系統管理看的：來源 IP 和連上的時間
+    ip: String,
+    since: Instant,
 }
 
 struct Arena<R: Rules> {
     public: bool,
+    /// 開房間的時間
+    opened: Instant,
     /// 從表裡移除後設為 true，剛好拿到這個房間的人要當作找不到
     closed: bool,
     phase: Phase,
@@ -209,6 +221,7 @@ impl<R: Rules> Arena<R> {
     fn new(public: bool, now: Instant) -> Self {
         Self {
             public,
+            opened: now,
             closed: false,
             phase: Phase::Lobby,
             deadline: None,
@@ -632,6 +645,56 @@ impl<R: Rules> Arena<R> {
         self.empty_since.is_some_and(|t| now.duration_since(t) >= EMPTY_TTL)
     }
 
+    /// 給系統管理看的房間狀態（game_monitor.rs）
+    fn info(&self, code: String, now: Instant) -> RoomInfo {
+        let in_game = matches!(self.phase, Phase::Countdown | Phase::Playing);
+        let host = self.host();
+        let players = self
+            .players
+            .iter()
+            .filter_map(|p| {
+                let conn = p.conn.as_ref().map(|c| (c.ip.as_str(), c.since));
+                let status = if in_game && !p.in_round {
+                    "等下一局".to_owned()
+                } else if in_game && p.alive {
+                    "存活".to_owned()
+                } else if let Some(place) = p.place {
+                    format!("第 {place} 名")
+                } else {
+                    String::new()
+                };
+                Some(
+                    PlayerInfo::new(p.key.as_ref()?, p.name.clone(), conn, now)
+                        .host(host == Some(p.pid))
+                        .status(status),
+                )
+            })
+            .collect();
+        RoomInfo {
+            kind: "arena",
+            game: R::ID,
+            code,
+            phase: match self.phase {
+                Phase::Lobby => "lobby",
+                Phase::Countdown => "countdown",
+                Phase::Playing => "playing",
+                Phase::Results => "results",
+            },
+            round: self.round,
+            age_secs: now.duration_since(self.opened).as_secs(),
+            // 大廳裡是開局時要補幾個，開局後是實際上場的
+            bots: if self.phase == Phase::Lobby {
+                self.bots
+            } else {
+                self.players.iter().filter(|p| p.key.is_none()).count()
+            },
+            public: self.public,
+            events: None,
+            alive: in_game.then(|| self.alive().len()),
+            players,
+        }
+    }
+
     /// 處理用戶端的一則訊息；非 JSON、未知的 type 或現在不能做的事直接忽略
     fn handle(&mut self, pid: u32, message: ClientMessage, now: Instant) {
         let Some(i) = self.index(pid) else { return };
@@ -767,6 +830,17 @@ impl<R: Rules> Arenas<R> {
     fn get(&self, code: &str) -> Option<Arc<Mutex<Arena<R>>>> {
         self.live.lock().unwrap().get(code).cloned()
     }
+
+    /// 給系統管理看：所有開著的房間
+    pub(crate) fn snapshot(&self, now: Instant) -> Vec<RoomInfo> {
+        let live: Vec<_> = self.live.lock().unwrap().iter().map(|(code, a)| (code.clone(), a.clone())).collect();
+        live.into_iter()
+            .filter_map(|(code, arena)| {
+                let arena = arena.lock().unwrap();
+                (!arena.closed).then(|| arena.info(code, now))
+            })
+            .collect()
+    }
 }
 
 /// 房間的計時器：推進遊戲，沒人太久就把房間收掉
@@ -812,9 +886,11 @@ pub async fn connect<R: Rules>(
     State(state): State<AppState>,
     Path(code): Path<String>,
     Query(query): Query<JoinQuery>,
+    headers: HeaderMap,
     user: Option<CurrentUser>,
 ) -> Response {
     let code = code.to_ascii_uppercase();
+    let ip = client_key(&headers);
     let identity = match (user, query.player) {
         (Some(user), _) => Some((format!("user:{}", user.id), user.username)),
         (None, Some(player)) if !player.is_empty() && player.chars().count() <= MAX_PLAYER_LEN => {
@@ -832,10 +908,16 @@ pub async fn connect<R: Rules>(
         }
         _ => None,
     };
-    ws.max_message_size(MAX_FRAME_BYTES).on_upgrade(move |socket| session::<R>(socket, state, code, identity))
+    ws.max_message_size(MAX_FRAME_BYTES).on_upgrade(move |socket| session::<R>(socket, state, code, identity, ip))
 }
 
-async fn session<R: Rules>(mut socket: WebSocket, state: AppState, code: String, identity: Option<(String, String)>) {
+async fn session<R: Rules>(
+    mut socket: WebSocket,
+    state: AppState,
+    code: String,
+    identity: Option<(String, String)>,
+    ip: String,
+) {
     let Some((key, name)) = identity else {
         return close_with(socket, ("bad_request", "缺少 player，或 player 太長")).await;
     };
@@ -845,7 +927,8 @@ async fn session<R: Rules>(mut socket: WebSocket, state: AppState, code: String,
     let Some(arena) = arenas.get(&code) else { return close_with(socket, NOT_FOUND).await };
     let joined = {
         let mut guard = arena.lock().unwrap();
-        if guard.closed { Err(NOT_FOUND) } else { guard.join(&key, name, Conn { id, tx }, Instant::now()) }
+        let now = Instant::now();
+        if guard.closed { Err(NOT_FOUND) } else { guard.join(&key, name, Conn { id, tx, ip, since: now }, now) }
     };
     let pid = match joined {
         Ok(pid) => pid,
@@ -927,7 +1010,7 @@ mod tests {
         arena.bots = bots;
         // 那個人要「連著線」才算得進開局人數，也不會因為斷線被判出局；送給他的訊息沒人收
         let (tx, _) = mpsc::unbounded_channel();
-        arena.join("dummy", "dummy".to_owned(), Conn { id: 1, tx }, t0).unwrap();
+        arena.join("dummy", "dummy".to_owned(), Conn { id: 1, tx, ip: "local".into(), since: t0 }, t0).unwrap();
         arena.start(t0);
         let mut now = t0;
         while arena.phase != Phase::Playing {

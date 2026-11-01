@@ -1,0 +1,117 @@
+/* ---- 頁首的地震速報（全站），放在固定的頁首底下 ---- */
+
+.quake-alert {
+  --alert: var(--tc-1);
+  border-bottom: 2px solid var(--alert);
+  background: color-mix(in srgb, var(--alert) 12%, var(--bg));
+  color: var(--text-h);
+}
+.quake-alert-2 {
+  --alert: var(--tc-2);
+}
+.quake-alert-3 {
+  --alert: var(--danger);
+}
+
+.quake-alert-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'main close'
+    'local close';
+  align-items: center;
+  gap: 2px 12px;
+  width: min(1240px, 100% - 32px);
+  margin: 0 auto;
+  padding: 8px 0;
+}
+
+.quake-alert-main {
+  grid-area: main;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.quake-alert-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--alert);
+  color: var(--on-accent);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .quake-alert-badge {
+    animation: quake-alert-pulse 1.2s ease-in-out infinite;
+  }
+}
+@keyframes quake-alert-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.quake-alert-place {
+  color: var(--text-h);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+.quake-alert-source {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.quake-alert-local {
+  grid-area: local;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+.quake-alert-local select {
+  flex: 0 1 auto;
+}
+.quake-alert-seconds strong {
+  font-size: 20px;
+  color: var(--alert);
+  font-variant-numeric: tabular-nums;
+}
+button.quake-alert-close {
+  grid-area: close;
+  width: 40px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--alert) 45%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-h);
+}
+button.quake-alert-close:hover {
+  background: color-mix(in srgb, var(--alert) 18%, transparent);
+}
+
+/* 手機：倒數那一行用滿整個寬度，省下一行高度；來源名稱收起來 */
+@media (max-width: 640px) {
+  .quake-alert-inner {
+    grid-template-areas:
+      'main close'
+      'local local';
+  }
+  .quake-alert-source {
+    display: none;
+  }
+  .quake-alert-local select {
+    padding: 4px 8px;
+  }
+}
+
+/* 寬螢幕排成一行 */
+@media (min-width: 900px) {
+  .quake-alert-inner {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'main local close';
+  }
+}

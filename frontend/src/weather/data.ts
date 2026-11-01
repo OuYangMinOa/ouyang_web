@@ -340,7 +340,13 @@ export function useRemote<T>(path: string, refreshMs: number): Remote<T> {
   return { data, error, loading: data === null && error === null, reload: () => setTick((t) => t + 1) }
 }
 
-/** 存在 localStorage 的小偏好（選的縣市、模式），讀寫失敗就只在這次有效 */
+const PREFERENCE_EVENT = 'preference-change'
+type PreferenceChange = { key: string; value: string }
+
+/**
+ * 存在 localStorage 的小偏好（選的縣市、模式），讀寫失敗就只在這次有效。
+ * 同一個偏好可能有好幾個元件在用（例如頁首的地震速報和地震頁都用所在縣市），改了會一起更新，其他分頁也是。
+ */
 export function usePreference<T extends string>(key: string, fallback: T, allowed?: readonly T[]) {
   const [value, setValue] = useState<T>(() => {
     try {
@@ -352,6 +358,25 @@ export function usePreference<T extends string>(key: string, fallback: T, allowe
     return fallback
   })
 
+  useEffect(() => {
+    function accept(raw: string | null) {
+      if (raw !== null && (!allowed || allowed.includes(raw as T))) setValue(raw as T)
+    }
+    function onLocal(event: Event) {
+      const { detail } = event as CustomEvent<PreferenceChange>
+      if (detail.key === key) accept(detail.value)
+    }
+    function onStorage(event: StorageEvent) {
+      if (event.key === key) accept(event.newValue)
+    }
+    window.addEventListener(PREFERENCE_EVENT, onLocal)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(PREFERENCE_EVENT, onLocal)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [key, allowed])
+
   function update(next: T) {
     setValue(next)
     try {
@@ -359,10 +384,41 @@ export function usePreference<T extends string>(key: string, fallback: T, allowe
     } catch {
       // 存不了就只在這次有效
     }
+    window.dispatchEvent(new CustomEvent<PreferenceChange>(PREFERENCE_EVENT, { detail: { key, value: next } }))
   }
 
   return [value, update] as const
 }
+
+/** 現在時間：`fast` 時每 0.25 秒更新（倒數用），平常 15 秒一次 */
+export function useNow(fast: boolean) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), fast ? 250 : 15000)
+    return () => clearInterval(timer)
+  }, [fast])
+  return now
+}
+
+/** 速報在發震後這麼久內都算「進行中」：地震頁顯示在最上面，頁首跳出警報 */
+export const ACTIVE_MS = 3 * 60 * 1000
+
+/** 每個來源只留最新的一筆（比發震時間，同一個地震再比第幾報） */
+export function latestPerSource(list: Eew[]) {
+  const latest = new Map<string, Eew>()
+  for (const eew of list) {
+    const prev = latest.get(eew.source)
+    const newer =
+      !prev ||
+      Date.parse(eew.origin_time) > Date.parse(prev.origin_time) ||
+      (prev.event_id === eew.event_id && (eew.serial ?? 0) >= (prev.serial ?? 0))
+    if (newer) latest.set(eew.source, eew)
+  }
+  return [...latest.values()].sort((a, b) => Date.parse(b.origin_time) - Date.parse(a.origin_time))
+}
+
+/** 使用者所在縣市存在這個偏好裡，地震頁和頁首的速報共用 */
+export const QUAKE_CITY_KEY = 'quake-city'
 
 /** 縣市政府附近的座標（和 backend/src/weather/forecast.rs 的 CITIES 一樣），地震頁算 S 波抵達時間用 */
 export const CITY_POINTS: { id: string; name: string; lat: number; lon: number }[] = [
@@ -417,4 +473,34 @@ export function estimateIntensity(magnitude: number, distance: number) {
     [800, '6強'],
   ]
   return limits.find(([limit]) => pga < limit)?.[1] ?? '7'
+}
+
+export function cityPoint(id: string) {
+  return CITY_POINTS.find((c) => c.id === id) ?? CITY_POINTS[1]
+}
+
+/** 「5弱」→ 5、「5強」→ 5.5，用來比大小 */
+export function intensityValue(intensity: string | undefined) {
+  if (!intensity) return 0
+  const value = parseFloat(intensity)
+  if (Number.isNaN(value)) return 0
+  return value + (intensity.endsWith('強') ? 0.5 : 0)
+}
+
+/** 頁首速報的門檻：震央離所在縣市這麼近就一律警報（和 eew_linebot 一樣） */
+export const ALERT_RADIUS_KM = 60
+/** 再遠的看預估當地震度，到這一級（大多數人有感）才警報 */
+export const ALERT_MIN_INTENSITY = 2
+
+/**
+ * 一筆速報對某個縣市的影響：震源距離、S 波抵達時間、預估震度，以及要不要在頁首警報。
+ * 不分來源；距離算到震源（含深度），深層地震才不會因為震央近就高估搖晃。
+ */
+export function eewAtCity(eew: Eew, city: { lat: number; lon: number }) {
+  const distance = hypocentralKm(eew, city.lat, city.lon)
+  const sArrival = Date.parse(eew.origin_time) + (distance / S_WAVE_KMS) * 1000
+  const estimate = eew.magnitude !== undefined ? estimateIntensity(eew.magnitude, distance) : undefined
+  const near = distanceKm(eew.lat, eew.lon, city.lat, city.lon) < ALERT_RADIUS_KM
+  const alert = near || intensityValue(estimate) >= ALERT_MIN_INTENSITY
+  return { distance, sArrival, estimate, alert }
 }

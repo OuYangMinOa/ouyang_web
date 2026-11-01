@@ -61,7 +61,7 @@ use axum::{
         Path, Query, State,
         ws::{Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::Response,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -69,7 +69,12 @@ use serde_json::{Value, json};
 use tokio::{sync::mpsc, time::Instant};
 
 pub use crate::arena::Rng;
-use crate::{AppError, AppState, auth::CurrentUser, games::random_code};
+use crate::{
+    AppError, AppState,
+    auth::{CurrentUser, client_key},
+    game_monitor::{PlayerInfo, RoomInfo},
+    games::random_code,
+};
 
 /// 每款遊戲不一樣的地方，說明見檔頭
 pub trait PartyGame: Sized + Send + 'static {
@@ -272,6 +277,9 @@ struct StoredLine {
 struct Conn {
     id: u64,
     tx: mpsc::UnboundedSender<Utf8Bytes>,
+    /// 給系統管理看的：來源 IP 和連上的時間
+    ip: String,
+    since: Instant,
 }
 
 struct Member {
@@ -296,6 +304,8 @@ impl<G: PartyGame> Default for Parties<G> {
 }
 
 struct Room<G: PartyGame> {
+    /// 開房間的時間
+    opened: Instant,
     /// 從表裡移除後設為 true，剛好拿到這個房間的人要當作找不到
     closed: bool,
     phase: Phase,
@@ -325,6 +335,7 @@ struct Room<G: PartyGame> {
 impl<G: PartyGame> Room<G> {
     fn new() -> Self {
         Self {
+            opened: Instant::now(),
             closed: false,
             phase: Phase::Lobby,
             round: 0,
@@ -851,6 +862,45 @@ impl<G: PartyGame> Room<G> {
     fn should_close(&self, now: Instant) -> bool {
         self.empty_since.is_some_and(|t| now.duration_since(t) >= EMPTY_TTL)
     }
+
+    /// 給系統管理看的房間狀態（game_monitor.rs）
+    fn info(&self, code: String, now: Instant) -> RoomInfo {
+        let host = self.host();
+        let players = self
+            .members
+            .iter()
+            .filter_map(|m| {
+                let conn = m.conn.as_ref().map(|c| (c.ip.as_str(), c.since));
+                let status = match self.seat_of(m.pid) {
+                    Some(seat) => format!("座位 {}", seat + 1),
+                    None if self.phase != Phase::Lobby => "觀戰".to_owned(),
+                    None => String::new(),
+                };
+                Some(
+                    PlayerInfo::new(m.key.as_ref()?, m.name.clone(), conn, now)
+                        .host(host == Some(m.pid))
+                        .status(status),
+                )
+            })
+            .collect();
+        RoomInfo {
+            kind: "party",
+            game: G::ID,
+            code,
+            phase: match self.phase {
+                Phase::Lobby => "lobby",
+                Phase::Playing => "playing",
+                Phase::Results => "results",
+            },
+            round: self.round,
+            age_secs: now.duration_since(self.opened).as_secs(),
+            bots: self.bots(),
+            public: false,
+            events: None,
+            alive: None,
+            players,
+        }
+    }
 }
 
 /// 去掉控制字元（換行也算）和頭尾空白，最多 `max` 個字
@@ -903,6 +953,17 @@ impl<G: PartyGame> Parties<G> {
     fn get(&self, code: &str) -> Option<Arc<Mutex<Room<G>>>> {
         self.live.lock().unwrap().get(code).cloned()
     }
+
+    /// 給系統管理看：所有開著的房間
+    pub(crate) fn snapshot(&self, now: Instant) -> Vec<RoomInfo> {
+        let live: Vec<_> = self.live.lock().unwrap().iter().map(|(code, r)| (code.clone(), r.clone())).collect();
+        live.into_iter()
+            .filter_map(|(code, room)| {
+                let room = room.lock().unwrap();
+                (!room.closed).then(|| room.info(code, now))
+            })
+            .collect()
+    }
 }
 
 /// 房間的計時器：推進遊戲，沒人太久就把房間收掉
@@ -942,9 +1003,11 @@ pub async fn connect<G: PartyGame>(
     State(state): State<AppState>,
     Path(code): Path<String>,
     Query(query): Query<JoinQuery>,
+    headers: HeaderMap,
     user: Option<CurrentUser>,
 ) -> Response {
     let code = code.to_ascii_uppercase();
+    let ip = client_key(&headers);
     let name = clean(query.name.as_deref().unwrap_or_default(), MAX_NAME_CHARS);
     let identity = match (user, query.player) {
         (Some(user), _) => {
@@ -957,7 +1020,7 @@ pub async fn connect<G: PartyGame>(
         }
         _ => None,
     };
-    ws.max_message_size(G::MAX_FRAME_BYTES).on_upgrade(move |socket| session::<G>(socket, state, code, identity))
+    ws.max_message_size(G::MAX_FRAME_BYTES).on_upgrade(move |socket| session::<G>(socket, state, code, identity, ip))
 }
 
 async fn session<G: PartyGame>(
@@ -965,6 +1028,7 @@ async fn session<G: PartyGame>(
     state: AppState,
     code: String,
     identity: Option<(String, String)>,
+    ip: String,
 ) {
     let Some((key, name)) = identity else {
         return close_with(socket, ("bad_request", "缺少 player，或 player 太長")).await;
@@ -975,7 +1039,8 @@ async fn session<G: PartyGame>(
     let Some(room) = parties.get(&code) else { return close_with(socket, NOT_FOUND).await };
     let joined = {
         let mut guard = room.lock().unwrap();
-        if guard.closed { Err(NOT_FOUND) } else { guard.join(&key, name, Conn { id, tx }, Instant::now()) }
+        let now = Instant::now();
+        if guard.closed { Err(NOT_FOUND) } else { guard.join(&key, name, Conn { id, tx, ip, since: now }, now) }
     };
     let pid = match joined {
         Ok(pid) => pid,
@@ -1160,6 +1225,10 @@ mod tests {
         }
     }
 
+    fn conn_for_test(id: u64, tx: mpsc::UnboundedSender<Utf8Bytes>) -> Conn {
+        Conn { id, tx, ip: "local".into(), since: Instant::now() }
+    }
+
     struct Peer {
         rx: mpsc::UnboundedReceiver<Utf8Bytes>,
         id: u64,
@@ -1183,7 +1252,7 @@ mod tests {
 
     fn join(room: &mut Room<Secret>, key: &str, name: &str, conn: u64) -> Peer {
         let (tx, rx) = mpsc::unbounded_channel();
-        let pid = room.join(key, name.into(), Conn { id: conn, tx }, Instant::now()).unwrap();
+        let pid = room.join(key, name.into(), conn_for_test(conn, tx), Instant::now()).unwrap();
         Peer { rx, id: conn, pid }
     }
 
@@ -1346,7 +1415,7 @@ mod tests {
         assert_eq!(room.members.len(), 1);
         // 被踢的人進不來
         let (tx, _rx) = mpsc::unbounded_channel();
-        assert_eq!(room.join("guest:b", "B".into(), Conn { id: 9, tx }, Instant::now()), Err(KICKED));
+        assert_eq!(room.join("guest:b", "B".into(), conn_for_test(9, tx), Instant::now()), Err(KICKED));
     }
 
     #[test]

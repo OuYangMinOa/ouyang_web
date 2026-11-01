@@ -17,6 +17,7 @@ const COLS: usize = 10;
 pub struct Tetris;
 
 impl Rules for Tetris {
+    const ID: &'static str = "tetris";
     /// 20 × 10，每格 `0`（空）～`8`（垃圾）
     const ROWS: usize = ROWS;
     const COLS: usize = COLS;

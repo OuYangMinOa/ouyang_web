@@ -9,6 +9,18 @@ main:has(.app-layout) {
 
 /* ---- 頁首：品牌、切換 APP、（手機）APP 選單、主題、帳號 ---- */
 
+/* 頁首（和底下的地震速報）固定在畫面上方；高度由 App.tsx 寫進 --site-top-h */
+.site-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+}
+/* 跳到頁內錨點時不要被頁首蓋住 */
+:root {
+  scroll-padding-top: var(--site-top-h, 0px);
+}
+
 .site-header {
   /* 手機版的下拉選單以頁首為基準展開，也要蓋在遊戲畫面上 */
   position: relative;
@@ -681,6 +693,129 @@ td .edit {
 }
 .access-all .access-requests {
   max-height: 70vh;
+}
+
+/* 遊戲狀態 */
+.live-rooms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+}
+.live-room {
+  margin-top: 0;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.live-room.is-idle {
+  opacity: 0.7;
+}
+.live-room header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+}
+.live-game {
+  font-weight: 600;
+  color: var(--text-h);
+}
+.live-code {
+  letter-spacing: 0.08em;
+}
+.live-phase {
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.live-phase.is-playing,
+.live-phase.is-countdown {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.live-phase.is-waiting,
+.live-phase.is-lobby {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.live-players {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.live-players li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+.live-conn {
+  margin-left: auto;
+}
+.live-empty {
+  margin-top: 8px;
+}
+.live-who {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.live-who strong {
+  color: var(--text-h);
+  font-weight: 600;
+}
+.live-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  align-self: center;
+}
+.live-dot.is-online {
+  background: var(--ok);
+}
+.live-tag {
+  font-size: 12px;
+  color: var(--text);
+}
+.live-tag.is-host {
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+}
+.live-where {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.live-where li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+}
+.live-ips {
+  display: flex;
+  flex-direction: column;
+}
+.live-heading {
+  margin: 32px 0 4px;
+  font-size: 20px;
+}
+.live-heading + .muted {
+  margin-bottom: 8px;
 }
 
 /* ---- 留言板 ---- */

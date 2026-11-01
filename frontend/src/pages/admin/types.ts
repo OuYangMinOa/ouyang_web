@@ -93,3 +93,43 @@ export type RegistrationReport = {
   pending: Registration[]
   reviewed: Registration[]
 }
+
+/** 系統管理的遊戲狀態，見後端 game_monitor.rs */
+export type LivePlayer = {
+  /** 認人用：帳號是 u<id>，訪客是雜湊過的 g<…> */
+  who: string
+  name: string
+  username: string | null
+  online: boolean
+  host: boolean
+  /** 例如「座位 1」「觀戰」「第 3 名」，可能是空字串 */
+  status: string
+  ip: string | null
+  online_secs: number | null
+}
+
+export type LiveRoom = {
+  kind: 'duel' | 'arena' | 'party'
+  game: string
+  code: string
+  phase: 'waiting' | 'playing' | 'idle' | 'lobby' | 'countdown' | 'results'
+  round: number
+  age_secs: number
+  bots: number
+  public: boolean
+  events: number | null
+  alive: number | null
+  players: LivePlayer[]
+}
+
+export type SoloRun = {
+  game: string
+  username: string
+  score: number
+  level: number
+  duration_ms: number
+  age_secs: number
+  idle_secs: number
+}
+
+export type GamesReport = { rooms: LiveRoom[]; solo: SoloRun[] }

@@ -27,7 +27,12 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{AppError, AppState, auth::CurrentUser, games::random_code};
+use crate::{
+    AppError, AppState,
+    auth::CurrentUser,
+    game_monitor::{SOLO_IDLE, SoloRun},
+    games::random_code,
+};
 
 /// 排行榜列出前幾名
 const TOP: i64 = 20;
@@ -122,6 +127,26 @@ struct Run {
 #[derive(Default)]
 pub struct Runs {
     runs: Mutex<HashMap<i64, Run>>,
+}
+
+impl Runs {
+    /// 給系統管理看：最近還有回報的局（帳號名稱由 game_monitor.rs 補上）
+    pub(crate) fn snapshot(&self, now: Instant) -> Vec<SoloRun> {
+        let runs = self.runs.lock().unwrap();
+        runs.iter()
+            .filter(|(_, run)| now.duration_since(run.touched) < SOLO_IDLE)
+            .map(|(&user_id, run)| SoloRun {
+                game: "puyo",
+                username: String::new(),
+                user_id,
+                score: run.last.score,
+                level: run.last.level,
+                duration_ms: run.last.duration_ms,
+                age_secs: now.duration_since(run.started).as_secs(),
+                idle_secs: now.duration_since(run.touched).as_secs(),
+            })
+            .collect()
+    }
 }
 
 #[derive(Serialize)]
