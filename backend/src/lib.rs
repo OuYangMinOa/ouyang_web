@@ -6,6 +6,7 @@ pub mod calendar;
 pub mod feedback;
 pub mod game_settings;
 pub mod games;
+pub mod minesrace;
 pub mod music;
 pub mod party;
 pub mod puyo;
@@ -64,6 +65,7 @@ pub struct AppState {
     pub puyo: Arc<arena::Arenas<puyo::Puyo>>,
     /// 派對遊戲的房間（只在記憶體裡，見 party.rs）
     pub undercover: Arc<party::Parties<undercover::Undercover>>,
+    pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
     pub tetris_runs: Arc<tetris_scores::Runs>,
     /// 魔法氣泡單人模式進行中的局
@@ -90,6 +92,7 @@ impl AppState {
             tetris: Arc::default(),
             puyo: Arc::default(),
             undercover: Arc::default(),
+            minesrace: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
@@ -152,6 +155,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/puyo/settings", get(game_settings::get_puyo).put(game_settings::put_puyo))
         .route("/games/undercover/party", post(party::create::<undercover::Undercover>))
         .route("/games/undercover/party/{code}/ws", get(party::connect::<undercover::Undercover>))
+        .route("/games/minesrace/party", post(party::create::<minesrace::MinesRace>))
+        .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))
