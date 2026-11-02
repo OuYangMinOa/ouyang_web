@@ -1,0 +1,291 @@
+/* ---- 計時器 ---- */
+
+.tm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.tm .card {
+  margin-top: 0;
+  min-width: 0;
+}
+
+.tm-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.tm-tabs button {
+  position: relative;
+  padding: 8px 6px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tm-tabs button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+/* 別的分頁有計時器在跑 */
+.tm-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.tm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* 大字：容器多寬、字有幾個，就用多大的字（等寬字型一個字約 0.6em） */
+.tm-big-wrap {
+  container-type: inline-size;
+  text-align: center;
+}
+.tm-big {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-h);
+  white-space: nowrap;
+  font-size: min(128px, calc(100cqi / (var(--chars) * 0.64)));
+}
+.tm-big-sub {
+  min-height: 1.6em;
+  color: var(--text);
+  font-size: 15px;
+}
+.tm-big-wrap.ringing .tm-big {
+  color: var(--accent);
+  animation: tm-ring 0.8s ease-in-out 4;
+}
+.tm-big-wrap.ringing .tm-big-sub {
+  color: var(--accent);
+  font-weight: 600;
+}
+@keyframes tm-ring {
+  0%,
+  100% {
+    transform: none;
+  }
+  25% {
+    transform: rotate(-2deg) scale(1.03);
+  }
+  75% {
+    transform: rotate(2deg) scale(1.03);
+  }
+}
+
+.tm-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--cell-alt);
+  overflow: hidden;
+}
+.tm-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s linear;
+}
+.tm-pomo.break .tm-progress span {
+  background: var(--ok);
+}
+
+.tm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.tm-actions button {
+  min-width: 110px;
+  min-height: 48px;
+  font-size: 17px;
+}
+
+.tm-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tm-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 0;
+}
+.tm-fields legend {
+  padding: 0 6px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.tm-fields label {
+  flex: 1 1 100px;
+}
+.tm-fields input[type='number'] {
+  width: 100%;
+  box-sizing: border-box;
+}
+.tm-fields:disabled {
+  opacity: 0.6;
+}
+
+.tm-check {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 16px;
+  color: var(--text-h);
+  min-height: 40px;
+  cursor: pointer;
+}
+.tm-check input {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+.tm-check > span {
+  display: flex;
+  flex-direction: column;
+}
+.tm-settings .tm-check {
+  flex-basis: 100%;
+}
+
+/* 番茄鐘：目前階段與輪數 */
+.tm-phase {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tm-phase-name {
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+.tm-pomo.break .tm-phase-name {
+  background: var(--ok);
+}
+.tm-rounds {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tm-rounds > span:not(.tm-round-text) {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+}
+.tm-rounds > span.done {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.tm-rounds > span.now {
+  border-color: var(--accent);
+}
+.tm-round-text {
+  margin-left: 4px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* 碼表：分圈 */
+.tm-laps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.tm-laps li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px 16px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.tm-lap-no {
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+.tm-lap-time {
+  font-family: var(--mono);
+  color: var(--text-h);
+}
+.tm-lap-total {
+  font-family: var(--mono);
+  color: var(--text);
+  font-size: 14px;
+  align-self: center;
+}
+.tm-laps li.current .tm-lap-no {
+  color: var(--text-h);
+}
+.tm-laps li.fast .tm-lap-no,
+.tm-laps li.fast .tm-lap-time {
+  color: var(--ok);
+}
+.tm-laps li.slow .tm-lap-no,
+.tm-laps li.slow .tm-lap-time {
+  color: var(--danger);
+}
+
+.tm-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-big-wrap.ringing .tm-big {
+    animation: none;
+  }
+  .tm-progress span {
+    transition: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .tm-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .tm-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tm-laps li {
+    grid-template-columns: 1fr auto;
+  }
+  .tm-lap-total {
+    grid-column: 2;
+  }
+}

@@ -341,7 +341,7 @@ DELETE /api/calendar/events/{id}
 
 ## 小工具
 
-都在瀏覽器裡執行，後端不參與。工具登記在 `frontend/src/tools/registry.ts`，每個工具各自打包、進到那一頁才下載。
+除了統一發票對獎要後端代抓中獎號碼，其他都在瀏覽器裡執行。工具登記在 `frontend/src/tools/registry.ts`，每個工具各自打包、進到那一頁才下載。
 
 - **圖片去背**：模型在 Web Worker 裡用 transformers.js 跑，從 Hugging Face 下載後存在瀏覽器快取。
   自動去背用 `Ko033/isnet-general-use-onnx`（WebGPU 用 fp16 約 88 MB，CPU 用 int8 約 46 MB），點選用 `Xenova/slimsam-77-uniform`（第一次點選才下載），兩者都是 Apache-2.0。
@@ -350,6 +350,14 @@ DELETE /api/calendar/events/{id}
 - **匯率計算機**：瀏覽器直接呼叫 Frankfurter v2（`api.frankfurter.dev/v2`，彙整各國央行匯率，含 TWD），最新匯率存在 localStorage，離線時顯示上次的資料。
 - **ASCII 藝術字**：figlet 的 `.flf` 字型當成靜態檔輸出，選到才 fetch。
 - **Emoji 選擇器**：資料來自 `emojibase-data`（繁中＋英文）。**編碼與雜湊**：雜湊用 `hash-wasm`。
+- **統一發票對獎**：`GET /api/invoice/winning`（`backend/src/invoice.rs`）回傳最近六期的特別獎、特獎、頭獎、增開六獎（有的話）、開獎日與領獎期間。
+  號碼來自財政部的 RSS `https://invoice.etax.nat.gov.tw/invoice.xml`（免金鑰）；RSS 沒有領獎期間，最新兩期另外讀稅務入口網的公告頁 `ETW183W2_<期別>` 補上，
+  讀不到就用規則推算（開獎隔月 6 日起三個月）。快取在記憶體：單月 25、26 日每 10 分鐘更新，其他時候 12 小時；抓失敗沿用舊資料，前端也會把上次的結果存在 localStorage。
+  前端可以輸入末 3 碼快速對、輸入 8 碼直接判定，或用相機掃電子發票證明聯左邊的 QR Code（前 10 碼字軌號碼、接著 7 碼民國年月日，看得出是哪一期）；
+  有 BarcodeDetector 就用它，沒有（iOS 等）改用 `@zxing/library` 解取景框裡的畫面，HTTP 網站沒有相機就改成拍照。對過的號碼存在 localStorage，還沒開獎的期別開獎後會自動對。
+- **計時器**：番茄鐘、碼表、倒數。時間都存開始／結束的時間戳（`performance.timeOrigin + performance.now()`），顯示時才相減，背景分頁也不會慢；
+  時間到只排一個 `setTimeout` 等到結束那一刻，響 Web Audio 合成的鈴聲並發系統通知（第一次按開始時詢問權限），分頁標題顯示剩餘時間。進行中的計時存在 localStorage，重新整理會接著跑。
+- **抽籤・分組**：分成 N 組或每組 M 人，人數差不超過 1；「一定要分開」的人先放，衝突時整個重來，最多試 300 次。
 
 ## IP 訪問紀錄
 

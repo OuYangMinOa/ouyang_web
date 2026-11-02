@@ -28,12 +28,15 @@
   gap: 8px;
 }
 
-/* 抽籤方式：桌機一排四個，窄螢幕兩排 */
+/* 抽籤方式：桌機一排五個，窄螢幕三個一排；彈珠賽道一排四個，窄螢幕兩個一排 */
 .lot-modes,
 .lot-tracks {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
+}
+.lot-modes {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 .lot-modes button,
 .lot-tracks button {
@@ -421,6 +424,130 @@
   color: var(--text-h);
 }
 
+/* ---- 分組 ---- */
+
+.lot-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.lot-by {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.lot-by button {
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.lot-by button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.lot-by button:disabled.active {
+  opacity: 1;
+}
+.lot-group-summary {
+  align-self: center;
+}
+.lot-group-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.lot-group {
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+}
+.lot-group h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-h);
+}
+.lot-group h4 .muted {
+  margin-left: auto;
+  font-weight: 400;
+}
+.lot-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 翻牌：背面是「?」，翻開是名字 */
+.lot-card {
+  height: 40px;
+  perspective: 600px;
+}
+.lot-card-inner {
+  position: relative;
+  display: block;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.45s ease-out;
+}
+.lot-card.flipped .lot-card-inner {
+  transform: rotateY(180deg);
+}
+.lot-card-back,
+.lot-card-front {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 8px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.lot-card-back {
+  justify-content: center;
+  background: var(--cell-alt);
+  border: 1px dashed var(--border);
+  color: var(--text);
+  font-weight: 600;
+}
+.lot-card-front {
+  transform: rotateY(180deg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-h);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  line-height: 38px;
+}
+/* 洗牌：每張牌錯開時間左右晃 */
+.lot-group-list.shuffling .lot-card-inner {
+  animation: lot-shuffle 0.35s ease-in-out 2 alternate;
+  animation-delay: calc(mod(var(--i), 7) * 30ms);
+}
+@keyframes lot-shuffle {
+  from {
+    transform: translateX(-10px) rotate(-3deg);
+  }
+  to {
+    transform: translateX(10px) rotate(3deg);
+  }
+}
+
 /* ---- 紀錄 ---- */
 
 .lot-history-head {
@@ -455,6 +582,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .lot-card-inner,
+  .lot-group-list.shuffling .lot-card-inner {
+    transition: none;
+    animation: none;
+  }
   .lot-slip-list li.settled,
   .lot-ladder-prize.shown {
     animation: none;
@@ -466,9 +598,14 @@
 }
 
 @media (max-width: 640px) {
-  .lot-modes,
+  .lot-modes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .lot-tracks {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lot-by {
+    flex: 1 1 100%;
   }
   .lot-race-stage {
     max-width: none;
