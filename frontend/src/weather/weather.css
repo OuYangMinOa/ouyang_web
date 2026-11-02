@@ -378,6 +378,46 @@ path.tc-point.tc-level-none {
   margin-top: 8px;
 }
 
+/* ---- 颱風名稱表 ---- */
+
+.name-search {
+  display: flex;
+  margin-bottom: 16px;
+  max-width: 420px;
+}
+.name-table td {
+  vertical-align: top;
+}
+.name-table .name-zh {
+  display: block;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.name-table .name-en {
+  display: block;
+  font-size: 13px;
+}
+.name-table td.name-hit {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.name-table td.name-active .name-zh {
+  color: var(--accent);
+}
+.name-table .chip.subtle {
+  margin: 4px 0 0;
+}
+@media (max-width: 640px) {
+  /* 卡片裡中英文和標籤排在同一行 */
+  .name-table .name-zh,
+  .name-table .name-en {
+    display: inline;
+  }
+  .name-table td {
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+}
+
 /* ---- 首頁的颱風區 ---- */
 
 .typhoon-home {

@@ -112,6 +112,7 @@ export const APPS: AppInfo[] = [
         items: [
           { to: '/weather', label: '總覽', icon: '▦' },
           { to: '/weather/typhoon', label: '颱風', icon: '🌀' },
+          { to: '/weather/typhoon/names', label: '颱風名稱表', icon: '📋' },
           { to: '/weather/forecast', label: '全台天氣', icon: '⛅' },
           { to: '/weather/quake', label: '地震', icon: '📈' },
         ],
@@ -141,7 +142,7 @@ export const APPS: AppInfo[] = [
     name: '系統管理',
     icon: '🛠️',
     glyph: '管',
-    blurb: '帳號、角色與權限、註冊審核、回覆大家的回報與許願，全站的 IP 訪問紀錄、隱藏頁面的訪客，以及現在誰在玩哪個遊戲。之後每個 APP 的權限都從這裡發。',
+    blurb: '帳號、角色與權限、註冊審核、回覆大家的回報與許願，全站的 IP 訪問紀錄、隱藏頁面的訪客、現在誰在玩哪個遊戲，以及主機和上面各個 bot 的 CPU、記憶體與磁碟。之後每個 APP 的權限都從這裡發。',
     tag: '僅管理員',
     permission: PERMISSIONS.adminUsers,
     nav: [
@@ -154,6 +155,7 @@ export const APPS: AppInfo[] = [
           { to: '/admin/access', label: 'IP 訪問紀錄', icon: '🌐' },
           { to: '/admin/visits', label: '頁面訪客', icon: '👁️' },
           { to: '/admin/games', label: '遊戲狀態', icon: '🎮' },
+          { to: '/admin/system', label: '主機監控', icon: '📊' },
         ],
       },
     ],

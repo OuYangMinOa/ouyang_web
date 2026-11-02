@@ -44,7 +44,7 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/games` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/games`、`/admin/system` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 回報與許願
 
@@ -368,6 +368,28 @@ GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可
   登出那一次 session 已刪，都算訪客）。關機時會寫完剩下的，被強制結束的話最後幾秒會遺失。
 - 保留 30 天，每小時清一次。同一個 IP 10 分鐘超過 1000 筆的部分不記，避免被灌爆。
 
+## 主機監控
+
+「系統管理 › 主機監控」（`/admin/system`，需要 `admin.users`）：整台主機的 CPU（含 iowait、steal）、記憶體、磁碟用量與讀寫、網路、負載，
+以及主機上每個服務各用了多少 CPU 和記憶體，頁面每 5 秒更新一次。程式在 `backend/src/monitor.rs`。
+
+```
+GET    /api/admin/system                 目前的快照（snapshot，讀不到 /proc 時是 null 加上 error）、監控清單的狀態（targets）
+GET    /api/admin/system/history?range=  1h：每 5 秒一點；24h：每分鐘一點    {"step_secs","points":[{t,cpu,mem_used,rx_bps,tx_bps,read_bps,write_bps,targets:[…]}]}
+POST   /api/admin/system/targets         {"label":"歐陽小俠","pattern":"Xiao-Xia"}  →  201   最多 20 個
+DELETE /api/admin/system/targets/{id}
+```
+
+- 全部讀 Linux 的 /proc。容器裡的 /proc 只看得到自己，所以 `compose.yaml` 把主機的 /proc 唯讀掛到 `/host/proc`（`HOST_PROC`）。
+  容器是 nonroot，讀得到每個行程的 stat、cmdline、cgroup，讀不到環境變數。本機開發（Windows、macOS）沒有 /proc，頁面會顯示讀不到。
+- 行程依 `/proc/<pid>/cgroup` 分組：同一個 systemd 服務、Docker 容器或 SSH 工作階段（tmux、nohup 跑的）算一組，主機上的 bot 不用設定就會出現。
+  Docker 容器只知道 id（讀不到 docker socket），所以用主要行程的指令列當名稱。CPU 一律換算成佔整台主機的比例。
+- 監控清單存在 `monitor_targets`：cgroup 路徑或指令列含有關鍵字（不分大小寫）的行程都算，一個都沒有就標成「沒在跑」。
+  bot 用 systemd 跑的話關鍵字填 `<名稱>.service`；容器的 id 每次部署都會換，改填指令列的一部分。
+- 磁碟是資料庫所在的分割區（容器的 `/data` volume，在 EC2 上就是根目錄那顆 EBS）；網路讀主機 1 號行程的 `/proc/1/net/dev`，不算 lo 和 docker 的虛擬網卡。
+- 背景每 5 秒取樣，歷史只放在記憶體（1 小時 × 5 秒、24 小時 × 1 分鐘），重啟或換版後重新累積。staging 和 prod 各自取樣，看到的是同一台主機。
+  這個頁面的請求不記進 IP 訪問紀錄。
+
 ## 隱藏頁面
 
 不在任何選單、首頁或工具清單裡，只有知道網址的人進得來；頁面加了 `noindex`。誰來過記在「系統管理 › 頁面訪客」（`/admin/visits`，需要 `admin.users`）。
@@ -442,7 +464,10 @@ echo 'CWA_API_KEY=CWA-XXXXXXXX' > ~/ouyang_web/prod/secrets.env
 chmod 600 ~/ouyang_web/prod/secrets.env
 ```
 
-有金鑰才會抓的資料：颱風路徑 `W-C0034-005`（含中文名稱）、顯著與小區域有感地震報告 `E-A0015-001`／`E-A0016-001`。
+有金鑰才會抓的資料：颱風路徑 `W-C0034-005`（含過去路徑）、顯著與小區域有感地震報告 `E-A0015-001`／`E-A0016-001`。
+沒有金鑰（或開放資料平台抓不到）時，颱風改讀氣象署網站「颱風消息」頁面用的 `Data/js/typhoon/TY_NEWS-Data.js`，
+有現況、預報、中文名稱和氣象署編號，只是沒有過去路徑。日本氣象廳與 GDACS 只有英文名稱的颱風，用 `backend/src/weather/typhoon_names.rs`
+的名稱表（氣象署〈颱風中文譯名及國際命名對照表〉）補上中文；同一張表也是 `/weather/typhoon/names` 頁面的資料，名字有除名替換時要手動更新。
 本機開發直接 `CWA_API_KEY=... cargo run`。
 
 ## LoL 世界賽

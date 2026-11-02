@@ -13,7 +13,9 @@ use std::{
 use backend::{
     AppState, access_log,
     auth::upsert_admin,
-    healthcheck, router,
+    healthcheck,
+    monitor::{self, Monitor},
+    router,
     weather::{self, Weather},
 };
 use sqlx::{
@@ -36,6 +38,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://data/app.db".into());
     let pool = connect(&database_url).await?;
+    // 主機監控看資料庫所在的分割區
+    let data_dir = SqliteConnectOptions::from_str(&database_url)?
+        .get_filename()
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .map_or_else(|| PathBuf::from("."), PathBuf::from);
 
     if args.get(1).map(String::as_str) == Some("create-admin") {
         let username = args.get(2).ok_or("用法：backend create-admin <帳號>（密碼從 stdin 讀一行）")?;
@@ -56,6 +64,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 地震速報要一直連著，不等有人來看；本機的 relay 見 weather/quake.rs
     weather::quake::spawn(state.weather.clone(), env::var("EEW_RELAY_URL").ok());
     access_log::spawn(state.access_log.clone(), pool.clone());
+    // 容器裡要讀主機的 /proc（compose.yaml 掛在 /host/proc），本機開發直接讀 /proc
+    let host_proc = env::var("HOST_PROC").unwrap_or_else(|_| "/proc".into());
+    state.monitor = Arc::new(Monitor::new(host_proc, data_dir));
+    monitor::spawn(state.monitor.clone(), pool.clone());
     let draining = state.draining.clone();
     let access = state.access_log.clone();
     let app = router(state, &static_dir);

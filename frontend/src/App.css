@@ -80,7 +80,7 @@ button.menu-button {
   white-space: nowrap;
 }
 button.menu-button:hover,
-button.menu-button[aria-expanded='true'] {
+button.menu-button[aria-expanded="true"] {
   background: var(--surface);
 }
 
@@ -284,7 +284,7 @@ label {
   gap: 6px;
 }
 
-input:not([type='checkbox']),
+input:not([type="checkbox"]),
 select,
 textarea {
   flex: 1;
@@ -513,7 +513,7 @@ td .edit {
   transition: background 0.15s;
 }
 .switch input::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -838,6 +838,333 @@ td .edit {
 time {
   flex-shrink: 0;
   font-size: 13px;
+}
+
+/* 主機監控 */
+.sys-host {
+  font-size: 13px;
+}
+.sys-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+.sys-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 0;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.sys-tile strong {
+  font-size: 26px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.sys-tile small {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.sys-meter {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.sys-meter > div {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.4s;
+}
+.sys-meter > div.is-high {
+  background: var(--danger);
+}
+.sys-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 28px 0 12px;
+}
+.sys-section-head h2 {
+  margin: 0;
+}
+.sys-section-head input {
+  flex: 0 1 260px;
+  min-width: 0;
+}
+.sys-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+}
+.sys-chart {
+  margin-top: 0;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.sys-chart header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+.sys-chart h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.sys-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+.sys-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sys-chart-empty {
+  margin: 24px 0;
+  text-align: center;
+}
+
+/* 折線圖：左邊是刻度、底下是時間，十字線和提示框疊在畫布上 */
+.sys-plot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  font-size: 11px;
+  color: var(--text);
+}
+.sys-plot.is-compact {
+  display: block;
+  margin-top: 8px;
+}
+.sys-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.sys-canvas {
+  position: relative;
+  height: 140px;
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.is-compact .sys-canvas {
+  height: 48px;
+}
+.sys-canvas svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.sys-times {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.sys-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.sys-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.sys-line.is-1 {
+  stroke: var(--accent);
+}
+.sys-line.is-2 {
+  stroke: var(--n1);
+}
+.sys-area {
+  fill: var(--accent);
+  opacity: 0.12;
+}
+.sys-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--text);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.sys-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+.sys-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.sys-dot.is-1,
+.sys-swatch.is-1 {
+  background: var(--accent);
+}
+.sys-dot.is-2,
+.sys-swatch.is-2 {
+  background: var(--n1);
+}
+.sys-tip {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sys-tip.is-left {
+  margin-left: 0;
+  transform: translateX(calc(-100% - 10px));
+}
+.sys-tip strong {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 監控清單 */
+.sys-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sys-target {
+  margin-top: 0;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.sys-target header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sys-target header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-h);
+}
+.sys-target.is-down {
+  border-color: var(--danger);
+}
+.sys-target.is-down .live-dot {
+  background: var(--danger);
+}
+.sys-remove {
+  margin-left: auto;
+  min-height: 40px;
+  font-size: 13px;
+}
+.sys-pattern {
+  margin: 2px 0 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.sys-target-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.sys-target-stats strong {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.sys-target .error {
+  margin: 0;
+}
+.sys-downs {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.sys-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0;
+  padding: 14px 16px;
+}
+.sys-form input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.sys-form .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* 所有服務 */
+.sys-group-name {
+  max-width: 360px;
+}
+.sys-group-name span {
+  overflow-wrap: anywhere;
+}
+.sys-group-name code {
+  display: block;
+  font-size: 12px;
+}
+.sys-procs li {
+  flex-wrap: wrap;
+}
+.sys-procs .visit-detail {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .sys-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sys-tile strong {
+    font-size: 22px;
+  }
+  .sys-section-head input {
+    flex: 1 1 100%;
+  }
+  .sys-group-name {
+    max-width: none;
+    flex-wrap: wrap;
+  }
 }
 
 /* ---- 平板與手機：側邊欄收進頁首，頁首維持一行 ---- */

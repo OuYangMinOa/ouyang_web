@@ -56,6 +56,12 @@ export type Storm = {
 
 export type TyphoonReport = { updated_at: string; storms: Storm[]; sources: SourceStatus[] }
 
+/** 颱風名稱表：每一列是一個成員提供的名字，names 依第 1～5 組排列 */
+export type TyphoonNameTable = {
+  updated: string
+  rows: { member: string; names: { zh: string; en: string }[] }[]
+}
+
 /** 顯示順序與名稱；顏色對應 weather.css 的 --agency-<id> */
 export const AGENCIES: { id: string; name: string; short: string }[] = [
   { id: 'cwa', name: '中央氣象署', short: '台灣' },
@@ -80,7 +86,7 @@ export function stormName(storm: Storm) {
   return '熱帶性低氣壓'
 }
 
-/** 日本的颱風編號 2631 → 第 31 號 */
+/** 颱風編號（氣象署為主，沒有才用日本的）2630 → 第 30 號 */
 export function stormNumber(storm: Storm) {
   return storm.number ? `第 ${Number(storm.number.slice(2))} 號` : undefined
 }
