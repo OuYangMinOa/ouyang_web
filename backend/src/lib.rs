@@ -182,6 +182,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/music/s/{alias}", get(music::shared_file))
         .route("/weather/forecast", get(weather::forecast::forecast))
         .route("/weather/typhoons", get(weather::typhoon::typhoons))
+        .route("/weather/typhoon-names", get(weather::typhoon_names::names))
         .route("/weather/quakes", get(weather::quake::quakes))
         .route("/weather/quakes/ws", get(weather::quake::connect))
         .fallback(api_not_found);

@@ -2,10 +2,12 @@
 //!
 //! - 日本氣象廳（JMA）：西北太平洋，含過去路徑、強度與 70% 機率圓，不需要金鑰。
 //! - GDACS：聯合國與歐盟合作的災害預警，整理 JTWC（美軍）與 NHC（美國）的全球路徑與不確定範圍。
-//! - 中央氣象署（CWA）：要 `CWA_API_KEY`，有設定才抓。
+//! - 中央氣象署（CWA）：有 `CWA_API_KEY` 就用開放資料平台（含過去路徑）；沒有金鑰或抓不到時，
+//!   改讀氣象署網站「颱風消息」頁面用的資料檔（只有現況與預報，沒有過去路徑）。
 //! - Weather Lab：每 6 小時起報一次的 AI 系集預報（平均路徑＋每個成員的路徑）。
 //!
 //! 各來源各自回報一份颱風清單，再依目前位置把同一個颱風合在一起（距離 600 公里內視為同一個）。
+//! 只有英文名稱的，用氣象署的颱風名稱表（`typhoon_names.rs`）補上中文。
 
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -14,7 +16,7 @@ use chrono::{DateTime, Duration as ChronoDuration, NaiveDateTime, TimeZone, Time
 use serde::Serialize;
 use serde_json::Value;
 
-use super::{SourceStatus, Weather, distance_km, field, get_json, list, num, text};
+use super::{SourceStatus, Weather, distance_km, field, get_json, list, num, text, typhoon_names};
 use crate::{AppError, AppState};
 
 const CACHE_TTL: Duration = Duration::from_secs(10 * 60);
@@ -27,6 +29,8 @@ const JMA_TARGETS: &str = "https://www.jma.go.jp/bosai/typhoon/data/targetTc.jso
 const GDACS_LIST: &str = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH";
 const NHC_CURRENT: &str = "https://www.nhc.noaa.gov/CurrentStorms.json";
 const CWA_TRACKS: &str = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/W-C0034-005";
+/// 氣象署網站「颱風消息」頁面的資料（JavaScript，不用金鑰）
+const CWA_WEB: &str = "https://www.cwa.gov.tw/Data/js/typhoon/TY_NEWS-Data.js";
 const WEATHER_LAB: &str = "https://deepmind.google.com/science/weatherlab/download/cyclones";
 /// Weather Lab 目前作業中的模型
 const WEATHER_LAB_MODEL: &str = "OPER";
@@ -88,7 +92,7 @@ pub struct Storm {
     pub name_en: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name_zh: Option<String>,
-    /// 日本氣象廳的颱風編號，例如 2631 是 2026 年第 31 號
+    /// 颱風編號，例如 2630 是 2026 年第 30 號；以氣象署的編號為主，沒有才用日本氣象廳的
     #[serde(skip_serializing_if = "Option::is_none")]
     pub number: Option<String>,
     pub current: TrackPoint,
@@ -135,23 +139,26 @@ pub async fn typhoons(State(state): State<AppState>) -> Result<Json<Arc<TyphoonR
 async fn build_report(weather: &Weather) -> TyphoonReport {
     let http = &weather.http;
     let cwa = async {
-        match &weather.cwa_key {
-            Some(key) => Some(fetch_cwa(http, key).await),
-            None => None,
+        let api = match &weather.cwa_key {
+            Some(key) => fetch_cwa(http, key).await,
+            None => Err("沒有設定 CWA_API_KEY".into()),
+        };
+        match api {
+            Ok(storms) => Ok(storms),
+            Err(api_error) => fetch_cwa_web(http).await.map_err(|web_error| {
+                if weather.cwa_key.is_some() { format!("{api_error}；{web_error}") } else { web_error }
+            }),
         }
     };
     let (cwa, jma, gdacs, ai) = tokio::join!(cwa, fetch_jma(http), fetch_gdacs(http), fetch_ai(weather));
 
-    let mut sources = Vec::new();
-    if let Some(cwa) = &cwa {
-        sources.push(SourceStatus::from_result("cwa", "中央氣象署", cwa));
-    }
+    let mut sources = vec![SourceStatus::from_result("cwa", "中央氣象署", &cwa)];
     sources.push(SourceStatus::from_result("jma", "日本氣象廳", &jma));
     sources.push(SourceStatus::from_result("gdacs", "GDACS（JTWC／NHC）", &gdacs));
     sources.push(SourceStatus::from_result("ai", "Google DeepMind Weather Lab", &ai));
 
     // 先放的來源優先決定颱風的名稱與目前位置
-    let official = [cwa.unwrap_or(Ok(Vec::new())), jma, gdacs].into_iter().flat_map(Result::unwrap_or_default);
+    let official = [cwa, jma, gdacs].into_iter().flat_map(Result::unwrap_or_default);
     let storms = merge(official.collect(), ai.map(|ai| (*ai).clone()).unwrap_or_default());
     TyphoonReport { updated_at: Utc::now().to_rfc3339(), storms, sources }
 }
@@ -203,6 +210,9 @@ fn merge(candidates: Vec<Candidate>, ai: Vec<AiForecast>) -> Vec<Storm> {
     }
 
     for storm in &mut storms {
+        if storm.name_zh.is_none() {
+            storm.name_zh = storm.name_en.as_deref().and_then(typhoon_names::chinese_name).map(str::to_owned);
+        }
         storm.distance_to_taiwan_km = distance_km(storm.current.lat, storm.current.lon, TAIWAN.0, TAIWAN.1).round();
         storm.closest_forecast_km = storm
             .agencies
@@ -485,12 +495,16 @@ fn parse_cwa(body: &Value) -> Vec<Candidate> {
                 .as_deref()
                 .and_then(parse_time)
                 .map(utc_string);
-            let number = text(field(tc, "cwaTyNo")).or_else(|| text(field(tc, "cwaTdNo")));
+            let ty_number = text(field(tc, "cwaTyNo"));
+            let id = ty_number.clone().or_else(|| text(field(tc, "cwaTdNo"))).unwrap_or_default();
+            // 編號加上年份，和日本氣象廳的格式一樣（2026 年第 30 號 → 2630）
+            let year = past.last().and_then(|p| p.time.as_deref()).and_then(|t| t.get(2..4)).map(str::to_owned);
+            let number = ty_number.zip(year).and_then(|(n, year)| Some(format!("{year}{:02}", n.parse::<u32>().ok()?)));
             Some(Candidate {
-                id: format!("cwa:{}", number.clone().unwrap_or_default()),
+                id: format!("cwa:{id}"),
                 name_en: text(field(tc, "typhoonName")).map(|n| gdacs_name(&n)),
                 name_zh: text(field(tc, "cwaTyphoonName")),
-                number: None,
+                number,
                 forecast: Forecast { agency: "cwa".into(), issued, past, forecast, cone: None },
             })
         })
@@ -516,6 +530,156 @@ fn cwa_point(fix: &Value, forecast_time: Option<DateTime<Utc>>) -> Option<TrackP
         radius_km: num(field(fix, "radiusOf70PercentProbability")),
         storm_radius_km: num(field(field(fix, "circleOf15Ms"), "radius")),
     })
+}
+
+async fn fetch_cwa_web(http: &reqwest::Client) -> Result<Vec<Candidate>, String> {
+    let response = http.get(CWA_WEB).send().await.map_err(|e| format!("中央氣象署網站：{e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("中央氣象署網站：HTTP {}", response.status()));
+    }
+    let script = response.text().await.map_err(|e| format!("中央氣象署網站：{e}"))?;
+    parse_cwa_web(&script).ok_or_else(|| "中央氣象署網站：資料格式不認得".into())
+}
+
+/// `TY_NEWS-Data.js` 是一段 JavaScript：`TYPHOON` 有中英文名稱，`TY_LIST_2['E']` 是英文版的現況與預報（HTML）。
+/// 英文版的格式比中文版固定（時間是 UTC、經緯度是 `22.2N 141.9E`），所以從英文版讀。
+fn parse_cwa_web(script: &str) -> Option<Vec<Candidate>> {
+    // 沒有颱風時 TY_LIST_2 是空字串
+    let html = js_string(script, "TY_LIST_2['E']")?;
+    let zh_names = cwa_web_names(script);
+    let storms = html
+        .split(r#"<div class="panel panel-default""#)
+        .skip(1)
+        .filter_map(|panel| {
+            // 標題像是 `<span class="fa-blue">IN-FA (202630)</span>`
+            let title = panel.split(r#"<span class="fa-blue">"#).nth(1)?.split('<').next()?.trim();
+            let (name, code) = match title.split_once(" (") {
+                Some((name, code)) => (name.trim(), code.trim_end_matches(')')),
+                None => (title, ""),
+            };
+            let zh = zh_names.iter().find(|(en, _)| en.eq_ignore_ascii_case(name)).map(|(_, zh)| zh.clone());
+            // 熱帶性低氣壓沒有名字，標題不是國際命名
+            let is_named = zh.is_some() || typhoon_names::chinese_name(name).is_some();
+            let number = (code.len() == 6 && code.chars().all(|c| c.is_ascii_digit())).then(|| code[2..].to_owned());
+
+            let (past, forecast) = cwa_web_points(panel);
+            let current = past.first()?.clone();
+            Some(Candidate {
+                id: format!("cwa:{}", number.as_deref().unwrap_or(name)),
+                name_en: is_named.then(|| gdacs_name(name)),
+                name_zh: zh,
+                number,
+                forecast: Forecast { agency: "cwa".into(), issued: current.time.clone(), past, forecast, cone: None },
+            })
+        })
+        .collect();
+    Some(storms)
+}
+
+/// `var TYPHOON = {'IN-FA':{'Name':{'C':'煙花','E':'IN-FA'}}, ...}` → `[("IN-FA", "煙花")]`
+fn cwa_web_names(script: &str) -> Vec<(String, String)> {
+    script
+        .split("'Name':{'C':'")
+        .skip(1)
+        .filter_map(|rest| {
+            let (zh, rest) = rest.split_once('\'')?;
+            let en = rest.split("'E':'").nth(1)?.split('\'').next()?;
+            Some((en.trim().to_owned(), zh.trim().to_owned()))
+        })
+        .filter(|(en, zh)| !en.is_empty() && !zh.is_empty())
+        .collect()
+}
+
+/// 讀出 `name = '...'+ '...';` 這種用 + 接起來的字串
+fn js_string(script: &str, name: &str) -> Option<String> {
+    let start = script.find(&format!("{name} ="))? + name.len() + 2;
+    let mut chars = script[start..].chars().peekable();
+    let mut out = String::new();
+    loop {
+        while chars.next_if(|c| c.is_whitespace() || *c == '+').is_some() {}
+        if chars.next_if_eq(&'\'').is_none() {
+            return Some(out);
+        }
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' => out.extend(chars.next()),
+                '\'' => break,
+                c => out.push(c),
+            }
+        }
+    }
+}
+
+/// 一個颱風的現況（第一點）與預報。每個點以 `0600UTC 02 November 2026` 開頭，後面幾行是位置、氣壓、風速…
+fn cwa_web_points(panel: &str) -> (Vec<TrackPoint>, Vec<TrackPoint>) {
+    let mut lines = Vec::new();
+    for piece in panel.split('<') {
+        let text = piece.split_once('>').map_or(piece, |(_, text)| text).trim();
+        if !text.is_empty() {
+            lines.push(text);
+        }
+    }
+    let mut points: Vec<TrackPoint> = Vec::new();
+    let mut current: Option<TrackPoint> = None;
+    for line in lines {
+        if let Ok(time) = NaiveDateTime::parse_from_str(line, "%H%MUTC %d %B %Y") {
+            points.extend(current.take());
+            current = Some(TrackPoint { time: Some(utc_string(Utc.from_utc_datetime(&time))), ..Default::default() });
+            continue;
+        }
+        let Some(point) = current.as_mut() else { continue };
+        let lower = line.to_lowercase();
+        let ms = |key: &str| number_after(line, key).map(|ms| (ms * KT_PER_MS).round());
+        if lower.starts_with("center location") || lower.starts_with("center position") {
+            if let Some((lat, lon)) = cwa_web_lat_lon(line) {
+                (point.lat, point.lon) = (lat, lon);
+            }
+        } else if lower.starts_with("minimum pressure") {
+            point.pressure_hpa = number_after(line, "Pressure");
+        } else if lower.starts_with("maximum wind speed") {
+            point.wind_kt = ms("Speed");
+        } else if lower.starts_with("gust") {
+            point.gust_kt = ms("Gust");
+        } else if lower.contains("radius of over 15m/s winds") {
+            point.storm_radius_km = number_after(line, "winds");
+        } else if lower.contains("70% probability circle") {
+            point.radius_km = number_after(line, "circle");
+        }
+    }
+    points.extend(current);
+    // 沒有位置的點（格式變了）不要畫在 (0, 0)
+    points.retain(|p| p.lat != 0.0 || p.lon != 0.0);
+    let forecast = points.split_off(points.len().min(1));
+    (points, forecast)
+}
+
+/// `Center Position 22.4N 141.1E`
+fn cwa_web_lat_lon(line: &str) -> Option<(f64, f64)> {
+    let mut lat = None;
+    let mut lon = None;
+    for word in line.split_whitespace() {
+        let Some((at, _)) = word.char_indices().last() else { continue };
+        let (value, hemisphere) = word.split_at(at);
+        let Ok(value) = value.parse::<f64>() else { continue };
+        match hemisphere {
+            "N" => lat = Some(value),
+            "S" => lat = Some(-value),
+            "E" => lon = Some(value),
+            "W" => lon = Some(-value),
+            _ => {}
+        }
+    }
+    lat.zip(lon)
+}
+
+/// `key` 後面的第一個數字；`Maximum Wind Speed  m/s` 這種沒有值的回 `None`
+fn number_after(line: &str, key: &str) -> Option<f64> {
+    let rest = &line[line.find(key)? + key.len()..];
+    let start = rest.find(|c: char| c.is_ascii_digit())?;
+    let digits = &rest[start..];
+    let end = digits.find(|c: char| !c.is_ascii_digit() && c != '.').unwrap_or(digits.len());
+    // 數字前面要是空白，避免把 `m/s` 之類的單位誤讀
+    rest[..start].trim().is_empty().then(|| digits[..end].parse().ok()).flatten()
 }
 
 // ---------- Google DeepMind Weather Lab ----------
@@ -728,6 +892,64 @@ mod tests {
         let next = &storm.forecast.forecast[0];
         assert_eq!((next.lat, next.lon), (21.8, 142.9));
         assert_eq!(next.time.as_deref(), Some("2026-10-31T00:00:00Z"));
+        assert_eq!(storm.number.as_deref(), Some("2630"));
+    }
+
+    #[test]
+    fn parses_cwa_website_data() {
+        let script = r#"// [RJ] for TY_NEWS.html, W23.html
+var TY_COUNT = [0,1];
+var TYPHOON = {
+	'IN-FA':{'Name':{'C':'煙花','E':'IN-FA'}}
+};
+TY_LIST_2['C'] = ''+
+    '<span class="fa-blue">煙花</span>';
+TY_LIST_2['E'] = ''+
+    '<div class="panel panel-default">'+
+        '<span class="fa-red">TYPHOON</span><br><span class="fa-blue">IN-FA (202630)</span>'+
+                    '<span class="now">Analysis</span>'+
+                    '<p>0000UTC 02 November 2026</p>'+
+                        '<li>Center Location 22.2N 141.9E</li>'+
+                        '<li>Movement WNW 18km/h</li>'+
+                        '<li>Minimum Pressure 965 hPa</li>'+
+                        '<li>Maximum Wind Speed 35 m/s</li>'+
+                        '<li>Gust 45 m/s</li>'+
+                        '<li>Average radius of over 15m/s winds 200km<br>　220km NW quad.  210km NE quad. </li>'+
+                    '<span class="prediction">Forecast</span>'+
+                    '<p>6 hours valid at:</p>'+
+                        '<li>0600UTC 02 November 2026</li>'+
+                        '<li>Center Position 22.4N 141.1E</li>'+
+                        '<li>Vector to 6 HR Position</li>'+
+                        '<li>Minimum Pressure 965 hPa</li>'+
+                        '<li>Radius of 70% probability circle 30km</li>'+
+                    '<p class="Move-120h">96 hours valid at:</p>'+
+                        '<li>0000UTC 06 November 2026</li>'+
+                        '<li>Center Position 36.5N 150.0E</li>'+
+                        '<li>Maximum Wind Speed  m/s</li>'+
+    '</div>';
+var W23_Name = 'IN-FA';"#;
+        let storms = parse_cwa_web(script).unwrap();
+        assert_eq!(storms.len(), 1);
+        let storm = &storms[0];
+        assert_eq!(storm.name_en.as_deref(), Some("In-fa"));
+        assert_eq!(storm.name_zh.as_deref(), Some("煙花"));
+        assert_eq!(storm.number.as_deref(), Some("2630"));
+        let current = &storm.forecast.past[0];
+        assert_eq!((current.lat, current.lon), (22.2, 141.9));
+        assert_eq!(current.time.as_deref(), Some("2026-11-02T00:00:00Z"));
+        assert_eq!(current.wind_kt, Some(68.0));
+        assert_eq!(current.gust_kt, Some(87.0));
+        assert_eq!(current.pressure_hpa, Some(965.0));
+        assert_eq!(current.storm_radius_km, Some(200.0));
+        let forecast = &storm.forecast.forecast;
+        assert_eq!(forecast.len(), 2);
+        assert_eq!(forecast[0].radius_km, Some(30.0));
+        assert_eq!(forecast[1].time.as_deref(), Some("2026-11-06T00:00:00Z"));
+        assert_eq!(forecast[1].wind_kt, None);
+
+        // 沒有颱風
+        let empty = "var TYPHOON = {};\nTY_LIST_2['E'] = '';\n";
+        assert!(parse_cwa_web(empty).unwrap().is_empty());
     }
 
     #[test]
@@ -789,5 +1011,9 @@ mod tests {
         assert!(!vance.west_pacific);
         // 只有 AI 的排最後
         assert_eq!(storms.last().unwrap().id, "ai:IO912026");
+
+        // 只有英文名稱的，從名稱表補上中文
+        let storms = merge(vec![candidate("IN-FA", "jma", 20.1, 144.1)], vec![]);
+        assert_eq!(storms[0].name_zh.as_deref(), Some("煙花"));
     }
 }

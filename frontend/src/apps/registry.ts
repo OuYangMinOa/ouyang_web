@@ -112,6 +112,7 @@ export const APPS: AppInfo[] = [
         items: [
           { to: '/weather', label: '總覽', icon: '▦' },
           { to: '/weather/typhoon', label: '颱風', icon: '🌀' },
+          { to: '/weather/typhoon/names', label: '颱風名稱表', icon: '📋' },
           { to: '/weather/forecast', label: '全台天氣', icon: '⛅' },
           { to: '/weather/quake', label: '地震', icon: '📈' },
         ],
