@@ -1,9 +1,7 @@
 import { PERMISSIONS } from '../api'
+import type { NavGroup, NavItem } from '../components/SideNav'
 import { GAME_CATEGORIES, GAMES } from '../games/registry'
 import { TOOL_CATEGORIES, TOOLS } from '../tools/registry'
-
-export type AppNavItem = { to: string; label: string; icon: string }
-export type AppNavGroup = { label?: string; items: AppNavItem[] }
 
 export type AppInfo = {
   /** 網址前綴：/<id>/... */
@@ -19,7 +17,7 @@ export type AppInfo = {
   /** 沒有這個權限就不出現在切換面板與首頁 */
   permission?: string
   /** 側邊欄（手機是頂部選單）的內容 */
-  nav: AppNavGroup[]
+  nav: NavGroup[]
 }
 
 // 新的 APP 在這裡登記一筆，切換面板、側邊欄、首頁卡片都會自動出現
@@ -177,6 +175,6 @@ export function findAppByPath(pathname: string): AppInfo | undefined {
 }
 
 /** 目前網址對應到選單裡的哪一項 */
-export function findNavItem(app: AppInfo, pathname: string): AppNavItem | undefined {
+export function findNavItem(app: AppInfo, pathname: string): NavItem | undefined {
   return app.nav.flatMap((group) => group.items).find((item) => item.to === pathname)
 }

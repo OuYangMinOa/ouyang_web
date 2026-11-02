@@ -13,6 +13,7 @@ pub mod invoice;
 pub mod minesrace;
 pub mod monitor;
 pub mod music;
+pub mod nav_pins;
 pub mod party;
 pub mod puyo;
 pub mod puyo_scores;
@@ -190,6 +191,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/weather/quakes", get(weather::quake::quakes))
         .route("/weather/quakes/ws", get(weather::quake::connect))
         .route("/invoice/winning", get(invoice::winning))
+        .route("/nav/pins", get(nav_pins::list))
+        .route("/nav/pins/{app}", put(nav_pins::set))
         .fallback(api_not_found);
 
     // 打包時已經把較大的檔案另存一份 .gz（Dockerfile），瀏覽器支援 gzip 就直接送那份

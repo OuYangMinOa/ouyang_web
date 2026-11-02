@@ -98,6 +98,8 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
    </Route>
    ```
    桌機會有可收合的側邊欄，窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
+   兩邊都是 `frontend/src/components/SideNav.tsx`：頁面有 10 個以上時，上面會出現搜尋框（Enter 直接開第一個結果、Esc 清掉），
+   每一列右邊可以釘選，釘選的排在最上面。沒登入存在瀏覽器，有登入存在帳號（`GET /api/nav/pins`、`PUT /api/nav/pins/<APP id>`，`backend/src/nav_pins.rs`），換裝置也一樣。
 
 > prod（`https://ouyang.app`）和 staging（`https://test.ouyang.app`）都走 HTTPS，`<env>.env` 設了 `COOKIE_SECURE=true`。
 > cookie 沒有設 Domain，只屬於各自的網址，名稱也依環境分開（`session_<env>`），兩邊的登入互不影響。
