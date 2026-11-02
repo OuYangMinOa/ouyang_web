@@ -1,0 +1,484 @@
+/* ---- 圖片取色與調色盤 ---- */
+
+.cpk {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  /* 透明處的棋盤格，亮暗主題都從主題色調出來 */
+  --cpk-check-a: var(--surface);
+  --cpk-check-b: color-mix(in srgb, var(--text) 22%, var(--surface));
+}
+
+.cpk-label {
+  font-size: 14px;
+}
+.cpk-h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.cpk-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cpk-seg button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.cpk-seg button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.cpk-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 上傳區 */
+.cpk-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 240px;
+  box-sizing: border-box;
+  padding: 28px 16px;
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.cpk-drop:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.cpk-drop.over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.cpk-drop strong {
+  color: var(--text-h);
+  font-size: 18px;
+}
+.cpk-drop-icon {
+  font-size: 40px;
+  line-height: 1;
+}
+.cpk-drop .cpk-buttons {
+  justify-content: center;
+}
+.cpk-inline-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cpk-inline-pick i {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* 主畫面：窄的時候上下排，夠寬時圖片在左、顏色在右 */
+.cpk-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@container (min-width: 760px) {
+  .cpk-main {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+.cpk-left,
+.cpk-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cpk-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.cpk-image {
+  display: block;
+  max-width: 100%;
+  max-height: 65dvh;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  background: repeating-conic-gradient(var(--cpk-check-b) 0 25%, var(--cpk-check-a) 0 50%) 0 0 / 16px 16px;
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: crosshair;
+  /* 手指拖動是在找顏色，不是捲動頁面 */
+  touch-action: none;
+}
+.cpk-image:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cpk-loupe {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.cpk-loupe canvas {
+  display: block;
+  border-radius: 50%;
+  border: 3px solid var(--surface);
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--shadow);
+  image-rendering: pixelated;
+  background: var(--surface);
+}
+.cpk-loupe-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+  color: var(--text-h);
+  font: 13px var(--mono);
+}
+.cpk-loupe-label i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.cpk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.cpk-toolbar .cpk-seg {
+  flex: 1 1 260px;
+}
+
+/* 目前的顏色 */
+.cpk-current {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.cpk-current-swatch {
+  display: grid;
+  place-items: center;
+  height: 88px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.cpk-current-swatch.empty {
+  color: var(--text);
+  font-size: 14px;
+  border: 1px dashed var(--border);
+  box-shadow: none;
+}
+.cpk-formats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cpk-formats li {
+  display: grid;
+  grid-template-columns: 2.8em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.cpk-format-label {
+  font-size: 13px;
+}
+.cpk-formats code {
+  color: var(--text-h);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.cpk-formats button {
+  padding: 6px 12px;
+}
+.cpk-current .cpk-buttons > button {
+  flex: 1 1 auto;
+}
+
+.cpk-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cpk-swatch {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* 調色盤 */
+.cpk-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.cpk-section h2 {
+  margin: 8px 0 0;
+}
+.cpk-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.cpk-section-head h2 {
+  margin: 0;
+}
+.cpk-palette {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+.cpk-palette li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cpk-palette-swatch {
+  width: 100%;
+  height: 72px;
+  padding: 0;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--border);
+  transition: transform 0.12s;
+}
+.cpk-palette-swatch:hover {
+  transform: translateY(-2px);
+}
+.cpk-palette code {
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+/* 對比檢查 */
+.cpk-contrast {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.cpk-contrast-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+.cpk-cfield {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.cpk-cfield-row {
+  display: flex;
+  gap: 8px;
+}
+.cpk-cfield-row input[type='color'] {
+  flex: none;
+  width: 48px;
+  height: 40px;
+  padding: 4px;
+  cursor: pointer;
+}
+.cpk-hex {
+  font-family: var(--mono);
+  text-transform: uppercase;
+}
+.cpk-hex.bad {
+  border-color: var(--danger);
+}
+.cpk-swap {
+  min-width: 40px;
+  padding: 8px 12px;
+  font-size: 18px;
+}
+
+.cpk-apply {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cpk-apply-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.cpk-apply-head .cpk-seg button {
+  flex: 0 0 auto;
+}
+.cpk-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cpk-mini-swatch {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.cpk-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow-wrap: anywhere;
+}
+.cpk-sample-big {
+  font-size: 24px;
+  font-weight: 600;
+}
+.cpk-sample-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid;
+  border-radius: 8px;
+  font-size: 18px;
+}
+
+.cpk-ratio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.cpk-ratio strong {
+  color: var(--text-h);
+  font: 600 28px var(--mono);
+}
+.cpk-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 6px 16px;
+}
+.cpk-checks li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-h);
+  font-size: 15px;
+}
+.cpk-checks li > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 13px;
+}
+.cpk-checks li.pass > span:first-child {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: var(--ok);
+}
+.cpk-checks li.fail > span:first-child {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+}
+
+/* 只給螢幕閱讀器看的文字 */
+.cpk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 複製後的提示 */
+.cpk-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 50;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  pointer-events: none;
+}
+.cpk-toast span {
+  display: block;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--text-h);
+  color: var(--bg);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* 說明 */
+.cpk-notes h2 {
+  margin: 16px 0 8px;
+  font-size: 16px;
+}
+.cpk-notes ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+.cpk-notes li + li {
+  margin-top: 4px;
+}
