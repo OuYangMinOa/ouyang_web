@@ -1,0 +1,104 @@
+/* ---- 單位換算 ---- */
+
+.uc {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+  min-width: 0;
+}
+.uc .card {
+  margin-top: 0;
+}
+
+.uc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.uc-tabs button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.uc-tabs button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.uc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.uc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.uc-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 0;
+}
+.uc-label {
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  min-width: 0;
+  font-size: 15px;
+  cursor: pointer;
+}
+.uc-name {
+  color: var(--text-h);
+}
+.uc-symbol {
+  font: 13px var(--mono);
+  color: var(--text);
+}
+.uc-input {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.uc-input input {
+  width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.uc-list li.active .uc-input input {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.uc-list li.active .uc-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+button.uc-sign {
+  flex-shrink: 0;
+  width: 44px;
+  padding: 0;
+  font-size: 18px;
+}
+.uc-msg {
+  font-size: 14px;
+}
+.uc-note {
+  font-size: 13px;
+}
+
+/* 窄螢幕：單位名稱在上、欄位在下 */
+@media (max-width: 420px) {
+  .uc-list li {
+    grid-template-columns: 1fr;
+  }
+}
