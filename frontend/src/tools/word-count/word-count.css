@@ -1,0 +1,83 @@
+/* ---- 字數統計 ---- */
+
+.wc-text {
+  min-height: 14em;
+  font-family: var(--sans);
+}
+
+.wc-scope {
+  margin: -8px 0 0;
+  font-size: 14px;
+}
+.wc-scope .chip {
+  margin: 0;
+}
+
+/* 四個主要數字：桌機一排四個，手機兩個 */
+.wc-main {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.wc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.wc-label {
+  font-size: 14px;
+}
+.wc-value {
+  color: var(--text-h);
+  font-size: 26px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.wc-hint {
+  font-size: 13px;
+}
+
+/* 細項：名稱｜數字，自動排成多欄 */
+.wc-detail {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 0 24px;
+}
+.wc-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.wc-row dt {
+  min-width: 0;
+  color: var(--text-h);
+  font-size: 15px;
+}
+.wc-row dd {
+  margin: 0;
+  color: var(--text-h);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .wc-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .wc-value {
+    font-size: 22px;
+  }
+}
