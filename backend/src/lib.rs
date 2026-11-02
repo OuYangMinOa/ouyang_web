@@ -9,6 +9,7 @@ pub mod feedback;
 pub mod game_monitor;
 pub mod game_settings;
 pub mod games;
+pub mod invoice;
 pub mod minesrace;
 pub mod monitor;
 pub mod music;
@@ -80,6 +81,8 @@ pub struct AppState {
     pub music_dir: PathBuf,
     /// 天氣與環境：外部資料的快取，以及地震速報的即時連線
     pub weather: Arc<weather::Weather>,
+    /// 統一發票中獎號碼的快取（見 invoice.rs）
+    pub invoice: Arc<invoice::Invoice>,
     pub visit_limiter: Arc<visits::VisitLimiter>,
     /// 全站的 IP 訪問紀錄，背景整批寫進資料庫（見 access_log.rs）
     pub access_log: Arc<access_log::AccessLog>,
@@ -107,6 +110,7 @@ impl AppState {
             puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
             weather: Arc::default(),
+            invoice: Arc::default(),
             visit_limiter: Arc::default(),
             access_log: Arc::default(),
             monitor: Arc::default(),
@@ -185,6 +189,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/weather/typhoon-names", get(weather::typhoon_names::names))
         .route("/weather/quakes", get(weather::quake::quakes))
         .route("/weather/quakes/ws", get(weather::quake::connect))
+        .route("/invoice/winning", get(invoice::winning))
         .fallback(api_not_found);
 
     // 打包時已經把較大的檔案另存一份 .gz（Dockerfile），瀏覽器支援 gzip 就直接送那份

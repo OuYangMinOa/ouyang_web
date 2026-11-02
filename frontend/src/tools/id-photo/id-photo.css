@@ -1,0 +1,95 @@
+/* ---- 證件照產生器 ---- */
+
+.idp-frame {
+  position: relative;
+  max-width: 100%;
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--shadow);
+  overflow: hidden;
+  cursor: grab;
+  /* 拖曳與兩指縮放交給我們處理，不要捲動頁面 */
+  touch-action: none;
+  user-select: none;
+}
+.idp-frame:active {
+  cursor: grabbing;
+}
+.idp-frame:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.idp-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 臉部比例輔助線：色帶是頭頂與下巴該落的範圍 */
+.idp-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.idp-band {
+  fill: var(--accent);
+  fill-opacity: 0.18;
+  stroke: var(--accent);
+  stroke-opacity: 0.6;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.idp-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-opacity: 0.85;
+  vector-effect: non-scaling-stroke;
+}
+.idp-line.dashed {
+  stroke-dasharray: 5 4;
+}
+.idp-line.faint {
+  stroke-opacity: 0.5;
+}
+.idp-text {
+  fill: var(--accent);
+  text-anchor: end;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--idp-halo, var(--surface));
+  stroke-width: 3px;
+  stroke-opacity: 0.8;
+}
+
+.idp-hint {
+  max-width: 420px;
+  text-align: center;
+}
+
+.idp-custom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.idp-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 相紙預覽：相紙本身是白的，墊一圈邊框才看得出範圍 */
+.idp-sheet {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 260px;
+  align-self: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}

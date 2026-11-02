@@ -1,0 +1,255 @@
+/* ---- 日期計算 ---- */
+
+.dc {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  min-width: 0;
+}
+.dc .card {
+  margin-top: 0;
+}
+.dc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.dc-card > h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+/* 分頁：放不下就換行 */
+.dc-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.dc-tabs button,
+.dc-seg button {
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.dc-tabs button.active,
+.dc-seg button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.dc-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dc-seg button {
+  flex: 1 0 auto;
+}
+
+.dc-field {
+  min-width: 0;
+}
+.dc-field input,
+.dc-field select {
+  width: 100%;
+}
+.dc-field input[type='text'] {
+  font-variant-numeric: tabular-nums;
+}
+div.dc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+.dc-roc {
+  display: flex;
+  gap: 8px;
+}
+.dc-roc input[type='text'] {
+  flex: 1;
+  width: auto;
+}
+.dc-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  white-space: nowrap;
+  font-size: 15px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+.dc-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+/* 兩個欄位並排，中間一個符號；窄螢幕改直排 */
+.dc-pair {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+.dc-pair > .dc-field {
+  flex: 1 1 0;
+}
+.dc-eq {
+  flex-shrink: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  font-size: 20px;
+  color: var(--text);
+}
+button.dc-swap {
+  flex-shrink: 0;
+  width: 44px;
+  padding: 0;
+  font-size: 18px;
+}
+
+.dc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+.dc-row > .dc-field {
+  flex: 1 1 160px;
+}
+.dc-row > .dc-seg {
+  flex: 1 1 200px;
+}
+.dc-row > .dc-num {
+  flex: 1 1 100px;
+}
+.dc-row > .dc-unit {
+  flex: 0 1 120px;
+}
+.dc-suffix {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  color: var(--text-h);
+}
+
+.dc-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  overflow-wrap: anywhere;
+}
+.dc-result strong {
+  color: var(--text-h);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dc-result > span {
+  color: var(--text);
+  font-size: 15px;
+}
+.dc-result .muted {
+  font-size: 14px;
+}
+
+.dc-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.dc-facts > div {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.dc-facts dt {
+  font-size: 13px;
+  color: var(--text);
+}
+.dc-facts dd {
+  margin: 0;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.dc-note {
+  margin: 0;
+  font-size: 13px;
+}
+
+.dc-specials summary {
+  cursor: pointer;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  color: var(--text-h);
+}
+.dc-specials ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+}
+.dc-specials li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.dc-specials li.off {
+  color: var(--holiday);
+}
+.dc-specials li.work {
+  color: var(--text-h);
+}
+.dc-specials-date {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* 只給螢幕閱讀器看的文字 */
+.dc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .dc-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .dc-pair {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dc-pair > .dc-field {
+    flex: none;
+  }
+  .dc-eq {
+    display: none;
+  }
+  button.dc-swap {
+    align-self: center;
+    transform: rotate(90deg);
+  }
+}
