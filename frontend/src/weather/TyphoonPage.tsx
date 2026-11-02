@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
 import {
   AGENCIES,
   agencyName,
@@ -149,6 +150,9 @@ export default function TyphoonPage() {
     <div className="weather-page">
       <div className="weather-head">
         <h1>颱風</h1>
+        <Link className="work-link" to="/weather/typhoon/names">
+          颱風名稱表 →
+        </Link>
       </div>
       <p className="muted weather-lead">
         各國氣象單位的官方預報和 Google DeepMind 的 AI 系集預報畫在同一張圖。官方：虛線是預報路徑，外圈是 70%
@@ -260,7 +264,7 @@ export default function TyphoonPage() {
           <SourceList sources={data.sources} updatedAt={data.updated_at} />
           <p className="muted fineprint">
             官方資料：{available.map((a) => agencyName(a.id)).join('、') || '—'}
-            ；JTWC 與 NHC 經由 GDACS 取得。AI 預報是 Google DeepMind 的實驗性資料（即時資料依其使用條款，過去資料為 CC
+            ；JTWC 與 NHC 經由 GDACS 取得，中文名稱依中央氣象署的颱風名稱表。AI 預報是 Google DeepMind 的實驗性資料（即時資料依其使用條款，過去資料為 CC
             BY 4.0），僅供參考。防颱請以中央氣象署發布為準。
           </p>
         </>

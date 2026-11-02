@@ -464,7 +464,10 @@ echo 'CWA_API_KEY=CWA-XXXXXXXX' > ~/ouyang_web/prod/secrets.env
 chmod 600 ~/ouyang_web/prod/secrets.env
 ```
 
-有金鑰才會抓的資料：颱風路徑 `W-C0034-005`（含中文名稱）、顯著與小區域有感地震報告 `E-A0015-001`／`E-A0016-001`。
+有金鑰才會抓的資料：颱風路徑 `W-C0034-005`（含過去路徑）、顯著與小區域有感地震報告 `E-A0015-001`／`E-A0016-001`。
+沒有金鑰（或開放資料平台抓不到）時，颱風改讀氣象署網站「颱風消息」頁面用的 `Data/js/typhoon/TY_NEWS-Data.js`，
+有現況、預報、中文名稱和氣象署編號，只是沒有過去路徑。日本氣象廳與 GDACS 只有英文名稱的颱風，用 `backend/src/weather/typhoon_names.rs`
+的名稱表（氣象署〈颱風中文譯名及國際命名對照表〉）補上中文；同一張表也是 `/weather/typhoon/names` 頁面的資料，名字有除名替換時要手動更新。
 本機開發直接 `CWA_API_KEY=... cargo run`。
 
 ## LoL 世界賽

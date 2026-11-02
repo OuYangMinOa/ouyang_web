@@ -42,6 +42,7 @@ import './App.css'
 // 天氣與環境的頁面帶著 Leaflet 地圖，進到那一頁才下載
 const WeatherHub = lazy(() => import('./weather/WeatherHub'))
 const TyphoonPage = lazy(() => import('./weather/TyphoonPage'))
+const TyphoonNames = lazy(() => import('./weather/TyphoonNames'))
 const ForecastPage = lazy(() => import('./weather/ForecastPage'))
 const QuakePage = lazy(() => import('./weather/QuakePage'))
 // 隱藏頁面：不在任何選單裡，只有知道網址的人進得來；條碼函式庫也只在這頁下載
@@ -225,6 +226,7 @@ function App() {
               <Route path="/weather" element={<AppLayout />}>
                 <Route index element={<Lazy page={WeatherHub} />} />
                 <Route path="typhoon" element={<Lazy page={TyphoonPage} />} />
+                <Route path="typhoon/names" element={<Lazy page={TyphoonNames} />} />
                 <Route path="forecast" element={<Lazy page={ForecastPage} />} />
                 <Route path="quake" element={<Lazy page={QuakePage} />} />
               </Route>

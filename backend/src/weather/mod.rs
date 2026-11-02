@@ -6,6 +6,7 @@
 pub mod forecast;
 pub mod quake;
 pub mod typhoon;
+pub mod typhoon_names;
 
 use std::{
     env,
