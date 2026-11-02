@@ -1,7 +1,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 
 /** 側邊欄的分組，順序就是顯示順序 */
-export const TOOL_CATEGORIES = ['圖片', '文字', '計算', '娛樂'] as const
+export const TOOL_CATEGORIES = ['圖片', '文字', '計算', '生活', '娛樂'] as const
 
 export type ToolInfo = {
   /** 網址用的 id：/tools/<id> */
@@ -63,11 +63,29 @@ export const TOOLS: ToolInfo[] = [
     component: lazy(() => import('./currency')),
   },
   {
+    id: 'invoice',
+    name: '統一發票對獎',
+    icon: '🧾',
+    blurb: '輸入末 3 碼快速對獎，或用相機掃電子發票 QR Code 自動對獎。',
+    tags: ['掃描', '財政部'],
+    category: '生活',
+    component: lazy(() => import('./invoice')),
+  },
+  {
+    id: 'timer',
+    name: '計時器',
+    icon: '⏱️',
+    blurb: '番茄鐘、碼表分圈、倒數計時，時間到會響鈴並通知。',
+    tags: ['番茄鐘', '碼表'],
+    category: '生活',
+    component: lazy(() => import('./timer')),
+  },
+  {
     id: 'lottery',
     name: '抽籤',
     icon: '🎲',
-    blurb: '籤筒、轉盤、彈珠賽跑、鬼腳圖，四種方式公平抽出結果。',
-    tags: ['轉盤', '鬼腳圖'],
+    blurb: '籤筒、轉盤、彈珠賽跑、鬼腳圖公平抽出結果，也能隨機分組。',
+    tags: ['轉盤', '鬼腳圖', '分組'],
     category: '娛樂',
     component: lazy(() => import('./lottery')),
   },

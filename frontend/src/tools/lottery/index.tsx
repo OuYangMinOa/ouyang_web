@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import Groups from './Groups'
 import Ladder from './Ladder'
 import MarbleRace from './MarbleRace'
 import { load, parseNames, save, type Entry } from './pool'
@@ -6,7 +7,7 @@ import Slips from './Slips'
 import Wheel from './Wheel'
 import './lottery.css'
 
-type Mode = 'slips' | 'wheel' | 'marble' | 'ladder'
+type Mode = 'slips' | 'wheel' | 'marble' | 'ladder' | 'group'
 type Round = { id: number; mode: Mode; lines: string[] }
 
 const MODES: { value: Mode; icon: string; label: string; blurb: string }[] = [
@@ -14,9 +15,10 @@ const MODES: { value: Mode; icon: string; label: string; blurb: string }[] = [
   { value: 'wheel', icon: '🎡', label: '轉盤', blurb: '圓盤轉起來，指針停在誰身上' },
   { value: 'marble', icon: '🔮', label: '彈珠', blurb: '挑一條賽道，彈珠滾下去分名次' },
   { value: 'ladder', icon: '🪜', label: '鬼腳圖', blurb: '鬼腳圖走線，一人一線對到一個獎項' },
+  { value: 'group', icon: '👥', label: '分組', blurb: '把名單平均隨機分組，可以指定誰跟誰一定要分開' },
 ]
 
-const REPLACE_HINT: Record<Exclude<Mode, 'ladder'>, [string, string]> = {
+const REPLACE_HINT: Record<Exclude<Mode, 'ladder' | 'group'>, [string, string]> = {
   slips: ['抽中的放回籤筒，同一次也可能抽到同一個人', '抽中的不放回，之後不會再抽到'],
   wheel: ['每次都用整個轉盤，可能重複轉到同一個人', '轉中的那格會拿掉，之後不會再轉到'],
   marble: ['每一場都是全員上場', '中籤的人下一場不再上場'],
@@ -50,6 +52,9 @@ export default function Lottery() {
   const entries = useMemo(() => parsed.slice(0, MAX_ENTRIES), [parsed])
   const pool = useMemo(() => entries.filter((e) => !taken.has(e.id)), [entries, taken])
   const isLadder = mode === 'ladder'
+  const isGroup = mode === 'group'
+  /** 鬼腳圖和分組是全員一次分完，沒有「抽幾名」「放回」 */
+  const isWhole = isLadder || isGroup
 
   function changeText(value: string) {
     setText(value)
@@ -94,10 +99,11 @@ export default function Lottery() {
     [mode, replace, record],
   )
   const handleLadder = useCallback((lines: string[]) => record('ladder', lines), [record])
+  const handleGroup = useCallback((lines: string[]) => record('group', lines), [record])
 
   const current = MODES.find((m) => m.value === mode) ?? MODES[0]
   const drawProps = { pool, count, replace, onBusy: setBusy, onDone: handleDone }
-  const emptyPool = !isLadder && entries.length > 0 && pool.length === 0
+  const emptyPool = !isWhole && entries.length > 0 && pool.length === 0
 
   return (
     <div className="lot">
@@ -108,10 +114,10 @@ export default function Lottery() {
         </label>
         <div className="lot-meta">
           <span className="muted">
-            共 {entries.length} 人{!isLadder && !replace && taken.size > 0 && `，還剩 ${pool.length} 人`}
+            共 {entries.length} 人{!isWhole && !replace && taken.size > 0 && `，還剩 ${pool.length} 人`}
             {parsed.length > MAX_ENTRIES && `（最多 ${MAX_ENTRIES} 人，後面的沒有算進去）`}
           </span>
-          {!isLadder && taken.size > 0 && (
+          {!isWhole && taken.size > 0 && (
             <button type="button" className="secondary" onClick={putBack} disabled={busy}>
               全部放回
             </button>
@@ -139,7 +145,7 @@ export default function Lottery() {
       </div>
       <p className="muted">{current.blurb}</p>
 
-      {isLadder ? (
+      {isGroup ? null : isLadder ? (
         <p className="lot-note">爬梯子是一人一條線、全員一次分出完整對應，「抽幾名」與「放回」都不適用；名單裡重複的人會有多條線，可能對到多個獎項。</p>
       ) : (
         <div className="lot-options">
@@ -166,7 +172,7 @@ export default function Lottery() {
         </div>
       )}
 
-      {!isLadder && !replace && count > pool.length && pool.length > 0 && (
+      {!isWhole && !replace && count > pool.length && pool.length > 0 && (
         <p className="lot-warn">只剩 {pool.length} 人，這次全部抽出。</p>
       )}
       {mode === 'marble' && replace && count > pool.length && pool.length > 0 && (
@@ -189,8 +195,10 @@ export default function Lottery() {
           <Wheel key={version} {...drawProps} />
         ) : mode === 'marble' ? (
           <MarbleRace key={version} {...drawProps} />
-        ) : (
+        ) : isLadder ? (
           <Ladder key={version} entries={entries} onBusy={setBusy} onDone={handleLadder} />
+        ) : (
+          <Groups key={version} entries={entries} onBusy={setBusy} onDone={handleGroup} />
         )}
       </section>
 
@@ -210,7 +218,7 @@ export default function Lottery() {
                   <span className="lot-history-mode">
                     <span aria-hidden="true">{m.icon}</span> {m.label}
                   </span>
-                  <span className="lot-history-lines">{r.lines.join('、')}</span>
+                  <span className="lot-history-lines">{r.lines.join(r.mode === 'group' ? '；' : '、')}</span>
                 </li>
               )
             })}
