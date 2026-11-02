@@ -1,23 +1,27 @@
 // 記住上次的選擇；localStorage 可能讀寫失敗（無痕模式等），失敗就用預設值
 
-const PREFIX = 'tools:encoding:'
-
-export function load<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(PREFIX + key)
-    return raw === null ? fallback : (JSON.parse(raw) as T)
-  } catch {
-    return fallback
+/** 每個工具用自己的前綴存設定，彼此不會互相蓋掉 */
+export function createStore(prefix: string) {
+  return {
+    load<T>(key: string, fallback: T): T {
+      try {
+        const raw = localStorage.getItem(prefix + key)
+        return raw === null ? fallback : (JSON.parse(raw) as T)
+      } catch {
+        return fallback
+      }
+    },
+    save(key: string, value: unknown) {
+      try {
+        localStorage.setItem(prefix + key, JSON.stringify(value))
+      } catch {
+        // 存不了就算了
+      }
+    },
   }
 }
 
-export function save(key: string, value: unknown) {
-  try {
-    localStorage.setItem(PREFIX + key, JSON.stringify(value))
-  } catch {
-    // 存不了就算了
-  }
-}
+export const { load, save } = createStore('tools:encoding:')
 
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

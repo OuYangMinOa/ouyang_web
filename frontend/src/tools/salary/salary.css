@@ -1,0 +1,218 @@
+/* ---- 薪資試算 ---- */
+
+.sal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+  min-width: 0;
+}
+.sal .card {
+  margin-top: 0;
+}
+.sal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.sal-card > h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.sal-disclaimer {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--text-h);
+  font-size: 14px;
+}
+.sal-warn {
+  margin: 0;
+  color: var(--warn);
+  font-size: 14px;
+}
+
+.sal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 14px;
+}
+.sal-grid input,
+.sal-grid select {
+  width: 100%;
+}
+.sal-grid input {
+  font-variant-numeric: tabular-nums;
+}
+
+.sal-seg-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sal-seg-label {
+  font-size: 14px;
+}
+.sal-seg {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.sal-seg button {
+  padding: 6px 0;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.sal-seg button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 重點數字 */
+.sal-big {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.sal-big > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+.sal-big > div:first-child {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.sal-big > div > span:first-child {
+  font-size: 14px;
+}
+.sal-big strong {
+  color: var(--text-h);
+  font-size: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.sal-big .muted {
+  font-size: 13px;
+}
+
+.sal-table td {
+  font-variant-numeric: tabular-nums;
+}
+.sal-table td:not(.primary) {
+  text-align: right;
+  white-space: nowrap;
+}
+.sal-table th:not(:first-child) {
+  text-align: right;
+}
+.sal-table td.primary {
+  color: var(--text-h);
+}
+.sal-table tr.sal-total td {
+  border-bottom: 0;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.sal-notes {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 所得稅的計算步驟 */
+.sal-steps {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sal-steps > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.sal-steps > div.strong {
+  border-bottom: 0;
+  border-top: 1px solid var(--text);
+  font-weight: 600;
+}
+.sal-steps dt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--text-h);
+  font-size: 15px;
+}
+.sal-steps dt small {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 400;
+}
+.sal-steps dd {
+  margin: 0;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sal-brackets summary {
+  cursor: pointer;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  color: var(--text-h);
+}
+.sal-bracket-table {
+  max-width: 360px;
+}
+.sal-bracket-table td {
+  font-variant-numeric: tabular-nums;
+  padding: 6px 8px;
+}
+.sal-bracket-table td:last-child {
+  text-align: right;
+}
+.sal-bracket-table tr.active td {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .sal-table td:not(.primary) {
+    justify-content: space-between;
+  }
+  .sal-table td.primary {
+    font-weight: 600;
+  }
+  .sal-table td.sal-empty {
+    display: none;
+  }
+  .sal-big strong {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 400px) {
+  .sal-seg {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

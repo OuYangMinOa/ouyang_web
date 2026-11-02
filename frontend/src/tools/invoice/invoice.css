@@ -1,0 +1,419 @@
+/* ---- 統一發票對獎 ---- */
+
+.inv {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.inv .card {
+  margin-top: 0;
+  min-width: 0;
+}
+
+.inv-warn {
+  margin: 0;
+  color: var(--warn);
+  font-size: 14px;
+}
+.inv-warn button.link {
+  min-height: 0;
+  margin-left: 6px;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* 期別與號碼 */
+.inv-period {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inv-select select {
+  max-width: 260px;
+  min-height: 44px;
+}
+.inv-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.inv-tag.on {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.inv-tag.off {
+  color: var(--text);
+}
+
+.inv-numbers {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.inv-numbers > div {
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.inv-numbers .inv-first {
+  grid-column: 1 / -1;
+}
+.inv-numbers dt {
+  font-size: 14px;
+  color: var(--text);
+}
+.inv-numbers dd {
+  margin: 2px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 18px;
+}
+.inv-numbers dd .inv-num {
+  font-size: 26px;
+}
+.inv-numbers small {
+  flex-basis: 100%;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.inv-num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+.inv-num b {
+  color: var(--accent);
+}
+
+.inv-rules summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--text-h);
+  font-size: 15px;
+}
+.inv-rules table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.inv-rules th,
+.inv-rules td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.inv-rules th {
+  color: var(--text-h);
+  white-space: nowrap;
+}
+.inv-rules td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* 對獎 */
+.inv-check {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.inv-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.inv-modes button {
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.inv-modes button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+input.inv-input {
+  font-family: var(--mono);
+  font-size: 32px;
+  letter-spacing: 0.15em;
+  text-align: center;
+  padding: 6px 12px;
+}
+
+.inv-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 96px;
+  justify-content: center;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+}
+.inv-result strong {
+  font-size: 24px;
+  color: var(--text-h);
+}
+.inv-result-number {
+  font-size: 18px;
+}
+.inv-result-number small {
+  margin-left: 4px;
+  font-size: 13px;
+  color: var(--text);
+}
+.inv-result.win {
+  border-color: var(--ok);
+  animation: inv-pop 0.3s ease-out;
+}
+.inv-result.win strong {
+  color: var(--ok);
+}
+.inv-result.maybe {
+  border-color: var(--warn);
+  animation: inv-pop 0.3s ease-out;
+}
+.inv-result.maybe strong {
+  color: var(--warn);
+}
+.inv-result.miss strong {
+  color: var(--text);
+}
+@keyframes inv-pop {
+  from {
+    transform: scale(1.04);
+  }
+}
+
+.inv-confirm {
+  padding: 12px;
+  border: 1px dashed var(--warn);
+  border-radius: 12px;
+}
+
+button.inv-scan {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--glow);
+  color: var(--accent);
+}
+.inv-check .muted button.inv-photo {
+  min-height: 0;
+  padding: 0 2px;
+  color: var(--accent);
+  text-decoration: underline;
+  font-size: inherit;
+}
+.inv-toast {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+/* 紀錄 */
+.inv-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+}
+.inv-summary {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+.inv-summary strong {
+  color: var(--text-h);
+}
+.inv-history ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.inv-history li {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.inv-history li:last-child {
+  border-bottom: 0;
+}
+.inv-history-number {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.inv-history small {
+  font-size: 13px;
+  color: var(--text);
+}
+.inv-history-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  font-size: 15px;
+  color: var(--text);
+}
+.inv-history li.win .inv-history-result {
+  color: var(--ok);
+  font-weight: 600;
+}
+.inv-history li.maybe .inv-history-result {
+  color: var(--warn);
+}
+button.inv-remove {
+  flex: none;
+  min-width: 40px;
+  color: var(--text);
+}
+
+/* 相機 */
+.inv-scanner {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+}
+.inv-scanner video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.inv-scan-ui {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 16px;
+}
+.inv-scan-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: min(100%, 420px);
+  padding: 10px 18px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: center;
+  font-size: 15px;
+}
+.inv-scan-status strong {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.inv-scan-status.win {
+  border-color: var(--ok);
+}
+.inv-scan-status.win strong {
+  color: var(--ok);
+}
+.inv-scan-status.maybe {
+  border-color: var(--warn);
+}
+.inv-scan-frame {
+  position: relative;
+  width: min(75vw, 75vh, 300px);
+  aspect-ratio: 1;
+  border: 3px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px var(--scrim);
+}
+.inv-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: inv-scan 1.8s ease-in-out infinite;
+}
+@keyframes inv-scan {
+  0%,
+  100% {
+    top: 0;
+  }
+  50% {
+    top: calc(100% - 2px);
+  }
+}
+.inv-scan-hint {
+  margin: 0;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-h);
+  font-size: 14px;
+}
+button.inv-scan-close {
+  position: absolute;
+  bottom: max(32px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  min-height: 48px;
+  padding: 0 52px;
+  font-size: 17px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-result.win,
+  .inv-result.maybe,
+  .inv-scan-line {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .inv-numbers dd .inv-num {
+    font-size: 24px;
+  }
+  input.inv-input {
+    font-size: 28px;
+  }
+  .inv-select select {
+    max-width: none;
+  }
+}

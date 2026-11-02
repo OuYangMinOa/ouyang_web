@@ -1,0 +1,169 @@
+/* ---- 照片 EXIF 檢視與清除 ---- */
+
+.exif .card {
+  margin-top: 0;
+}
+
+.exif-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.exif-warn {
+  color: var(--danger);
+}
+
+.exif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exif-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.exif-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.exif-thumb {
+  flex: none;
+  width: 88px;
+  height: 88px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.exif-thumb-none {
+  display: grid;
+  place-items: center;
+  font-size: 32px;
+}
+.exif-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.exif-title strong {
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.exif-title .chip {
+  margin: 0;
+}
+.chip.exif-chip-gps {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+.exif-remove {
+  flex: none;
+  min-width: 40px;
+  padding: 0;
+}
+
+/* 欄位：寬的時候兩欄 */
+.exif-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+}
+.exif-fields > div {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.exif-fields dt {
+  flex: 0 0 72px;
+  color: var(--text);
+}
+.exif-fields dd {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.exif-gps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+.exif-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.exif-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.exif-map {
+  height: 220px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+  /* Leaflet 的控制項 z-index 很高，關在這個容器裡，免得蓋過頁首的下拉選單 */
+  isolation: isolate;
+  z-index: 0;
+}
+.exif-map.leaflet-container {
+  font: inherit;
+  background: var(--surface);
+}
+.exif-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text);
+  font-size: 11px;
+}
+.exif-map .leaflet-control-attribution a {
+  color: var(--text-h);
+}
+.exif-map .leaflet-bar a {
+  background: var(--surface);
+  color: var(--text-h);
+  border-color: var(--border);
+}
+path.exif-dot {
+  stroke: var(--danger);
+  stroke-width: 2;
+  fill: var(--danger);
+  fill-opacity: 0.35;
+}
+
+.exif-raw-scroll {
+  max-height: 360px;
+  overflow: auto;
+}
+.exif-raw td {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.exif-raw td:nth-child(2) {
+  font-family: var(--mono);
+}
