@@ -350,6 +350,16 @@ DELETE /api/calendar/events/{id}
 - **匯率計算機**：瀏覽器直接呼叫 Frankfurter v2（`api.frankfurter.dev/v2`，彙整各國央行匯率，含 TWD），最新匯率存在 localStorage，離線時顯示上次的資料。
 - **ASCII 藝術字**：figlet 的 `.flf` 字型當成靜態檔輸出，選到才 fetch。
 - **Emoji 選擇器**：資料來自 `emojibase-data`（繁中＋英文）。**編碼與雜湊**：雜湊用 `hash-wasm`。
+- **證件照產生器**：直接用圖片去背的 worker 和模型，兩邊共用瀏覽器快取。圖片類工具共用的上傳、拖曳、貼上、下載放在 `tools/image-kit/`。
+- **照片 EXIF**：直接改檔案的位元組移除中繼資料，不重新壓縮；照片有旋轉時會補回只含方向的 EXIF，避免直拍的照片變橫的。
+- **圖片壓縮與轉檔**：在 Worker 裡用 OffscreenCanvas 轉檔，zip 是自己寫的（只打包不壓縮）。
+  HEIC 先試瀏覽器內建解碼，不行才動態載入 `heic-to`（LGPL-3.0，約 3.2 MB，所以 `vite.config.ts` 的 chunk 警告上限調到 3300 kB）。
+- **QR Code**：產生用 `bwip-js`，掃描沿用 `datamatrix/scanner.ts` 的 `@zxing/library`。
+- **簡繁轉換**：`opencc-js` 的詞庫當成靜態檔輸出，選到那個方向才下載（簡轉繁的詞庫 gzip 後約 425 KB）。**文字比對**用 `diff`，**JSON / YAML** 的 YAML 用 `yaml`（動態載入）。
+- **正規表示式測試**：在 Worker 裡執行，超過 1.5 秒就終止重開，災難性回溯不會卡住頁面。
+- **日期計算**：工作天直接用日曆的 `calendar/holidays.ts`。人事行政總處每年公告的調整放假與補班要登記在那裡的 `ADJUSTMENTS`。
+- **薪資試算**：勞保、就保、勞退、職災、健保的級距和費率，以及綜所稅的免稅額、扣除額、級距，都集中在 `tools/salary/rates.ts`，附資料年度和官方來源，**每年要更新**。
+  115 年度的基本生活費還沒公告，暫時沿用 114 年度的 213,000。
 - **統一發票對獎**：`GET /api/invoice/winning`（`backend/src/invoice.rs`）回傳最近六期的特別獎、特獎、頭獎、增開六獎（有的話）、開獎日與領獎期間。
   號碼來自財政部的 RSS `https://invoice.etax.nat.gov.tw/invoice.xml`（免金鑰）；RSS 沒有領獎期間，最新兩期另外讀稅務入口網的公告頁 `ETW183W2_<期別>` 補上，
   讀不到就用規則推算（開獎隔月 6 日起三個月）。快取在記憶體：單月 25、26 日每 10 分鐘更新，其他時候 12 小時；抓失敗沿用舊資料，前端也會把上次的結果存在 localStorage。

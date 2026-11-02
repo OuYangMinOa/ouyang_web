@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { copyToClipboard } from '../../clipboard'
 import { decodeHeic, decodeWithImg, isHeic } from '../image-convert/decode'
-import { isImageFile, useFileDrop } from '../useFileDrop'
+import { isImageFile } from '../image-kit/files'
+import { useDragFiles, usePasteImages } from '../image-kit/hooks'
 import { hslText, parseHex, rgbText, toHex, type RGB } from './color'
 import Contrast from './Contrast'
 import { extractPalette } from './palette'
@@ -107,7 +108,8 @@ export default function ColorPicker() {
     }
   }, [])
 
-  const { dragging, handlers } = useFileDrop((files) => void open(files))
+  const { dragging, handlers } = useDragFiles((files) => void open(files))
+  usePasteImages((files) => void open(files))
 
   async function fromScreen() {
     if (!EyeDropper) return

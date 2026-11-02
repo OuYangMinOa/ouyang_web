@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { decodeImageFile } from '../../datamatrix/scanner'
-import { isImageFile, useFileDrop } from '../useFileDrop'
+import { isImageFile } from '../image-kit/files'
+import { useDragFiles, usePasteImages } from '../image-kit/hooks'
 import { parseScanned } from './payload'
 import { CopyButton } from './ui'
 
@@ -250,7 +251,8 @@ export default function Scan() {
     }
   }
 
-  const { dragging, handlers } = useFileDrop((files) => void decodeFile(files[0]))
+  const { dragging, handlers } = useDragFiles((files) => void decodeFile(files[0]))
+  usePasteImages((files) => void decodeFile(files[0]))
 
   return (
     <div className={`qr-scan${dragging ? ' over' : ''}`} {...handlers}>

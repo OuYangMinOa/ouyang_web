@@ -3,10 +3,9 @@ import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { imageFiles } from './files'
 
 /**
- * 整個工具範圍都能把檔案拖進來。dragenter/leave 會在子元素間反覆觸發，所以用計數。
- * onFiles 只會收到圖片；拖進來的不是圖片時 onReject 會被呼叫。
+ * 整個工具範圍都能把檔案拖進來，收到的檔案不篩選。dragenter/leave 會在子元素間反覆觸發，所以用計數。
  */
-export function useFileDrop(onFiles: (files: File[]) => void, onReject?: () => void) {
+export function useDragFiles(onFiles: (files: File[]) => void) {
   const [dragging, setDragging] = useState(false)
   const depth = useRef(0)
   const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes('Files')
@@ -32,12 +31,19 @@ export function useFileDrop(onFiles: (files: File[]) => void, onReject?: () => v
       e.preventDefault()
       depth.current = 0
       setDragging(false)
-      const files = imageFiles(e.dataTransfer.files)
-      if (files.length) onFiles(files)
-      else onReject?.()
+      onFiles([...e.dataTransfer.files])
     },
   }
   return { dragging, handlers }
+}
+
+/** 跟 useDragFiles 一樣，但 onFiles 只會收到圖片；拖進來的都不是圖片時 onReject 會被呼叫 */
+export function useFileDrop(onFiles: (files: File[]) => void, onReject?: () => void) {
+  return useDragFiles((dropped) => {
+    const files = imageFiles(dropped)
+    if (files.length) onFiles(files)
+    else onReject?.()
+  })
 }
 
 /** Ctrl+V 貼上圖片 */

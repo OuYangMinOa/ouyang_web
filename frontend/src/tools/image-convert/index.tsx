@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { isImageFile, useFileDrop } from '../useFileDrop'
+import { isImageFile } from '../image-kit/files'
+import { useDragFiles, usePasteImages } from '../image-kit/hooks'
 import Compare from './Compare'
 import { DecodeError, OUT_FORMATS, type ConvertOptions, type Converted, type OutFormat, type Resize, type Source } from './convert'
 import { decodeHeic, decodeWithImg, isHeic } from './decode'
@@ -325,7 +326,8 @@ export default function ImageConvert() {
     setNotice('')
   }
 
-  const { dragging, handlers } = useFileDrop((files) => void addFiles(files))
+  const { dragging, handlers } = useDragFiles((files) => void addFiles(files))
+  usePasteImages((files) => void addFiles(files))
 
   const done = items.filter((it) => it.status === 'done' && it.result)
   const busy = items.some((it) => it.status === 'working' || it.status === 'decoding')

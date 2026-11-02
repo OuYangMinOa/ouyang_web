@@ -5,8 +5,9 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   build: {
-    // three.js 的 chunk 約 530 kB（gzip 後 130 kB），只在首頁動態載入，不影響其他頁面
-    chunkSizeWarningLimit: 600,
+    // 最大的是 HEIC 解碼器 heic-to，約 3.2 MB（gzip 後 810 kB），只有在圖片轉檔遇到瀏覽器解不了的 HEIC 才下載；
+    // 其次是 three.js 約 530 kB（gzip 後 130 kB），只在首頁動態載入，不影響其他頁面
+    chunkSizeWarningLimit: 3300,
   },
   server: {
     // 開發時把 /api 轉給本機的 Rust 後端（cargo run，預設 :8080）

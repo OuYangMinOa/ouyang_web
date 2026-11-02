@@ -2,7 +2,12 @@
 
 /** 從 FileList 挑出圖片檔 */
 export function imageFiles(files: FileList | File[] | undefined | null): File[] {
-  return [...(files ?? [])].filter((f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|avif|tiff?)$/i.test(f.name))
+  return [...(files ?? [])].filter(isImageFile)
+}
+
+/** 是不是圖片：有些系統（Windows）給 HEIC 的 type 是空字串，所以也看副檔名 */
+export function isImageFile(f: File) {
+  return f.type.startsWith('image/') || /\.(heic|heif|avif|webp|jpe?g|png|gif|bmp|svg|ico|tiff?)$/i.test(f.name)
 }
 
 /** 檔名去掉副檔名 */
