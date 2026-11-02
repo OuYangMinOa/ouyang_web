@@ -144,7 +144,9 @@ async fn build_report(weather: &Weather) -> TyphoonReport {
             None => Err("沒有設定 CWA_API_KEY".into()),
         };
         match api {
-            Ok(storms) => Ok(storms),
+            Ok(storms) if !storms.is_empty() => Ok(storms),
+            // 開放資料平台有時回傳成功但沒有颱風（網站上明明有），這時也看一下網站
+            Ok(empty) => Ok(fetch_cwa_web(http).await.unwrap_or(empty)),
             Err(api_error) => fetch_cwa_web(http).await.map_err(|web_error| {
                 if weather.cwa_key.is_some() { format!("{api_error}；{web_error}") } else { web_error }
             }),
