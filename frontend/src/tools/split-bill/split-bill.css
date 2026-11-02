@@ -1,0 +1,290 @@
+/* ---- 分帳計算機 ---- */
+
+.sb {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+  min-width: 0;
+}
+.sb .card {
+  margin-top: 0;
+}
+.sb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.sb-card h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+.sb-sub {
+  margin-top: 8px;
+}
+.sb-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sb-head h2 {
+  margin: 0;
+}
+.sb-note {
+  font-size: 13px;
+}
+.sb-warn {
+  color: var(--warn);
+}
+
+.sb-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: 15px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+.sb-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+/* 成員：每人一個可改名的欄位 */
+.sb-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+.sb-members li {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+button.sb-icon {
+  flex-shrink: 0;
+  width: 40px;
+  padding: 0;
+  color: var(--text);
+}
+button.sb-icon:hover {
+  color: var(--danger);
+}
+.sb-add {
+  display: flex;
+  gap: 8px;
+}
+
+/* 支出清單 */
+.sb-expenses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sb-expense {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 0;
+}
+.sb-expense.open {
+  border-color: var(--accent);
+}
+.sb-expense.bad:not(.open) {
+  border-style: dashed;
+}
+button.sb-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  border-radius: 10px;
+}
+.sb-summary-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sb-summary-title strong {
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-summary-title .muted {
+  font-size: 13px;
+}
+.sb-expense.bad .sb-summary-title .muted {
+  color: var(--warn);
+}
+.sb-summary-amt {
+  color: var(--text-h);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sb-caret {
+  color: var(--text);
+}
+
+.sb-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 12px 12px;
+}
+.sb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 12px;
+}
+.sb-grid input,
+.sb-grid select {
+  width: 100%;
+}
+
+.sb-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sb-seg button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.sb-seg button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.sb-people-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+}
+button.sb-all {
+  min-height: 40px;
+  padding: 0 4px;
+  color: var(--accent);
+}
+.sb-people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sb-people li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.sb-people li:last-child {
+  border-bottom: 0;
+}
+.sb-people .sb-check {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.sb-people li:not(.on) .sb-check span {
+  color: var(--text);
+}
+input.sb-share {
+  flex: 0 1 120px;
+  width: 120px;
+  font-variant-numeric: tabular-nums;
+}
+.sb-share-val {
+  min-width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+button.sb-add-expense {
+  align-self: flex-start;
+}
+
+/* 結果 */
+.sb-table td {
+  font-variant-numeric: tabular-nums;
+}
+.sb-pos {
+  color: var(--ok);
+}
+.sb-neg {
+  color: var(--danger);
+}
+.sb-transfers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sb-transfers li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+.sb-who {
+  color: var(--text-h);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sb-arrow {
+  color: var(--accent);
+}
+.sb-amt {
+  margin-left: auto;
+  color: var(--text-h);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .sb-members {
+    grid-template-columns: 1fr;
+  }
+  .sb-add-expense {
+    align-self: stretch;
+  }
+  .sb-actions button {
+    flex: 1 1 auto;
+  }
+}

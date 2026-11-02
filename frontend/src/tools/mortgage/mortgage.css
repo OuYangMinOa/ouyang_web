@@ -1,0 +1,363 @@
+/* ---- 房貸試算 ---- */
+
+.mtg {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 820px;
+  min-width: 0;
+}
+.mtg .card {
+  margin-top: 0;
+}
+.mtg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.mtg-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.mtg-note {
+  font-size: 13px;
+}
+
+.mtg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+}
+.mtg-grid input,
+.mtg-grid select {
+  width: 100%;
+}
+.mtg input[inputmode] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分段利率 */
+.mtg-rates {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.mtg-rates legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+.mtg-seg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.mtg-seg-label {
+  flex: 0 0 110px;
+  color: var(--text-h);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.mtg-seg-months,
+.mtg-seg-rate {
+  flex: 1 1 120px;
+  max-width: 240px;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 15px;
+}
+.mtg-seg-months input,
+.mtg-seg-rate input {
+  width: 100%;
+  min-width: 0;
+}
+button.mtg-icon {
+  flex-shrink: 0;
+  width: 40px;
+  padding: 0;
+  color: var(--text);
+}
+button.mtg-icon:hover {
+  color: var(--danger);
+}
+button.mtg-add {
+  align-self: flex-start;
+}
+
+/* 兩種方式並排比較 */
+.mtg-compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.mtg-sum {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 0;
+}
+.mtg-sum h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.mtg-sum dl {
+  margin: 0;
+}
+.mtg-sum dl > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 4px 0;
+}
+.mtg-sum dt {
+  font-size: 14px;
+}
+.mtg-sum dd {
+  margin: 0;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mtg-sum dd.big {
+  font-size: 20px;
+  font-weight: 600;
+}
+.mtg-diff {
+  margin: 0;
+  font-size: 14px;
+}
+.mtg-diff strong {
+  color: var(--text-h);
+}
+
+/* 圖表：兩條線用強調色和藍色，圖例和讀數的文字維持一般文字色 */
+.mtg-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.mtg-swatch.annuity {
+  background: var(--accent);
+}
+.mtg-swatch.principal {
+  background: var(--ev-blue);
+}
+.mtg-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.mtg-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mtg-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 6px 0 8px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.mtg-readout strong {
+  color: var(--text-h);
+}
+.mtg-readout-period {
+  flex-basis: 100%;
+  font-size: 13px;
+}
+.mtg-plot-wrap {
+  display: flex;
+  gap: 6px;
+}
+.mtg-yaxis {
+  position: relative;
+  flex: 0 0 40px;
+  font: 11px var(--mono);
+  color: var(--text);
+}
+.mtg-yaxis span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+.mtg-plot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 200px;
+  border-radius: 6px;
+  /* 讓手機上下滑動還是捲頁面，左右才是看讀數 */
+  touch-action: pan-y;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.mtg-plot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.mtg-plot svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.mtg-gridline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.mtg-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.mtg-line.annuity {
+  stroke: var(--accent);
+}
+.mtg-line.principal {
+  stroke: var(--ev-blue);
+}
+.mtg-cross,
+.mtg-dot {
+  position: absolute;
+  pointer-events: none;
+}
+.mtg-cross {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text) 60%, transparent);
+  transform: translateX(-0.5px);
+}
+.mtg-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  transform: translate(-50%, -50%);
+}
+.mtg-dot.annuity {
+  background: var(--accent);
+}
+.mtg-dot.principal {
+  background: var(--ev-blue);
+}
+.mtg-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 0 46px;
+  font: 12px var(--mono);
+  color: var(--text);
+}
+
+/* 攤還表：在自己的框裡捲動，不撐開整頁 */
+.mtg-table-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.mtg-table-head h2 {
+  flex: 1 1 100%;
+}
+.mtg-seg {
+  display: flex;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+.mtg-seg button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.mtg-seg button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.mtg-table-wrap {
+  max-height: 480px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overscroll-behavior: contain;
+}
+.mtg-table-wrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.mtg-table {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.mtg-table th,
+.mtg-table td {
+  padding: 6px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+.mtg-table th:first-child,
+.mtg-table td:first-child {
+  text-align: center;
+}
+.mtg-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.mtg-table td {
+  color: var(--text-h);
+}
+.mtg-table td:nth-child(2) {
+  color: var(--text);
+}
+
+/* 只給螢幕閱讀器看的文字 */
+.mtg-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .mtg-seg-label {
+    flex-basis: 100%;
+  }
+  button.mtg-add {
+    align-self: stretch;
+  }
+  .mtg-table th,
+  .mtg-table td {
+    padding: 6px 5px;
+  }
+}
