@@ -1,0 +1,122 @@
+/* ---- 時間戳與產生器 ---- */
+
+.gen-tabs .enc-seg-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.gen-h {
+  margin: 8px 0 0;
+  color: var(--text-h);
+  font-size: 18px;
+}
+
+/* 跟輸入框底部對齊、不撐滿的按鈕 */
+.enc-controls > .gen-fit {
+  flex: 0 0 auto;
+}
+
+/* 現在時間 */
+.gen-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.gen-now > div:not(.enc-actions) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gen-now span {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.gen-now strong {
+  color: var(--text-h);
+  font: 600 18px/1.4 var(--mono);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.gen-now .enc-actions {
+  margin-left: auto;
+}
+
+/* 一列一個產生的值 */
+.gen-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gen-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.gen-list code {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-h);
+  font: 15px/1.5 var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.gen-length,
+.gen-symbols {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.gen-length input[type='range'] {
+  flex: 1;
+  padding: 0;
+  border: 0;
+  accent-color: var(--accent);
+}
+.gen-length input[type='number'] {
+  flex: 0 0 6em;
+}
+.gen-symbols input {
+  font-family: var(--mono);
+}
+
+/* 密碼強度：四格 */
+.gen-strength {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 15px;
+  color: var(--text-h);
+}
+.gen-meter {
+  display: flex;
+  gap: 4px;
+}
+.gen-meter span {
+  width: 36px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+}
+.gen-strength[data-level='1'] .on {
+  background: var(--danger);
+}
+.gen-strength[data-level='2'] .on {
+  background: var(--warn);
+}
+.gen-strength[data-level='3'] .on,
+.gen-strength[data-level='4'] .on {
+  background: var(--ok);
+}

@@ -1,0 +1,181 @@
+/* ---- JSON / YAML 格式化 ---- */
+
+.jsn {
+  /* 樹狀檢視各型別的顏色，沿用全站已有亮暗兩組的顏色 */
+  --jt-str: var(--ok);
+  --jt-num: var(--ev-blue);
+  --jt-bool: var(--ev-purple);
+  --jt-null: var(--text);
+}
+
+/* 桌機左右兩欄，手機上下排 */
+.jsn-panes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.jsn-text {
+  min-height: 22em;
+  font-size: 14px;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+/* 輸入框維持 16px，避免 iOS 聚焦時放大 */
+.jsn-panes textarea:not([readonly]) {
+  font-size: 16px;
+}
+.jsn-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jsn-ok {
+  color: var(--ok);
+}
+
+.jsn-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.jsn-excerpt {
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-h);
+  font: 14px/1.5 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.jsn-excerpt mark {
+  background: color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--text-h);
+  border-radius: 2px;
+  outline: 1px solid var(--danger);
+}
+
+.jsn-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.jsn-path code {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-h);
+  font: 14px var(--mono);
+  overflow-wrap: anywhere;
+}
+
+/* 樹狀檢視 */
+.jsn-tree {
+  min-height: 22em;
+  max-height: 70vh;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font: 14px/1.6 var(--mono);
+  color: var(--text-h);
+}
+.jt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1.4em;
+}
+.jt-root {
+  padding-left: 0;
+}
+.jt-list li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.jt-leaf {
+  padding-left: 1.1em;
+}
+.jt-list summary {
+  cursor: pointer;
+  list-style-position: outside;
+  margin-left: 1.1em;
+}
+.jt-list summary::marker {
+  color: var(--text);
+}
+.jt-key {
+  min-height: 0;
+  padding: 0 2px;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-h);
+  font: inherit;
+  font-weight: 600;
+}
+.jt-key.index {
+  color: var(--text);
+  font-weight: 400;
+}
+.jt-key:hover,
+.jt-key.selected {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.jt-colon,
+.jt-punct {
+  color: var(--text);
+}
+.jt-meta {
+  margin: 0 6px;
+  color: var(--text);
+  font: 12px var(--sans);
+}
+.jt-str {
+  color: var(--jt-str);
+}
+.jt-num {
+  color: var(--jt-num);
+}
+.jt-bool {
+  color: var(--jt-bool);
+}
+.jt-null {
+  color: var(--jt-null);
+  font-style: italic;
+}
+.jt-close {
+  display: block;
+  margin-left: 1.1em;
+}
+.jt-more {
+  margin: 4px 0 4px 2.5em;
+  font: 13px var(--sans);
+}
+
+@media (max-width: 860px) {
+  .jsn-panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .jsn-text,
+  .jsn-tree {
+    min-height: 12em;
+  }
+}
+
+/* 觸控螢幕上把每一列拉高一點，鍵名比較好點 */
+@media (pointer: coarse) {
+  .jsn-tree {
+    line-height: 2.2;
+  }
+}

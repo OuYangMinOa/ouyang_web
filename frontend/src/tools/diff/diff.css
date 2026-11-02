@@ -1,0 +1,187 @@
+/* ---- 文字比對 ---- */
+
+.dif {
+  --dif-del: color-mix(in srgb, var(--danger) 12%, transparent);
+  --dif-del-strong: color-mix(in srgb, var(--danger) 30%, transparent);
+  --dif-ins: color-mix(in srgb, var(--ok) 12%, transparent);
+  --dif-ins-strong: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+
+.dif-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.dif-input {
+  min-height: 12em;
+}
+
+.dif-narrow {
+  align-self: center;
+}
+.dif-swap {
+  margin-left: auto;
+}
+
+.dif-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  transition: opacity 0.15s;
+}
+/* 還在算新的結果時先淡一點 */
+.dif-result.stale {
+  opacity: 0.6;
+}
+
+.dif-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 15px;
+}
+.dif-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dif-count.ins,
+.dif-same {
+  color: var(--ok);
+}
+.dif-count.del {
+  color: var(--danger);
+}
+
+/* 結果：每一行是 grid 的一列，長行自動換行，不會橫向捲動 */
+.dif-grid {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+  font: 14px/1.5 var(--mono);
+  color: var(--text-h);
+}
+.dif-grid.side {
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.dif-grid.unified {
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+}
+
+.dif-no {
+  padding: 0 8px;
+  min-width: 2ch;
+  color: var(--text);
+  text-align: right;
+  font-size: 12px;
+  line-height: 21px;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.dif-sign {
+  padding: 0 4px;
+  user-select: none;
+}
+.dif-text {
+  min-width: 0;
+  min-height: 1.5em;
+  padding: 0 10px 0 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* 左右並排時，左欄右邊畫一條分隔線 */
+.dif-left {
+  border-right: 1px solid var(--border);
+}
+.dif-empty {
+  grid-column: span 2;
+  background: color-mix(in srgb, var(--border) 35%, transparent);
+}
+
+.dif-no.del,
+.dif-sign.del,
+.dif-text.del {
+  background: var(--dif-del);
+}
+.dif-no.ins,
+.dif-sign.ins,
+.dif-text.ins {
+  background: var(--dif-ins);
+}
+.dif-sign.del {
+  color: var(--danger);
+}
+.dif-sign.ins {
+  color: var(--ok);
+}
+
+.dif del,
+.dif ins {
+  text-decoration: none;
+  border-radius: 3px;
+  color: var(--text-h);
+}
+.dif del {
+  background: var(--dif-del-strong);
+}
+.dif ins {
+  background: var(--dif-ins-strong);
+}
+/* 逐字結果的合併檢視：刪除的字加刪除線，不靠顏色也看得出來 */
+.dif-pane del {
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+}
+.dif-pane ins {
+  text-decoration: underline;
+  text-decoration-color: var(--ok);
+}
+
+.dif-fold {
+  grid-column: 1 / -1;
+  min-height: 40px;
+  border-radius: 0;
+  border-block: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--text-h);
+  font: 14px var(--sans);
+}
+.dif-fold:first-child {
+  border-top: 0;
+}
+.dif-fold:last-child {
+  border-bottom: 0;
+}
+
+/* 逐詞／逐字：一整段文字 */
+.dif-panes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.dif-pane {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-h);
+  font: 15px/1.7 var(--sans);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .dif-inputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dif-input {
+    min-height: 8em;
+  }
+  .dif-no {
+    padding: 0 4px;
+  }
+}
