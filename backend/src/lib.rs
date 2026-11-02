@@ -20,6 +20,7 @@ pub mod puyo_scores;
 pub mod registration;
 pub mod tetris;
 pub mod tetris_scores;
+pub mod threads;
 pub mod undercover;
 pub mod visits;
 pub mod weather;
@@ -89,6 +90,8 @@ pub struct AppState {
     pub access_log: Arc<access_log::AccessLog>,
     /// 主機監控：背景取樣的 CPU、記憶體、磁碟和各服務的用量（見 monitor.rs）
     pub monitor: Arc<monitor::Monitor>,
+    /// Threads 影片下載的 HTTP client 和每個 IP 的查詢間隔（見 threads.rs）
+    pub threads: Arc<threads::Threads>,
 }
 
 impl AppState {
@@ -115,6 +118,7 @@ impl AppState {
             visit_limiter: Arc::default(),
             access_log: Arc::default(),
             monitor: Arc::default(),
+            threads: Arc::default(),
         }
     }
 }
@@ -191,6 +195,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/weather/quakes", get(weather::quake::quakes))
         .route("/weather/quakes/ws", get(weather::quake::connect))
         .route("/invoice/winning", get(invoice::winning))
+        .route("/threads/video", get(threads::video))
         .route("/nav/pins", get(nav_pins::list))
         .route("/nav/pins/{app}", put(nav_pins::set))
         .fallback(api_not_found);
