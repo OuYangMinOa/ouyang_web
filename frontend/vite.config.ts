@@ -14,6 +14,8 @@ export default defineConfig({
     proxy: {
       // ws：小遊戲線上對戰的 WebSocket 也走 /api
       '/api': { target: 'http://localhost:8080', ws: true },
+      // 短網址的跳轉由後端處理
+      '/s/': 'http://localhost:8080',
     },
   },
 })
