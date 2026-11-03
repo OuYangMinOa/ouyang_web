@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router'
+import { Link, Outlet, useLocation } from 'react-router'
+import SideNav from '../components/SideNav'
 import { useMenu } from '../components/useMenu'
 import { appPath, findAppByPath, findNavItem, type AppInfo } from './registry'
 import './apps.css'
@@ -24,28 +25,8 @@ function saveCollapsed(collapsed: boolean) {
 }
 
 /** APP 自己的頁面清單：桌機放在側邊欄，手機放在頁首的下拉選單 */
-function AppNav({ app, collapsed = false }: { app: AppInfo; collapsed?: boolean }) {
-  return (
-    <nav className="app-nav" aria-label={app.name}>
-      {app.nav.map((group, i) => (
-        <div key={group.label ?? i} className="app-nav-group">
-          {group.label && <p className="app-nav-label">{group.label}</p>}
-          <ul>
-            {group.items.map((item) => (
-              <li key={item.to}>
-                <NavLink to={item.to} end className="app-nav-link" title={collapsed ? item.label : undefined}>
-                  <span className="app-nav-icon" aria-hidden="true">
-                    {item.icon}
-                  </span>
-                  <span className="app-nav-text">{item.label}</span>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </nav>
-  )
+function AppNav({ app, collapsed }: { app: AppInfo; collapsed?: boolean }) {
+  return <SideNav label={app.name} groups={app.nav} pinScope={app.id} collapsed={collapsed} />
 }
 
 /** 手機版：頁首上的「小遊戲 › 五子棋 ▾」，點開是這個 APP 的頁面清單 */
@@ -97,10 +78,10 @@ export default function AppLayout() {
       <aside className="app-sidebar">
         <div className="app-sidebar-head">
           <Link to={appPath(app)} className="app-sidebar-title" title={collapsed ? app.name : undefined}>
-            <span className="app-nav-icon" aria-hidden="true">
+            <span className="side-nav-icon" aria-hidden="true">
               {app.icon}
             </span>
-            <span className="app-nav-text">{app.name}</span>
+            <span className="side-nav-text">{app.name}</span>
           </Link>
           <button
             type="button"

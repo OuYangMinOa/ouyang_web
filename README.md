@@ -98,6 +98,8 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
    </Route>
    ```
    桌機會有可收合的側邊欄，窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
+   兩邊都是 `frontend/src/components/SideNav.tsx`：頁面有 10 個以上時，上面會出現搜尋框（Enter 直接開第一個結果、Esc 清掉），
+   每一列右邊可以釘選，釘選的排在最上面。沒登入存在瀏覽器，有登入存在帳號（`GET /api/nav/pins`、`PUT /api/nav/pins/<APP id>`，`backend/src/nav_pins.rs`），換裝置也一樣。
 
 > prod（`https://ouyang.app`）和 staging（`https://test.ouyang.app`）都走 HTTPS，`<env>.env` 設了 `COOKIE_SECURE=true`。
 > cookie 沒有設 Domain，只屬於各自的網址，名稱也依環境分開（`session_<env>`），兩邊的登入互不影響。
@@ -368,6 +370,24 @@ DELETE /api/calendar/events/{id}
 - **計時器**：番茄鐘、碼表、倒數。時間都存開始／結束的時間戳（`performance.timeOrigin + performance.now()`），顯示時才相減，背景分頁也不會慢；
   時間到只排一個 `setTimeout` 等到結束那一刻，響 Web Audio 合成的鈴聲並發系統通知（第一次按開始時詢問權限），分頁標題顯示剩餘時間。進行中的計時存在 localStorage，重新整理會接著跑。
 - **抽籤・分組**：分成 N 組或每組 M 人，人數差不超過 1；「一定要分開」的人先放，衝突時整個重來，最多試 300 次。
+
+## Threads 影片下載
+
+沒有頁面，給 iPhone 捷徑用：在 Threads 按「分享 → 捷徑」，捷徑把網址丟給這個 API，再下載回傳的 mp4 存進相簿。程式在 `backend/src/threads.rs`。
+
+```
+GET /api/threads/video?url=<貼文或分享連結>
+→ 200 {"code","author","caption","videos":[{"url","thumbnail","width","height"}]}   輪播有幾支影片就有幾筆
+→ 400 {"error"}                    不是 Threads 的網址、找不到貼文、沒有影片（或要登入才看得到）
+→ 429 {"error","retry_after":10}   同一個 IP 10 秒只能查一次（不管成功與否），回應帶 Retry-After
+→ 503 {"error"}                    Threads 連不上
+```
+
+- 只接受 `threads.com`／`threads.net` 的 https 網址，分享連結（`/share/xxx`）的轉址也只跟到 Threads 自己的網址，不會被拿來打其他主機。
+- Threads 沒有查別人貼文的公開 API，一般瀏覽器拿到的頁面也沒有貼文資料（登入後由前端另外查），
+  只有搜尋引擎拿到的頁面把資料放在 `<script type="application/json">` 裡，所以用 Googlebot 的 User-Agent 抓，從裡面找這則貼文的 `video_versions`。
+  非公開格式，Meta 改版時要跟著調整。沒登入看不到的內容抓不到，例如引用了限制瀏覽的貼文（`quoted_attachment_post_unavailable`）。
+- 回傳的是 Meta CDN 的網址，帶簽章、幾天後失效，不用 cookie 就能下載；影片不經過我們的伺服器。
 
 ## IP 訪問紀錄
 

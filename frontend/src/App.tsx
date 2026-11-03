@@ -8,6 +8,7 @@ import { AuthProvider, RequireAuth, useAuth } from './auth'
 import CalendarPage from './calendar/CalendarPage'
 import HolidaysPage from './calendar/HolidaysPage'
 import MyEventsPage from './calendar/MyEventsPage'
+import { NavPinsProvider } from './components/navPins'
 import { useMenu } from './components/useMenu'
 import FeedbackButton from './feedback/FeedbackButton'
 import FeedbackPage from './feedback/FeedbackPage'
@@ -188,91 +189,93 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <QuakeFeedProvider>
-          <SiteTop>
-            <Header />
-            <QuakeAlert />
-          </SiteTop>
-          <main>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/games" element={<AppLayout />}>
-                <Route index element={<GamesHub />} />
-                <Route path=":id" element={<GamePage />} />
-              </Route>
-              <Route path="/calendar" element={<AppLayout />}>
-                <Route index element={<CalendarPage />} />
-                <Route path="holidays" element={<HolidaysPage />} />
+        <NavPinsProvider>
+          <QuakeFeedProvider>
+            <SiteTop>
+              <Header />
+              <QuakeAlert />
+            </SiteTop>
+            <main>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/games" element={<AppLayout />}>
+                  <Route index element={<GamesHub />} />
+                  <Route path=":id" element={<GamePage />} />
+                </Route>
+                <Route path="/calendar" element={<AppLayout />}>
+                  <Route index element={<CalendarPage />} />
+                  <Route path="holidays" element={<HolidaysPage />} />
+                  <Route
+                    path="events"
+                    element={
+                      <RequireAuth>
+                        <MyEventsPage />
+                      </RequireAuth>
+                    }
+                  />
+                </Route>
+                <Route path="/tools" element={<AppLayout />}>
+                  <Route index element={<ToolsHub />} />
+                  <Route path=":id" element={<ToolPage />} />
+                </Route>
+                <Route path="/music" element={<AppLayout />}>
+                  {/* 播放器放在外層，切換頁面時音樂不會停 */}
+                  <Route element={<MusicApp />}>
+                    <Route index element={<MusicLibrary />} />
+                    <Route path="favorites" element={<MusicLibrary favoritesOnly />} />
+                  </Route>
+                </Route>
+                <Route path="/weather" element={<AppLayout />}>
+                  <Route index element={<Lazy page={WeatherHub} />} />
+                  <Route path="typhoon" element={<Lazy page={TyphoonPage} />} />
+                  <Route path="typhoon/names" element={<Lazy page={TyphoonNames} />} />
+                  <Route path="forecast" element={<Lazy page={ForecastPage} />} />
+                  <Route path="quake" element={<Lazy page={QuakePage} />} />
+                </Route>
+                <Route path="/lol" element={<AppLayout />}>
+                  {/* 賽程和直播狀態在外層抓一次，切換頁面不用重抓 */}
+                  <Route element={<LolApp />}>
+                    <Route index element={<Overview />} />
+                    <Route path="schedule" element={<Schedule />} />
+                    <Route path="standings" element={<Standings />} />
+                    <Route path="match/:id" element={<MatchPage />} />
+                  </Route>
+                </Route>
+                <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/feedback" element={<FeedbackPage />} />
                 <Route
-                  path="events"
+                  path="/account"
                   element={
                     <RequireAuth>
-                      <MyEventsPage />
+                      <Account />
                     </RequireAuth>
                   }
                 />
-              </Route>
-              <Route path="/tools" element={<AppLayout />}>
-                <Route index element={<ToolsHub />} />
-                <Route path=":id" element={<ToolPage />} />
-              </Route>
-              <Route path="/music" element={<AppLayout />}>
-                {/* 播放器放在外層，切換頁面時音樂不會停 */}
-                <Route element={<MusicApp />}>
-                  <Route index element={<MusicLibrary />} />
-                  <Route path="favorites" element={<MusicLibrary favoritesOnly />} />
+                <Route
+                  path="/admin"
+                  element={
+                    <RequireAuth permission={PERMISSIONS.adminUsers}>
+                      <AppLayout />
+                    </RequireAuth>
+                  }
+                >
+                  <Route index element={<Navigate to="users" replace />} />
+                  <Route path="users" element={<AdminUsers />} />
+                  <Route path="roles" element={<AdminRoles />} />
+                  <Route path="registrations" element={<AdminRegistrations />} />
+                  <Route path="feedback" element={<AdminFeedback />} />
+                  <Route path="access" element={<AdminAccess />} />
+                  <Route path="visits" element={<AdminVisits />} />
+                  <Route path="system" element={<AdminSystem />} />
+                  <Route path="games" element={<AdminGames />} />
                 </Route>
-              </Route>
-              <Route path="/weather" element={<AppLayout />}>
-                <Route index element={<Lazy page={WeatherHub} />} />
-                <Route path="typhoon" element={<Lazy page={TyphoonPage} />} />
-                <Route path="typhoon/names" element={<Lazy page={TyphoonNames} />} />
-                <Route path="forecast" element={<Lazy page={ForecastPage} />} />
-                <Route path="quake" element={<Lazy page={QuakePage} />} />
-              </Route>
-              <Route path="/lol" element={<AppLayout />}>
-                {/* 賽程和直播狀態在外層抓一次，切換頁面不用重抓 */}
-                <Route element={<LolApp />}>
-                  <Route index element={<Overview />} />
-                  <Route path="schedule" element={<Schedule />} />
-                  <Route path="standings" element={<Standings />} />
-                  <Route path="match/:id" element={<MatchPage />} />
-                </Route>
-              </Route>
-              <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/feedback" element={<FeedbackPage />} />
-              <Route
-                path="/account"
-                element={
-                  <RequireAuth>
-                    <Account />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/admin"
-                element={
-                  <RequireAuth permission={PERMISSIONS.adminUsers}>
-                    <AppLayout />
-                  </RequireAuth>
-                }
-              >
-                <Route index element={<Navigate to="users" replace />} />
-                <Route path="users" element={<AdminUsers />} />
-                <Route path="roles" element={<AdminRoles />} />
-                <Route path="registrations" element={<AdminRegistrations />} />
-                <Route path="feedback" element={<AdminFeedback />} />
-                <Route path="access" element={<AdminAccess />} />
-                <Route path="visits" element={<AdminVisits />} />
-                <Route path="system" element={<AdminSystem />} />
-                <Route path="games" element={<AdminGames />} />
-              </Route>
-              <Route path="*" element={<p className="muted">找不到這個頁面。</p>} />
-            </Routes>
-          </main>
-        </QuakeFeedProvider>
+                <Route path="*" element={<p className="muted">找不到這個頁面。</p>} />
+              </Routes>
+            </main>
+          </QuakeFeedProvider>
+        </NavPinsProvider>
       </AuthProvider>
     </BrowserRouter>
   )
