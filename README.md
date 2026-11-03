@@ -600,6 +600,12 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 - `main` 受保護：只能透過 PR 合併，且 CI 的 `test` 必須通過，不能 force push 或刪除。
 - 對 `dev` / `main` 開的 PR 只會跑測試，merge 後才會建置並部署。
 
+CI 的快取：
+- Docker 層快取存在 GHCR 的 `buildcache-staging` / `buildcache-prod`，先讀自己環境的，沒有再讀另一個環境的。
+  沒放在 Actions 快取：整個 repo 只有 10 GB，Docker 層快取一份就要好幾 GB，超過上限時 GitHub 會一直清掉舊快取。
+- Rust 和 npm 的快取在 Actions 快取。Rust 快取只在 push 到 `dev` / `main` 時存，PR 只讀。
+- `build` job 超過 15 分鐘會直接失敗（平常 2–5 分鐘），通常是下載 layer 卡住，重跑就好。
+
 ### 不斷線部署（Traefik + docker-rollout）
 
 ```
@@ -629,7 +635,7 @@ Traefik 每秒主動檢查 health，看到 503 就把它移出負載平衡，之
 `/api/health` 會回傳 `commit`，可以用來確認目前是哪一版在接流量。
 
 每次部署成功後會清掉同環境的舊 image：伺服器上只留這次的加上前 2 版（`deploy.sh` 的 `KEEP_PREVIOUS_IMAGES`），
-GHCR 上留最近 10 版（workflow 的 `cleanup` job）。
+GHCR 上留最近 10 版（workflow 的 `cleanup` job，同時清掉沒有 tag 的舊版，例如被覆蓋掉的 `buildcache-*`）。
 
 回滾：在伺服器上改 `.env` 的 `IMAGE` 再 rollout（本機現有的版本用 `docker image ls` 看，更舊的 tag 在 GitHub 的 Packages 頁面，要先 `docker login ghcr.io` 才拉得到）：
 
