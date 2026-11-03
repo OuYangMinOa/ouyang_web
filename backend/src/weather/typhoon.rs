@@ -20,6 +20,8 @@ use super::{SourceStatus, Weather, distance_km, field, get_json, list, num, text
 use crate::{AppError, AppState};
 
 const CACHE_TTL: Duration = Duration::from_secs(10 * 60);
+/// 背景重抓的間隔，比 TTL 短，快取才不會過期（一次要抓好幾秒，AI 路徑最多等 60 秒）
+pub(super) const REFRESH_EVERY: Duration = Duration::from_secs(8 * 60);
 /// 不同來源的目前位置在這個距離內，就當作同一個颱風（各家定位時間可能差到 6～12 小時）
 const SAME_STORM_KM: f64 = 600.0;
 const KT_PER_MS: f64 = 1.943_844;
@@ -136,7 +138,7 @@ pub async fn typhoons(State(state): State<AppState>) -> Result<Json<Arc<TyphoonR
     Ok(Json(report))
 }
 
-async fn build_report(weather: &Weather) -> TyphoonReport {
+pub(super) async fn build_report(weather: &Weather) -> TyphoonReport {
     let http = &weather.http;
     let cwa = async {
         let api = match &weather.cwa_key {

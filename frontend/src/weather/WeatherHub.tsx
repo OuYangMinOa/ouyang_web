@@ -21,7 +21,7 @@ export function SourceList({ sources, updatedAt }: { sources: SourceStatus[]; up
     <ul className="source-list" aria-label="資料來源">
       {sources.map((s) => (
         <li key={s.id} className={s.ok ? '' : 'down'} title={s.error}>
-          <span className={`live-dot ${s.ok ? 'on' : ''}`}>{s.name}</span>
+          <span className={`live-status ${s.ok ? 'on' : ''}`}>{s.name}</span>
           {!s.ok && <span className="muted">暫時無法連線</span>}
         </li>
       ))}
