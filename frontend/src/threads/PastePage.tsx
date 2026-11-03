@@ -321,7 +321,7 @@ export default function PastePage() {
             ))}
           </ul>
           <p className="muted th-note">
-            已記在 <Link to="/threads/downloads">下載紀錄</Link>。
+            已記在 <Link className="text-link" to="/threads/downloads">下載紀錄</Link>。
           </p>
         </section>
       )}

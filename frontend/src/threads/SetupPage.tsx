@@ -91,7 +91,7 @@ export default function SetupPage() {
           同一個網路 10 秒內只能下載一次。要登入 Threads 才看得到的影片（例如引用了限制瀏覽的貼文）抓不到。
         </p>
         <p className="muted">
-          不是 iPhone、或不想裝捷徑？到 <Link to="/threads/paste">貼網址下載</Link> 直接貼上貼文的網址。
+          不是 iPhone、或不想裝捷徑？到 <Link className="text-link" to="/threads/paste">貼網址下載</Link> 直接貼上貼文的網址。
         </p>
       </section>
 
