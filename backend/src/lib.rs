@@ -11,6 +11,7 @@ pub mod game_settings;
 pub mod games;
 pub mod honeypot;
 pub mod invoice;
+pub mod lobby;
 pub mod minesrace;
 pub mod monitor;
 pub mod music;
@@ -76,6 +77,8 @@ pub struct AppState {
     pub bigtwo: Arc<party::Parties<bigtwo::BigTwo>>,
     pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
     pub draw: Arc<party::Parties<draw::Draw>>,
+    /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
+    pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
     pub tetris_runs: Arc<tetris_scores::Runs>,
     /// 魔法氣泡單人模式進行中的局
@@ -113,6 +116,7 @@ impl AppState {
             bigtwo: Arc::default(),
             minesrace: Arc::default(),
             draw: Arc::default(),
+            lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
             music_dir: PathBuf::from("data/music"),
@@ -196,6 +200,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
         .route("/games/draw/party", post(party::create::<draw::Draw>))
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
+        .route("/games/lobby", post(lobby::create))
+        .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))
         .route("/music/files/{name}", get(music::track_file))
         .route("/music/s/{alias}", get(music::shared_file))

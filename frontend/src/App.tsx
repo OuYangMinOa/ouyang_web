@@ -14,6 +14,8 @@ import FeedbackButton from './feedback/FeedbackButton'
 import FeedbackPage from './feedback/FeedbackPage'
 import GamePage from './games/GamePage'
 import GamesHub from './games/GamesHub'
+import GamesLayout from './games/GamesLayout'
+import LobbyPage from './games/lobby/LobbyPage'
 import LolApp from './lol/LolApp'
 import MatchPage from './lol/MatchPage'
 import Overview from './lol/Overview'
@@ -205,8 +207,11 @@ function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/games" element={<AppLayout />}>
-                  <Route index element={<GamesHub />} />
-                  <Route path=":id" element={<GamePage />} />
+                  <Route element={<GamesLayout />}>
+                    <Route index element={<GamesHub />} />
+                    <Route path="room/:code" element={<LobbyPage />} />
+                    <Route path=":id" element={<GamePage />} />
+                  </Route>
                 </Route>
                 <Route path="/calendar" element={<AppLayout />}>
                   <Route index element={<CalendarPage />} />
