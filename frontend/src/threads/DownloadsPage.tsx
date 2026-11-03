@@ -30,11 +30,12 @@ export default function DownloadsPage() {
   return (
     <div className="threads">
       <h1>下載紀錄</h1>
-      <p className="muted">用捷徑下載過的貼文，新的在前面，最多保留 500 筆。</p>
+      <p className="muted">用捷徑或網頁下載過的貼文，新的在前面，最多保留 500 筆。</p>
       {error && <p className="error">{error}</p>}
       {downloads.length === 0 ? (
         <p className="muted">
-          還沒有下載過。先到 <Link to="/threads">安裝捷徑</Link>，在 Threads 按分享試試看。
+          還沒有下載過。先到 <Link className="text-link" to="/threads">安裝捷徑</Link>，在 Threads 按分享試試看，或是直接
+          <Link className="text-link" to="/threads/paste">貼網址下載</Link>。
         </p>
       ) : (
         <div className="table-wrap">

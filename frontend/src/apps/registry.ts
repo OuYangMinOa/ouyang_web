@@ -142,7 +142,7 @@ export const APPS: AppInfo[] = [
     name: 'Threads 下載',
     icon: '🧵',
     glyph: '串',
-    blurb: '在 Threads 按分享就能把影片存進 iPhone 相簿。這裡拿你的下載金鑰、安裝捷徑，還有下載過的貼文紀錄。',
+    blurb: '在 Threads 按分享就能把影片存進 iPhone 相簿，也可以直接在網頁貼網址下載。這裡拿你的下載金鑰、安裝捷徑，還有下載過的貼文紀錄。',
     tag: 'iPhone 捷徑',
     live: true,
     loginOnly: true,
@@ -150,6 +150,7 @@ export const APPS: AppInfo[] = [
       {
         items: [
           { to: '/threads', label: '安裝捷徑', icon: '📲' },
+          { to: '/threads/paste', label: '貼網址下載', icon: '🔗' },
           { to: '/threads/downloads', label: '下載紀錄', icon: '🕘' },
         ],
       },

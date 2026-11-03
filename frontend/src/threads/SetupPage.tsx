@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import { PERMISSIONS, errorMessage } from '../api'
 import { useAuth } from '../auth'
 import { getSetup, resetKey, setShortcut, type Setup } from './api'
@@ -88,6 +89,9 @@ export default function SetupPage() {
         </ol>
         <p className="muted">
           同一個網路 10 秒內只能下載一次。要登入 Threads 才看得到的影片（例如引用了限制瀏覽的貼文）抓不到。
+        </p>
+        <p className="muted">
+          不是 iPhone、或不想裝捷徑？到 <Link className="text-link" to="/threads/paste">貼網址下載</Link> 直接貼上貼文的網址。
         </p>
       </section>
 

@@ -171,6 +171,10 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/tetris/runs/{id}/checkpoints", post(tetris_scores::checkpoint))
         .route("/games/tetris/runs/{id}/finish", post(tetris_scores::finish_run))
         .route("/games/tetris/settings", get(game_settings::get_tetris).put(game_settings::put_tetris))
+        .route(
+            "/games/tetris/handling",
+            get(game_settings::get_tetris_handling).put(game_settings::put_tetris_handling),
+        )
         .route("/games/puyo/rooms", post(arena::create_arena::<puyo::Puyo>))
         .route("/games/puyo/rooms/{code}/ws", get(arena::connect::<puyo::Puyo>))
         .route("/games/puyo/scores", get(puyo_scores::list_scores))

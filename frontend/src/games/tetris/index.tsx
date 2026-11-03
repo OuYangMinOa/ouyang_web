@@ -4,6 +4,8 @@ import { errorMessage } from '../../api'
 import { useAuth } from '../../auth'
 import { ArenaIdentity, ArenaScreen, JoinForm, MAX_PLAYERS } from '../shared/Arena'
 import { useFlash } from '../shared/flash'
+import { HandlingEditor } from '../shared/HandlingEditor'
+import { useHandling, type HandlingSettings } from '../shared/handling'
 import { KeyEditor } from '../shared/KeyEditor'
 import { keyNames } from '../shared/keys'
 import { load, save } from '../shared/storage'
@@ -16,6 +18,7 @@ import { useKeys, type Action, type KeySettings } from './keys'
 import { CHECKPOINT_MS, formatScore, Leaderboard, RunReporter, useLeaderboard, type RunState } from './Leaderboard'
 import { useMusic } from './music'
 import { Playfield, type PlayfieldHooks } from './Playfield'
+import { useSfx, type SfxControl } from './sfx'
 import './tetris.css'
 
 /** 單人模式每消這麼多行、或每玩這麼久就升一級（後端檢查分數時用一樣的規則） */
@@ -30,16 +33,22 @@ export default function TetrisGame() {
   return <Menu onPractice={() => setPractice(true)} />
 }
 
-/** 操作說明和自訂快捷鍵；`onEdit` 在開始改快捷鍵時呼叫（單人模式用來暫停） */
-function Help({ settings, onEdit }: { settings: KeySettings; onEdit?: () => void }) {
-  const [editing, setEditing] = useState(false)
+/** 操作說明、自訂快捷鍵和操作手感；`onEdit` 在開始修改時呼叫（單人模式用來暫停） */
+function Help({ settings, handling, onEdit }: { settings: KeySettings; handling: HandlingSettings; onEdit?: () => void }) {
+  const [editing, setEditing] = useState<'keys' | 'handling' | null>(null)
   const k = (action: Action) => keyNames(settings.keys, action)
+  const edit = (what: 'keys' | 'handling') => {
+    setEditing(what)
+    onEdit?.()
+  }
   return (
     <>
       <div className="game-help">
         <strong>操作</strong>
-        {editing ? (
-          <KeyEditor settings={settings} onDone={() => setEditing(false)} />
+        {editing === 'keys' ? (
+          <KeyEditor settings={settings} onDone={() => setEditing(null)} />
+        ) : editing === 'handling' ? (
+          <HandlingEditor settings={handling} onDone={() => setEditing(null)} />
         ) : (
           <>
             <ul>
@@ -59,16 +68,14 @@ function Help({ settings, onEdit }: { settings: KeySettings; onEdit?: () => void
               <li>1～4：切換攻擊目標（線上對戰）</li>
             </ul>
             <p className="muted">手機用盤面下方的按鈕，左右和下可以按住不放。</p>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                setEditing(true)
-                onEdit?.()
-              }}
-            >
-              ⌨ 自訂快捷鍵
-            </button>
+            <div className="game-help-buttons">
+              <button type="button" className="secondary" onClick={() => edit('keys')}>
+                ⌨ 自訂快捷鍵
+              </button>
+              <button type="button" className="secondary" onClick={() => edit('handling')}>
+                ⚙ 操作手感（DAS {handling.handling.das} / ARR {handling.handling.arr}）
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -93,13 +100,14 @@ function Menu({ onPractice }: { onPractice: () => void }) {
   const { loading } = useAuth()
   const leaderboard = useLeaderboard()
   const keys = useKeys()
+  const handling = useHandling('tetris')
 
   return (
     <GameLayout
       side={
         <>
           <Leaderboard board={leaderboard.board} error={leaderboard.error} />
-          <Help settings={keys} />
+          <Help settings={keys} handling={handling} />
         </>
       }
     >
@@ -164,6 +172,8 @@ function Practice({ onExit }: { onExit: () => void }) {
   const [flash, showFlash] = useFlash()
   const music = useMusic(phase === 'running', hud.level)
   const keys = useKeys()
+  const handling = useHandling('tetris')
+  const sfx = useSfx()
 
   function restart() {
     game.current = new Tetris()
@@ -280,7 +290,7 @@ function Practice({ onExit }: { onExit: () => void }) {
       side={
         <>
           <Leaderboard board={leaderboard.board} error={leaderboard.error} />
-          <Help settings={keys} onEdit={() => setPhase((p) => (p === 'running' ? 'paused' : p))} />
+          <Help settings={keys} handling={handling} onEdit={() => setPhase((p) => (p === 'running' ? 'paused' : p))} />
         </>
       }
     >
@@ -292,6 +302,8 @@ function Practice({ onExit }: { onExit: () => void }) {
         game={game}
         running={phase === 'running'}
         keys={keys.keys}
+        handling={handling.handling}
+        sound={sfx.play}
         hooks={hooks}
         overlay={overlay}
         flash={flash}
@@ -309,11 +321,20 @@ function Practice({ onExit }: { onExit: () => void }) {
           重新開始
         </button>
         <MusicButton music={music} />
+        <SfxButton sfx={sfx} />
         <button type="button" className="secondary" onClick={onExit}>
           回到選單
         </button>
       </Toolbar>
     </GameLayout>
+  )
+}
+
+function SfxButton({ sfx }: { sfx: SfxControl }) {
+  return (
+    <button type="button" className="secondary" onClick={sfx.toggle} aria-pressed={sfx.enabled}>
+      {sfx.enabled ? '🔊 音效：開' : '🔈 音效：關'}
+    </button>
   )
 }
 
@@ -347,6 +368,8 @@ function Online() {
   const match = useArenaMatch(ENGINE)
   const music = useMusic(match.running, match.state?.level ?? 1)
   const { keys } = useKeys()
+  const { handling } = useHandling('tetris')
+  const sfx = useSfx()
 
   const hooks = useRef<PlayfieldHooks>({})
   useEffect(() => {
@@ -365,12 +388,19 @@ function Online() {
   return (
     <ArenaScreen
       match={match}
-      extra={<MusicButton music={music} />}
+      extra={
+        <>
+          <MusicButton music={music} />
+          <SfxButton sfx={sfx} />
+        </>
+      }
       playfield={({ overlay, info, flash }) => (
         <Playfield
           game={match.game}
           running={match.running}
           keys={keys}
+          handling={handling}
+          sound={sfx.play}
           hooks={hooks}
           overlay={overlay}
           flash={flash}

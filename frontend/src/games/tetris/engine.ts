@@ -126,6 +126,12 @@ export type LockResult = {
   points: number
 }
 
+/**
+ * 要發出的音效：`spin` 是旋轉後卡在 spin 的位置（還沒放下就提示），`big` 是消四行或 spin 消行，
+ * `garbage` 是垃圾行升上來
+ */
+export type Sound = 'move' | 'rotate' | 'spin' | 'hold' | 'drop' | 'lock' | 'clear' | 'big' | 'garbage'
+
 export class Tetris {
   board = new Uint8Array(COLS * TOTAL)
   piece: Piece | null = null
@@ -145,6 +151,8 @@ export class Tetris {
   sent = 0
   garbage: Garbage[] = []
   events: LockResult[] = []
+  /** 畫面每一幀取走去播放 */
+  sounds: Sound[] = []
   /** 遊戲時間（毫秒），垃圾行何時升上來以這個為準 */
   clock = 0
 
@@ -240,6 +248,7 @@ export class Tetris {
     p.x += dx
     this.lastKick = -1
     this.moved()
+    this.sounds.push('move')
     return true
   }
 
@@ -257,6 +266,7 @@ export class Tetris {
         p.rot = to
         this.lastKick = i
         this.moved()
+        this.sounds.push(this.spin() === 'none' ? 'rotate' : 'spin')
         return true
       }
     }
@@ -274,7 +284,22 @@ export class Tetris {
   setSoftDrop(on: boolean) {
     // 照原本重力累積的時間不能拿來算加速後的格數，否則按下的瞬間會一口氣掉好幾格
     if (on !== this.softDrop) this.fall = 0
+    // 按下的瞬間先掉一格，不用等第一個間隔
+    if (on && !this.softDrop && this.piece && !this.over && this.fallOne()) this.score++
     this.softDrop = on
+  }
+
+  /** 往下掉一格；已經在地上就回傳 false */
+  private fallOne(): boolean {
+    const p = this.piece
+    if (!p || this.onGround()) return false
+    p.y++
+    this.lastKick = -1
+    if (p.y > this.lowest) {
+      this.lowest = p.y
+      this.lockResets = 0
+    }
+    return true
   }
 
   hardDrop() {
@@ -284,6 +309,7 @@ export class Tetris {
     if (y !== p.y) this.lastKick = -1
     this.score += (y - p.y) * 2
     p.y = y
+    this.sounds.push('drop')
     this.lock()
   }
 
@@ -293,6 +319,7 @@ export class Tetris {
     const swap = this.hold
     this.hold = p.kind
     this.holdUsed = true
+    this.sounds.push('hold')
     this.spawn(swap ?? this.takeNext())
   }
 
@@ -320,14 +347,8 @@ export class Tetris {
     this.fall += dt
     while (this.fall >= step && this.piece) {
       this.fall -= step
-      if (this.onGround()) break
-      this.piece.y++
-      this.lastKick = -1
+      if (!this.fallOne()) break
       if (this.softDrop) this.score++
-      if (this.piece.y > this.lowest) {
-        this.lowest = this.piece.y
-        this.lockResets = 0
-      }
     }
   }
 
@@ -427,6 +448,7 @@ export class Tetris {
       this.riseGarbage()
     }
 
+    this.sounds.push(lines === 0 ? 'lock' : lines === 4 || spin !== 'none' ? 'big' : 'clear')
     this.lines += lines
     this.sent += sent
     this.events.push({ lines, spin, piece: p.kind, b2b, combo: this.combo, perfect, attack, sent, points })
@@ -440,6 +462,7 @@ export class Tetris {
     while (budget > 0 && this.garbage.length > 0 && this.garbage[0].readyAt <= this.clock) {
       const g = this.garbage[0]
       const n = Math.min(g.lines, budget)
+      if (budget === GARBAGE_PER_LOCK) this.sounds.push('garbage')
       budget -= n
       g.lines -= n
       if (g.lines === 0) this.garbage.shift()
