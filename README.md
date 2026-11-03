@@ -89,7 +89,7 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 
 ### 新增 APP
 
-1. 在 `frontend/src/apps/registry.ts` 的 `APPS` 加一筆：`id`（網址前綴）、名稱、圖示、首頁卡片文字，以及 `nav`（側邊欄的頁面，可以分組）。需要權限才能用的 APP 設 `permission`，沒權限的人在切換面板和首頁都看不到；只要登入就能用的設 `loginOnly`。
+1. 在 `frontend/src/apps/registry.ts` 的 `APPS` 加一筆：`id`（網址前綴）、名稱、圖示、首頁卡片文字，以及 `nav`（側邊欄的頁面，可以分組）。需要權限才能用的 APP 設 `permission`，沒權限的人在切換面板和首頁都看不到；只要登入就能用的設 `loginOnly`；需要大畫面的（小遊戲）設 `wide`，內容區從 1000px 放寬到 1440px。
 2. 在 `App.tsx` 把路由包在 `<AppLayout />` 底下（要權限就再包一層 `<RequireAuth>`）：
    ```tsx
    <Route path="/notes" element={<AppLayout />}>
@@ -97,7 +97,7 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
      <Route path=":id" element={<NoteEditor />} />
    </Route>
    ```
-   桌機會有可收合的側邊欄，窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
+   桌機的側邊欄固定在畫面最左邊（可收合成只剩圖示），內容區在剩下的寬度裡置中；窄於 900px 時改成頁首的「APP › 頁面 ▾」選單。
    兩邊都是 `frontend/src/components/SideNav.tsx`：頁面有 10 個以上時，上面會出現搜尋框（Enter 直接開第一個結果、Esc 清掉），
    每一列右邊可以釘選，釘選的排在最上面。沒登入存在瀏覽器，有登入存在帳號（`GET /api/nav/pins`、`PUT /api/nav/pins/<APP id>`，`backend/src/nav_pins.rs`），換裝置也一樣。
 
@@ -105,6 +105,9 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 > cookie 沒有設 Domain，只屬於各自的網址，名稱也依環境分開（`session_<env>`），兩邊的登入互不影響。
 
 ## 小遊戲線上對戰
+
+> 遊戲頁的盤面大小用 `games.css` 的 `--game-vh`（視窗扣掉頁首和標題列後剩的高度）或 `--board-vh`（再扣掉一行狀態和一排按鈕）來算，
+> 不要寫死 `100dvh - …`，整個遊戲才不用捲動就看得完（在遊戲室裡、窄螢幕標題列換成兩行也一樣）。
 
 後端只負責轉送訊息，不懂遊戲規則；規則由兩端各自執行（`frontend/src/games/shared/useRoom.ts`、`backend/src/games.rs`）。不需要登入，但登入後會用帳號認座位。
 
@@ -262,7 +265,7 @@ GET  /api/games/<遊戲>/party/{code}/ws?player=<id>&name=<暱稱>
 ### 遊戲室
 
 `/games/room/{code}`：同一群人換著玩不同遊戲，不用每換一款就重開房間、重新邀請（`backend/src/lobby.rs`、`frontend/src/games/lobby/`）。
-小遊戲大廳按「開遊戲室」，把連結傳給朋友；房主選遊戲，伺服器替大家開好那款遊戲的房間，所有人自動跳過去，玩完按頁面上方的「換遊戲」再選下一款。
+小遊戲大廳按「開遊戲室」，把連結傳給朋友；房主選遊戲，伺服器替大家開好那款遊戲的房間，所有人自動跳過去，玩完按標題列上的「換遊戲」再選下一款。
 
 ```
 POST /api/games/lobby                     →  201 {"code":"ABCDE"}
@@ -273,7 +276,8 @@ GET  /api/games/lobby/{code}/ws?player=<id>&name=<暱稱>
 - 派對遊戲和大逃殺所有人一起去。開房時把遊戲室的順序交給那間房間（`hosts`），遊戲室的房主到了那邊也是房主，不管誰先連上。
 - 兩人的棋類由房主挑誰先手、誰後手，開房時就把兩個座位排好（`game_rooms.seat0/seat1`），其他人連進去會是 `full`，留在遊戲室聊天。
 - 整個小遊戲區（`GamesLayout`）共用一條遊戲室的連線，玩遊戲的時候也連著，房主換遊戲時才跟得過去；連上時已經在玩的那一間不會自動跳，
-  頁面上方的列有「回到…」。遊戲室代碼存在 sessionStorage，只認這個分頁。名字和派對房間共用，大逃殺沒取過名字的也用這個。
+  遊戲頁標題列上的遊戲室（`LobbyChip`）和大廳最上面的卡片有「回到…」。
+- 遊戲室開的房間不顯示自己的房間代碼、邀請和離開（`useInLobbyRoom`），大家只看得到遊戲室的代碼，邀請的也是遊戲室，下一款遊戲才跟得到。遊戲室代碼存在 sessionStorage，只認這個分頁。名字和派對房間共用，大逃殺沒取過名字的也用這個。
 - 只放在記憶體，伺服器重啟或換版時會消失。斷線的人留在名單上一分鐘，沒人連線 10 分鐘就收掉，最多 200 間、每間 30 人。
   房主開完一間後 2 秒內不能再開（避免連點開出好幾間），可以請人離開（之後不能再進來）。
 

@@ -76,7 +76,8 @@
   grid-template-columns: minmax(14px, 0.6fr) repeat(10, minmax(0, 1fr));
   gap: 2px;
   width: 100%;
-  max-width: 460px;
+  /* 不超過標題列底下剩的高度（扣掉狀態列和海域標題）；格子是正方形，高度約為寬度的 1.04 倍 */
+  max-width: min(460px, max(280px, calc((var(--game-vh) - 120px) / 1.04)));
   margin: 0 auto;
   border-radius: 8px;
   /* 避免點兩下放大、長按選字與點擊時的灰色閃爍 */
@@ -444,4 +445,9 @@
   .bs-cell.pending .bs-mark {
     animation: none;
   }
+}
+
+/* 擺船時上面還有船的清單和提示、下面有按鈕，海域再小一點，整個畫面不用捲動 */
+.bs-setup .bs-grid {
+  max-width: min(460px, max(280px, calc((var(--game-vh) - 300px) / 1.04)));
 }

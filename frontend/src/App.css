@@ -2,9 +2,10 @@ main {
   width: min(960px, 100% - 32px);
   margin: 32px auto 64px;
 }
-/* APP 頁面有側邊欄，跟頁首一樣寬 */
+/* APP 頁面撐滿整個畫面：側邊欄固定在最左邊，內容區自己置中、留邊距（apps/apps.css） */
 main:has(.app-layout) {
-  width: min(1240px, 100% - 32px);
+  width: auto;
+  margin: 0;
 }
 
 /* ---- 頁首：品牌、切換 APP、（手機）APP 選單、主題、帳號 ---- */
@@ -32,6 +33,16 @@ main:has(.app-layout) {
   margin: 0 auto;
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
+}
+/* 在 APP 裡時撐滿整個寬度，品牌和最左邊的側邊欄對齊 */
+.site-header.in-app {
+  width: auto;
+  padding-inline: 20px;
+}
+@media (max-width: 900px) {
+  .site-header.in-app {
+    padding-inline: 16px;
+  }
 }
 
 .brand {

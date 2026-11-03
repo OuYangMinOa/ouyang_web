@@ -147,7 +147,7 @@ export function MineBoard({
     <div className="ms-scroll">
       <div
         className={['ms-board', done ? 'done' : '', className ?? ''].filter(Boolean).join(' ')}
-        style={{ '--cols': viewCols } as CSSProperties}
+        style={{ '--cols': viewCols, '--rows': viewRows } as CSSProperties}
         onClick={onClick}
         onContextMenu={onContextMenu}
         onPointerDown={onPointerDown}

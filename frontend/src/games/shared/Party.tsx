@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useAuth } from '../../auth'
+import { useInLobbyRoom } from '../lobby/useLobby'
+import { useInvite } from './share'
 import { loadPartyName, MAX_CHAT, MAX_NAME, type AnyParty } from './useParty'
 import './party.css'
 
@@ -138,7 +140,10 @@ export function PartyEntry({ party, children }: { party: AnyParty; children?: Re
   )
 }
 
-/** 房間代碼、邀請、離開，以及連線錯誤；`extra` 是遊戲自己的按鈕 */
+/**
+ * 房間代碼、邀請、離開，以及連線錯誤；`extra` 是遊戲自己的按鈕。
+ * 遊戲室開的房間不顯示代碼、邀請和離開（標題列的遊戲室就有），只留遊戲自己的按鈕和錯誤。
+ */
 export function PartyHeader({
   party,
   shareTitle,
@@ -148,25 +153,34 @@ export function PartyHeader({
   shareTitle: string
   extra?: ReactNode
 }) {
-  const [copied, setCopied] = useState(false)
+  const invite = useInvite(party.inviteUrl, shareTitle)
+  const inLobby = useInLobbyRoom(party.code)
+  const recover = (
+    <>
+      {party.errorCode === 'replaced' && (
+        <button type="button" onClick={party.reconnect}>
+          在這裡繼續
+        </button>
+      )}
+      {party.errorCode === 'not_found' && !inLobby && (
+        <button type="button" onClick={party.create} disabled={party.busy}>
+          建立新房間
+        </button>
+      )}
+    </>
+  )
 
-  async function share() {
-    if (!party.inviteUrl) return
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: shareTitle, url: party.inviteUrl })
-        return
-      } catch {
-        // 使用者取消分享，改成複製
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(party.inviteUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      window.prompt('複製這個連結給朋友：', party.inviteUrl)
-    }
+  if (inLobby) {
+    if (!extra && !party.error) return null
+    return (
+      <div className="party-header in-lobby">
+        <div className="game-toolbar">
+          {recover}
+          {extra}
+        </div>
+        {party.error && <p className="error">{party.error}</p>}
+      </div>
+    )
   }
 
   return (
@@ -177,19 +191,10 @@ export function PartyHeader({
         {party.code && !party.connected && !party.error && <span className="muted">連線中…</span>}
       </div>
       <div className="game-toolbar">
-        {party.errorCode === 'replaced' && (
-          <button type="button" onClick={party.reconnect}>
-            在這裡繼續
-          </button>
-        )}
-        {party.errorCode === 'not_found' && (
-          <button type="button" onClick={party.create} disabled={party.busy}>
-            建立新房間
-          </button>
-        )}
+        {recover}
         {extra}
-        <button type="button" className="secondary" onClick={share}>
-          {copied ? '已複製連結' : '邀請朋友'}
+        <button type="button" className="secondary" onClick={invite.share}>
+          {invite.copied ? '已複製連結' : '邀請朋友'}
         </button>
         <button type="button" className="secondary" onClick={party.leave}>
           離開房間

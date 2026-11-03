@@ -47,8 +47,15 @@
 
 .ms-board {
   --gap: 1px;
-  /* 依容器寬度算格子大小，但至少 30px 好點、最多 44px */
-  --cs: clamp(30px, calc((100cqw - 6px - (var(--cols) - 1) * var(--gap)) / var(--cols)), 44px);
+  /* 依容器寬度和標題列底下剩的高度（扣掉上面的選項和計數列）算格子大小，但至少 30px 好點、最多 44px */
+  --cs: clamp(
+    30px,
+    min(
+      calc((100cqw - 6px - (var(--cols) - 1) * var(--gap)) / var(--cols)),
+      calc((var(--game-vh, 100dvh) - 236px - (var(--rows) - 1) * var(--gap)) / var(--rows))
+    ),
+    44px
+  );
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--cs));
   grid-auto-rows: var(--cs);

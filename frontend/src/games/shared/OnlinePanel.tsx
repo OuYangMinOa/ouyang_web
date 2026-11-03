@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useAuth } from '../../auth'
+import { useInLobbyRoom } from '../lobby/useLobby'
+import { useInvite } from './share'
 import type { Room, Seat } from './useRoom'
 
 /** 訪客的座位只認這個分頁，提醒可以登入（登入後回到同一個房間） */
@@ -25,30 +27,12 @@ function LoginHint() {
  */
 export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: [string, string] }) {
   const [draft, setDraft] = useState('')
-  const [copied, setCopied] = useState(false)
+  const invite = useInvite(room.inviteUrl)
+  const inLobby = useInLobbyRoom(room.code)
 
   function submit(e: FormEvent) {
     e.preventDefault()
     if (draft.trim()) room.join(draft)
-  }
-
-  async function share() {
-    if (!room.inviteUrl) return
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: '一起來玩', url: room.inviteUrl })
-        return
-      } catch {
-        // 使用者取消分享，改成複製
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(room.inviteUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      window.prompt('複製這個連結給對手：', room.inviteUrl)
-    }
   }
 
   if (!room.code) {
@@ -86,10 +70,13 @@ export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: 
 
   return (
     <div className="online-panel">
-      <div className="room-code">
-        <span className="muted">房間代碼</span>
-        <strong>{room.code}</strong>
-      </div>
+      {/* 遊戲室開的房間：代碼、邀請、離開都在標題列的遊戲室 */}
+      {!inLobby && (
+        <div className="room-code">
+          <span className="muted">房間代碼</span>
+          <strong>{room.code}</strong>
+        </div>
+      )}
       <p className={room.error ? 'error' : 'muted'}>{status}</p>
       {room.seat !== null && opponent !== null && (
         <p className="muted">
@@ -102,17 +89,21 @@ export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: 
             在這裡繼續
           </button>
         )}
-        {room.errorCode === 'not_found' && (
+        {room.errorCode === 'not_found' && !inLobby && (
           <button type="button" onClick={room.create} disabled={room.busy}>
             建立新房間
           </button>
         )}
-        <button type="button" className="secondary" onClick={share}>
-          {copied ? '已複製連結' : '邀請對手'}
-        </button>
-        <button type="button" className="secondary" onClick={room.leave}>
-          離開房間
-        </button>
+        {!inLobby && (
+          <>
+            <button type="button" className="secondary" onClick={invite.share}>
+              {invite.copied ? '已複製連結' : '邀請對手'}
+            </button>
+            <button type="button" className="secondary" onClick={room.leave}>
+              離開房間
+            </button>
+          </>
+        )}
       </div>
       <LoginHint />
     </div>

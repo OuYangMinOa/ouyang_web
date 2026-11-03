@@ -1,36 +1,54 @@
-/* ---- APP 版面：左邊側邊欄（可收合成只剩圖示），右邊內容 ---- */
+/* ---- APP 版面：側邊欄固定在畫面最左邊（可收合成只剩圖示），右邊內容在剩下的寬度裡置中 ---- */
 
 .app-layout {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 32px;
-  align-items: start;
+  --sidebar-w: 240px;
+  /* 內容區最寬多少；寬螢幕多出來的空間平均放在內容兩側 */
+  --content-max: 1000px;
+  padding-left: var(--sidebar-w);
 }
 .app-layout.collapsed {
-  grid-template-columns: 48px minmax(0, 1fr);
+  --sidebar-w: 64px;
+}
+/* 小遊戲這類需要大畫面的 APP（registry.ts 的 wide） */
+.app-layout.wide {
+  --content-max: 1440px;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .app-layout {
-    transition: grid-template-columns 0.2s ease;
+  .app-layout,
+  .app-sidebar {
+    transition:
+      padding-left 0.2s ease,
+      width 0.2s ease;
   }
 }
 
 /* 內容區當作容器，遊戲版面依「剩下多寬」排列，不受側邊欄開關影響 */
 .app-content {
   min-width: 0;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 32px 32px 64px;
   container-type: inline-size;
 }
 
 .app-sidebar {
-  position: sticky;
-  /* 讓出固定在上方的頁首 */
-  top: calc(var(--site-top-h, 0px) + 16px);
+  position: fixed;
+  /* 讓出固定在上方的頁首（地震速報出現時頁首會變高） */
+  top: var(--site-top-h, 65px);
+  bottom: 0;
+  left: 0;
+  z-index: 10;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  /* 上面讓 16px、下面留 main 的 64px 下邊距：捲到底時側邊欄才不會被往上頂進頁首底下 */
-  max-height: calc(100dvh - var(--site-top-h, 0px) - 80px);
+  width: var(--sidebar-w);
+  box-sizing: border-box;
+  padding: 16px 12px 24px;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
   overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .app-sidebar-head {
@@ -50,6 +68,7 @@
   color: var(--text-h);
   font-weight: 700;
   text-decoration: none;
+  white-space: nowrap;
 }
 .sidebar-toggle {
   flex-shrink: 0;
@@ -65,6 +84,9 @@
 }
 
 /* 收合：只留圖示（頁面清單的部分在 components/SideNav.css） */
+.collapsed .app-sidebar {
+  padding-inline: 8px;
+}
 .collapsed .app-sidebar-head {
   flex-direction: column;
 }
@@ -77,10 +99,19 @@
 
 /* 平板與手機：側邊欄改由頁首的 APP 選單取代 */
 @media (max-width: 900px) {
-  .app-layout {
-    display: block;
+  .app-layout,
+  .app-layout.collapsed {
+    --sidebar-w: 0px;
   }
   .app-sidebar {
     display: none;
+  }
+  .app-content {
+    padding: 24px 16px 56px;
+  }
+}
+@media (max-width: 640px) {
+  .app-content {
+    padding: 20px 16px 48px;
   }
 }

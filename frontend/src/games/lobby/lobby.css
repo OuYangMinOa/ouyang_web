@@ -1,30 +1,105 @@
-/* ---- 遊戲室：每一頁上面的列 ---- */
+/* ---- 遊戲室：遊戲頁標題列上的小膠囊（代碼、人數、邀請、換遊戲） ---- */
+
+.lobby-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 3px 3px 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.lobby-chip-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 9px;
+  color: var(--text-h);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lobby-chip-info:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.lobby-chip-info strong {
+  font: 600 15px var(--mono);
+  letter-spacing: 0.1em;
+}
+.lobby-chip-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--text);
+}
+.lobby-chip-status.error {
+  color: var(--danger);
+}
+.lobby-chip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.lobby-chip-actions button {
+  min-height: 40px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+/* 窄的時候：代碼一行、按鈕一行平分 */
+@container (max-width: 560px) {
+  .lobby-chip-info {
+    flex: 1 1 auto;
+  }
+  .lobby-chip-actions {
+    flex: 1 1 100%;
+  }
+  .lobby-chip-actions button {
+    flex: 1 1 0;
+  }
+}
+
+/* ---- 遊戲室：小遊戲大廳上的卡片（已經在遊戲室裡時） ---- */
 
 .lobby-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 12px;
-  margin-bottom: 16px;
-  padding: 8px 8px 8px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  gap: 12px 16px;
+  margin-bottom: 8px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
   color: var(--text-h);
 }
 .lobby-bar-info {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
 }
-.lobby-bar-info strong {
-  font: 600 16px var(--mono);
+.lobby-bar-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.lobby-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lobby-bar-text strong {
+  font: 600 17px var(--mono);
   letter-spacing: 0.1em;
 }
-.lobby-bar-info .error {
+.lobby-bar-text .error {
   margin: 0;
 }
 .lobby-bar-actions {
@@ -33,7 +108,7 @@
   gap: 8px;
 }
 .lobby-bar-actions button {
-  min-height: 40px;
+  min-height: 44px;
   white-space: nowrap;
 }
 @media (max-width: 480px) {
@@ -41,7 +116,7 @@
     flex: 1 1 100%;
   }
   .lobby-bar-actions button {
-    flex: 1 1 0;
+    flex: 1 1 auto;
   }
 }
 
@@ -52,6 +127,18 @@
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+}
+.app-content:has(> .lobby-page) {
+  padding-top: 16px;
+}
+.lobby-page > .game-head {
+  padding-bottom: 0;
+}
+.lobby-code {
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--accent);
 }
 .lobby-page h2 {
   margin: 0;
@@ -68,7 +155,7 @@
   gap: 16px;
   align-items: start;
 }
-@media (max-width: 900px) {
+@container (max-width: 760px) {
   .lobby-columns {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -172,17 +259,68 @@ section.lobby-now {
   font-size: 15px;
 }
 
+/* 選好遊戲後黏在畫面底部：清單很長（手機、矮的筆電）時也不用捲下去找「開始玩」 */
 .lobby-start {
+  position: sticky;
+  bottom: 12px;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px;
+  padding: 14px 16px 16px;
   border: 1px solid var(--accent);
   border-radius: 12px;
   background: var(--surface);
+  box-shadow: var(--shadow);
 }
 .lobby-start p {
   margin: 0;
+}
+.lobby-start-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+button.lobby-start-close {
+  flex-shrink: 0;
+  width: 40px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+}
+button.lobby-start-close:hover {
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+/* 只有自己一個人時的邀請卡 */
+.lobby-invite {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.lobby-invite p {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+.lobby-invite strong {
+  color: var(--text-h);
+}
+.lobby-invite input {
+  font-family: var(--mono);
+  font-size: 16px;
+}
+.lobby-invite button {
+  flex-shrink: 0;
 }
 .lobby-start strong {
   color: var(--text-h);
@@ -213,17 +351,21 @@ section.lobby-now {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 16px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
   border-radius: 12px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.lobby-entry-icon {
+  font-size: 32px;
+  line-height: 1;
 }
 .lobby-entry-text {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1 1 260px;
+  flex: 1 1 240px;
   min-width: 0;
 }
 .lobby-entry-text strong {
@@ -234,7 +376,7 @@ section.lobby-now {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  flex: 1 1 260px;
+  flex: 0 1 440px;
 }
 .lobby-entry-actions > button {
   min-height: 44px;
