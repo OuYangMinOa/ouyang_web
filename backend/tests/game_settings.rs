@@ -66,3 +66,44 @@ async fn rejects_strange_keys() {
         }
     }
 }
+
+const HANDLING: &str = "/api/games/tetris/handling";
+
+#[tokio::test]
+async fn handling_is_saved_per_account() {
+    let app = app().await;
+    let alice = login(&app, "alice").await;
+    let bob = login(&app, "bob").await;
+    assert_eq!(app.get(HANDLING, None).await.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(app.get(HANDLING, Some(&alice)).await.body, json!({ "handling": null }));
+
+    let handling = json!({ "das": 200, "arr": 0 });
+    let put = app.call("PUT", HANDLING, Some(&alice), Some(json!({ "handling": handling }))).await;
+    assert_eq!(put.status, StatusCode::NO_CONTENT, "{}", put.body);
+    assert_eq!(app.get(HANDLING, Some(&alice)).await.body["handling"], handling);
+    assert_eq!(app.get(HANDLING, Some(&bob)).await.body["handling"], json!(null));
+    // 跟快捷鍵分開存，改其中一個不影響另一個
+    app.call("PUT", TETRIS, Some(&alice), Some(json!({ "keys": null }))).await;
+    assert_eq!(app.get(HANDLING, Some(&alice)).await.body["handling"], handling);
+
+    let reset = app.call("PUT", HANDLING, Some(&alice), Some(json!({ "handling": null }))).await;
+    assert_eq!(reset.status, StatusCode::NO_CONTENT);
+    assert_eq!(app.get(HANDLING, Some(&alice)).await.body["handling"], json!(null));
+}
+
+#[tokio::test]
+async fn rejects_strange_handling() {
+    let app = app().await;
+    let alice = login(&app, "alice").await;
+    for handling in [
+        json!({ "das": 10, "arr": 40 }),
+        json!({ "das": 170, "arr": 1000 }),
+        json!({ "das": -1, "arr": 40 }),
+        json!({ "das": 170 }),
+        json!({ "das": 170, "arr": 40, "extra": 1 }),
+        json!("fast"),
+    ] {
+        let reply = app.call("PUT", HANDLING, Some(&alice), Some(json!({ "handling": handling }))).await;
+        assert!(reply.status.is_client_error(), "{handling} → {}", reply.status);
+    }
+}

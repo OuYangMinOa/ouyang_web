@@ -372,6 +372,43 @@
   justify-content: flex-end;
 }
 
+/* 操作手感（DAS、ARR）：名稱和數值一行，滑桿和說明在下面 */
+.game-help .game-handling {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.game-help .game-handling li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  margin: 0;
+}
+.game-handling output {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.game-handling input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.game-handling .muted {
+  grid-column: 1 / -1;
+  font-size: 0.85em;
+}
+.game-help-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ---- 大逃殺共用（俄羅斯方塊、魔法氣泡）：暱稱、房間列、小盤面、攻擊目標、KO 訊息、大廳 ---- */
 
 .arena-online {

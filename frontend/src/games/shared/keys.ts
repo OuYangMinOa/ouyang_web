@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, errorMessage } from '../../api'
-import { useAuth } from '../../auth'
-import { load, save } from './storage'
+import { useCallback } from 'react'
+import { useAccountSetting } from './accountSetting'
 
 /**
  * 自訂快捷鍵（俄羅斯方塊、魔法氣泡共用）：沒登入存在瀏覽器，有登入就存在帳號（後端 game_settings.rs），換裝置也一樣。
@@ -112,51 +110,9 @@ export function keyNames<A extends string>(keys: Keys<A>, action: A): string {
 
 /** 目前的快捷鍵；改了就存起來（有登入的話也存到帳號） */
 export function useKeys<A extends string>(scheme: KeyScheme<A>) {
-  const { user, loading } = useAuth()
-  const storageKey = `${scheme.game}:keys`
-  const endpoint = `/games/${scheme.game}/settings`
-  const [keys, setKeys] = useState<Keys<A>>(() => sanitize(scheme, load<unknown>(storageKey, null)))
-  const [error, setError] = useState<string | null>(null)
-  /** 伺服器的設定回來之前就改過的話，不要被蓋掉 */
-  const changed = useRef(false)
-  /** 一個接一個送，順序才不會亂 */
-  const queue = useRef<Promise<unknown>>(Promise.resolve())
-
-  const userId = user?.id
-  useEffect(() => {
-    if (loading || !userId) return
-    let cancelled = false
-    changed.current = false
-    api<{ keys: unknown }>(endpoint)
-      .then((r) => {
-        // 帳號還沒存過就沿用這個瀏覽器的設定
-        if (cancelled || changed.current || !r.keys) return
-        const next = sanitize(scheme, r.keys)
-        setKeys(next)
-        save(storageKey, next)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [loading, userId, scheme, endpoint, storageKey])
-
-  /** 改成新的設定；null 是恢復預設 */
-  const change = useCallback(
-    (next: Keys<A> | null) => {
-      changed.current = true
-      setKeys(next ?? scheme.defaults)
-      save(storageKey, next)
-      if (!userId) return
-      queue.current = queue.current
-        .then(() => api(endpoint, { method: 'PUT', body: JSON.stringify({ keys: next }) }))
-        .then(() => setError(null))
-        .catch((e) => setError(`沒能存到帳號：${errorMessage(e)}`))
-    },
-    [userId, scheme, endpoint, storageKey],
-  )
-
-  return { scheme, keys, change, error, synced: !!userId }
+  const clean = useCallback((raw: unknown) => sanitize(scheme, raw), [scheme])
+  const { value, ...rest } = useAccountSetting(`${scheme.game}:keys`, `/games/${scheme.game}/settings`, 'keys', clean)
+  return { scheme, keys: value, ...rest }
 }
 
 export type KeySettings<A extends string = string> = ReturnType<typeof useKeys<A>>

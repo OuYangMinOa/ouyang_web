@@ -1,14 +1,12 @@
 import { useEffect, useRef, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { drawBoard, drawPreview, readPalette, METER } from './draw'
-import { COLS, PREVIEW, ROWS, type Tetris } from './engine'
+import { COLS, PREVIEW, ROWS, type Sound, type Tetris } from './engine'
+import type { Handling } from '../shared/handling'
 import { actionOf } from '../shared/keys'
 import { KEYS, type Action, type Keys } from './keys'
 
-/** 左右鍵按住多久開始連續移動，以及之後每格的間隔 */
-const DAS_MS = 150
-const ARR_MS = 40
-
-type Held = { dir: -1 | 1; since: number; acc: number } | null
+/** 按住的左右鍵：`moves` 是按下後自動多走了幾次 */
+type Held = { dir: -1 | 1; since: number; moves: number } | null
 
 export type PlayfieldHooks = {
   /** 每一幀推進完遊戲後呼叫（取走鎖定事件、送出攻擊…） */
@@ -24,6 +22,10 @@ export type PlayfieldProps = {
   running: boolean
   /** 快捷鍵設定 */
   keys: Keys
+  /** 左右鍵的 DAS、ARR */
+  handling: Handling
+  /** 播放音效（關掉音效時什麼都不做） */
+  sound: (s: Sound) => void
   /** 由上層在 effect 裡更新，迴圈每一幀拿最新的版本來呼叫 */
   hooks: RefObject<PlayfieldHooks>
   overlay?: ReactNode
@@ -62,16 +64,16 @@ const BOARD_ASPECT = ROWS / (COLS + METER)
 const HOLD_ASPECT = 0.75
 const NEXT_ASPECT = 0.75 * PREVIEW
 
-export function Playfield({ game, running, keys, hooks, overlay, flash, info }: PlayfieldProps) {
+export function Playfield({ game, running, keys, handling, sound, hooks, overlay, flash, info }: PlayfieldProps) {
   const boardRef = useRef<HTMLCanvasElement>(null)
   const holdRef = useRef<HTMLCanvasElement>(null)
   const nextRef = useRef<HTMLCanvasElement>(null)
   const held = useRef<Held>(null)
 
   // 迴圈與事件只註冊一次，透過 ref 拿最新的 props
-  const latest = useRef({ running, keys })
+  const latest = useRef({ running, keys, handling, sound })
   useEffect(() => {
-    latest.current = { running, keys }
+    latest.current = { running, keys, handling, sound }
   })
 
   function act(fn: (g: Tetris) => void) {
@@ -81,7 +83,7 @@ export function Playfield({ game, running, keys, hooks, overlay, flash, info }: 
 
   function press(dir: -1 | 1) {
     act((g) => g.move(dir))
-    held.current = { dir, since: performance.now(), acc: 0 }
+    held.current = { dir, since: performance.now(), moves: 0 }
   }
 
   function release(dir: -1 | 1) {
@@ -132,19 +134,30 @@ export function Playfield({ game, running, keys, hooks, overlay, flash, info }: 
       const g = game.current
       const { running } = latest.current
       if (g && running && !g.over) {
+        // 從按下的那一刻算時間，不會因為一幀比較長就提早多走一格
         const h = held.current
-        if (h && now - h.since >= DAS_MS) {
-          h.acc += dt
-          while (h.acc >= ARR_MS) {
-            h.acc -= ARR_MS
-            if (!g.move(h.dir)) {
-              h.acc = 0
-              break
+        const { das, arr } = latest.current.handling
+        const t = h ? now - h.since - das : -1
+        if (h && t >= 0) {
+          if (arr === 0) {
+            let moved = true
+            while (moved) moved = g.move(h.dir)
+          } else {
+            const due = Math.floor(t / arr) + 1
+            while (h.moves < due) {
+              h.moves++
+              // 撞牆就跳過這次，之後能動了再照節奏繼續
+              if (!g.move(h.dir)) h.moves = due
             }
           }
         }
         g.update(dt)
+      } else {
+        // 暫停或還沒開始時按住的鍵不算，否則繼續時會照經過的時間一口氣補走好幾格
+        held.current = null
       }
+      // 同一幀裡一樣的音效只響一次（ARR 0 一口氣滑好幾格時不會疊成一團）
+      if (g) for (const s of new Set(g.sounds.splice(0))) latest.current.sound(s)
       hooks.current.onFrame?.(dt)
       if (g && size.board > 0) {
         drawBoard(bctx, size.board, g, palette)
