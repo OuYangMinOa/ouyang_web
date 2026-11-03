@@ -1,6 +1,6 @@
 //! 系統管理的「遊戲狀態」（`/admin/games`）：現在開著的房間、誰在裡面，以及單人排行榜模式誰正在玩。
 //!
-//! 三種房間各自提供快照（`games.rs`、`arena.rs`、`party.rs` 的 `snapshot`），這裡合併起來，再把帳號 id 換成帳號名稱。
+//! 三種房間和遊戲室各自提供快照（`games.rs`、`arena.rs`、`party.rs`、`lobby.rs` 的 `snapshot`），這裡合併起來，再把帳號 id 換成帳號名稱。
 //! 只看得到這個容器記憶體裡的東西：換版的那幾秒新舊容器各有一部分。
 //! 對電腦、同一台輪流下和單人模式（排行榜以外）都只在瀏覽器裡跑，伺服器不知道，所以不在這裡。
 
@@ -27,13 +27,13 @@ pub struct Report {
 
 #[derive(Serialize)]
 pub struct RoomInfo {
-    /// `duel`（棋類的轉送房間）、`arena`（大逃殺）、`party`（派對）
+    /// `duel`（棋類的轉送房間）、`arena`（大逃殺）、`party`（派對）、`lobby`（遊戲室）
     pub kind: &'static str,
-    /// 遊戲 id，例如 `gomoku`、`tetris`、`undercover`
+    /// 遊戲 id，例如 `gomoku`、`tetris`、`undercover`；遊戲室是現在在玩的那款（還沒開過是空字串）
     pub game: &'static str,
     pub code: String,
     /// duel：`waiting`／`playing`／`idle`（沒人連著）；arena：`lobby`／`countdown`／`playing`／`results`；
-    /// party：`lobby`／`playing`／`results`
+    /// party：`lobby`／`playing`／`results`；lobby：`lobby`（還沒開過遊戲）／`playing`
     pub phase: &'static str,
     /// 開過幾局（duel 沒有局的概念，是 0）
     pub round: u32,
@@ -128,6 +128,7 @@ pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Re
     rooms.extend(state.bigtwo.snapshot(now));
     rooms.extend(state.minesrace.snapshot(now));
     rooms.extend(state.draw.snapshot(now));
+    rooms.extend(state.lobbies.snapshot(now));
     // 有人連著的在前面，再來是新開的
     rooms.sort_by_key(|r| (!r.players.iter().any(|p| p.online), r.age_secs));
 

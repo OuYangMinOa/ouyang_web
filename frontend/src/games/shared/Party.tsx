@@ -278,6 +278,9 @@ export function PartyLobby({
   )
 }
 
+/** 聊天室用到的部分：派對房間和遊戲室（`lobby/useLobby.tsx`）都有 */
+type ChatSource = Pick<AnyParty, 'chat' | 'you' | 'say' | 'connected'>
+
 /** 聊天室；`placeholder` 可以提示這個階段能聊什麼，`disabled` 時只能看 */
 export function ChatBox({
   party,
@@ -285,7 +288,7 @@ export function ChatBox({
   placeholder = '說點什麼…',
   disabled,
 }: {
-  party: AnyParty
+  party: ChatSource
   title?: string
   placeholder?: string
   disabled?: boolean
@@ -357,7 +360,7 @@ export function ChatBox({
 }
 
 /** 自己的動作被拒絕時跳出來的提示，幾秒後自己消失（每則新的提示 id 不同，會重新顯示） */
-export function PartyNotice({ party }: { party: AnyParty }) {
+export function PartyNotice({ party }: { party: Pick<AnyParty, 'notice'> }) {
   if (!party.notice) return null
   return <NoticeText key={party.notice.id} message={party.notice.message} />
 }

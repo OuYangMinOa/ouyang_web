@@ -157,6 +157,17 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'links',
+    name: '短網址',
+    icon: '🔗',
+    glyph: '短',
+    blurb: '把長網址縮成 /s/ 開頭的短網址，附 QR Code 可以直接分享。可以設定要登入本站才能開啟，也看得到每個 IP 點了幾次。',
+    tag: 'QR Code · 統計',
+    live: true,
+    loginOnly: true,
+    nav: [{ items: [{ to: '/links', label: '我的短網址', icon: '🔗' }] }],
+  },
+  {
     id: 'admin',
     name: '系統管理',
     icon: '🛠️',

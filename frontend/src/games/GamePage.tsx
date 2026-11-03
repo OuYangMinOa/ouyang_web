@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { Link, useParams } from 'react-router'
+import { useLobby } from './lobby/useLobby'
 import { findGame } from './registry'
 import { PageMusic } from './shared/PageMusic'
 import './games.css'
@@ -7,6 +8,7 @@ import './games.css'
 export default function GamePage() {
   const { id } = useParams()
   const game = findGame(id)
+  const { follow } = useLobby()
 
   if (!game) {
     return (
@@ -30,8 +32,8 @@ export default function GamePage() {
         {game.music && <PageMusic key={game.id} game={game.id} load={game.music} />}
       </div>
       <Suspense fallback={<p className="muted">載入中…</p>}>
-        {/* key：從一個遊戲切到另一個時整個重來，不沿用狀態 */}
-        <Game key={game.id} />
+        {/* key：從一個遊戲切到另一個、或跟著遊戲室換了房間時整個重來，不沿用狀態 */}
+        <Game key={`${game.id}:${follow}`} />
       </Suspense>
     </>
   )

@@ -1,0 +1,162 @@
+/* ---- 短網址 ---- */
+
+.links {
+  max-width: 860px;
+  min-width: 0;
+}
+.links .card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.links-heading {
+  margin: 32px 0 12px;
+  font-size: 20px;
+}
+.links-title {
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.links-dest {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.links-dest a {
+  color: inherit;
+}
+.links .links-note {
+  margin: 0;
+  font-size: 13px;
+}
+.links .visit-stats strong {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.links-code {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+td .badge {
+  margin-left: 8px;
+}
+.links-target {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  max-width: 360px;
+  overflow-wrap: anywhere;
+}
+.links-target .muted {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+}
+.links-referer {
+  display: inline-block;
+  max-width: 240px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.links-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- QR Code ---- */
+
+.links-qr {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+/* 畫布是 1024px，畫面上縮小顯示；白底的 QR Code 在深色主題下加個邊框比較不突兀 */
+.links-qr-canvas {
+  width: 180px;
+  height: 180px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  image-rendering: pixelated;
+}
+.links-qr-side {
+  min-width: 0;
+  flex: 1;
+}
+.links-short {
+  font: 600 20px var(--mono);
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+/* ---- 每日點擊 ---- */
+
+.links-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+}
+.links-bar {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+.links-bar span {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+.links-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.links-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.links-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+@media (max-width: 600px) {
+  .links-qr {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .links-qr-canvas {
+    align-self: center;
+    width: min(240px, 100%);
+    height: auto;
+    aspect-ratio: 1;
+  }
+  .links-short {
+    text-align: center;
+  }
+  .links-buttons > button {
+    flex: 1 1 calc(50% - 4px);
+  }
+  .links-tabs {
+    flex: 1 1 100%;
+  }
+  .links-tabs button {
+    flex: 1;
+  }
+  .links-target,
+  .links-referer {
+    max-width: none;
+  }
+}

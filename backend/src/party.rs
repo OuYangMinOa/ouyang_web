@@ -326,6 +326,8 @@ struct Room<G: PartyGame> {
     lines: VecDeque<StoredLine>,
     /// 被踢掉的人
     banned: HashSet<String>,
+    /// 遊戲室開的房間：照遊戲室的順序決定房主（見 `host`），其他房間是空的
+    hosts: Vec<String>,
     dirty_room: bool,
     dirty_views: bool,
     empty_since: Option<Instant>,
@@ -349,6 +351,7 @@ impl<G: PartyGame> Room<G> {
             next_line: 1,
             lines: VecDeque::new(),
             banned: HashSet::new(),
+            hosts: Vec::new(),
             dirty_room: true,
             dirty_views: false,
             empty_since: None,
@@ -360,9 +363,10 @@ impl<G: PartyGame> Room<G> {
         self.members.iter().position(|m| m.pid == pid)
     }
 
-    /// 房主：最早進來、還連著的人
+    /// 房主：還連著的人裡，排在 `hosts`（遊戲室的順序）最前面的；都不在裡面就是最早進來的
     fn host(&self) -> Option<u32> {
-        self.members.iter().find(|m| m.conn.is_some()).map(|m| m.pid)
+        let rank = |m: &Member| m.key.as_ref().and_then(|k| self.hosts.iter().position(|h| h == k));
+        self.members.iter().filter(|m| m.conn.is_some()).min_by_key(|m| rank(m).unwrap_or(usize::MAX)).map(|m| m.pid)
     }
 
     fn online_humans(&self) -> usize {
@@ -933,7 +937,8 @@ enum ClientMessage {
 }
 
 impl<G: PartyGame> Parties<G> {
-    fn open(self: &Arc<Self>) -> Result<String, AppError> {
+    /// 開一間新房間；`hosts` 是遊戲室替大家開房時的房主順序（`user:<id>`／`guest:<id>`），自己開的是空的
+    pub(crate) fn open(self: &Arc<Self>, hosts: Vec<String>) -> Result<String, AppError> {
         let mut live = self.live.lock().unwrap();
         if live.len() >= MAX_ROOMS {
             return Err(AppError::ServiceUnavailable("目前房間太多，請稍後再試"));
@@ -944,7 +949,9 @@ impl<G: PartyGame> Parties<G> {
                 break code;
             }
         };
-        let room = Arc::new(Mutex::new(Room::<G>::new()));
+        let mut room = Room::<G>::new();
+        room.hosts = hosts;
+        let room = Arc::new(Mutex::new(room));
         live.insert(code.clone(), room.clone());
         tokio::spawn(run(self.clone(), code.clone(), room));
         Ok(code)
@@ -985,7 +992,7 @@ async fn run<G: PartyGame>(parties: Arc<Parties<G>>, code: String, room: Arc<Mut
 }
 
 pub async fn create<G: PartyGame>(State(state): State<AppState>) -> Result<(StatusCode, Json<Value>), AppError> {
-    let code = G::rooms(&state).open()?;
+    let code = G::rooms(&state).open(Vec::new())?;
     Ok((StatusCode::CREATED, Json(json!({ "code": code }))))
 }
 
@@ -1272,6 +1279,22 @@ mod tests {
         let state = b.last("room").unwrap();
         assert_eq!(state["host"], b.pid);
         assert_eq!(state["players"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn lobby_order_decides_the_host() {
+        // 遊戲室開的房間：不管誰先連上，房主都照遊戲室的順序
+        let mut room = Room::<Secret>::new();
+        room.hosts = vec!["guest:a".into(), "guest:b".into()];
+        let b = join(&mut room, "guest:b", "小華", 1);
+        let c = join(&mut room, "guest:c", "阿強", 2);
+        assert_eq!(room.host(), Some(b.pid));
+        let a = join(&mut room, "guest:a", "阿明", 3);
+        assert_eq!(room.host(), Some(a.pid));
+        room.leave(a.pid, a.id, Instant::now());
+        assert_eq!(room.host(), Some(b.pid));
+        room.leave(b.pid, b.id, Instant::now());
+        assert_eq!(room.host(), Some(c.pid));
     }
 
     #[test]

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router'
 import { api, errorMessage } from '../../api'
 import { useAuth } from '../../auth'
 import { load, save } from './storage'
+import { loadPartyName } from './useParty'
 import { normalizeCode, playerId } from './useRoom'
 
 /**
@@ -152,7 +153,8 @@ export function useArena(game: string, handlers: ArenaHandlers) {
       const url = new URL(`/api/games/${game}/rooms/${encodeURIComponent(code!)}/ws`, window.location.href)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       url.searchParams.set('player', playerId())
-      url.searchParams.set('name', loadName(game))
+      // 沒在這款遊戲取過名字就用派對房間、遊戲室的名字
+      url.searchParams.set('name', loadName(game) || loadPartyName())
       ws = new WebSocket(url)
       socket.current = ws
 
