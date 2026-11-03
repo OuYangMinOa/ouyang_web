@@ -16,6 +16,8 @@ export type AppInfo = {
   live?: boolean
   /** 沒有這個權限就不出現在切換面板與首頁 */
   permission?: string
+  /** 只有登入的人看得到（不需要特別的權限） */
+  loginOnly?: boolean
   /** 側邊欄（手機是頂部選單）的內容 */
   nav: NavGroup[]
 }
@@ -136,6 +138,24 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'threads',
+    name: 'Threads 下載',
+    icon: '🧵',
+    glyph: '串',
+    blurb: '在 Threads 按分享就能把影片存進 iPhone 相簿。這裡拿你的下載金鑰、安裝捷徑，還有下載過的貼文紀錄。',
+    tag: 'iPhone 捷徑',
+    live: true,
+    loginOnly: true,
+    nav: [
+      {
+        items: [
+          { to: '/threads', label: '安裝捷徑', icon: '📲' },
+          { to: '/threads/downloads', label: '下載紀錄', icon: '🕘' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     name: '系統管理',
     icon: '🛠️',
@@ -160,9 +180,15 @@ export const APPS: AppInfo[] = [
   },
 ]
 
-/** 這個使用者看得到的 APP；前端只是不顯示，真正的檢查在後端 */
-export function visibleApps(can: (permission: string) => boolean): AppInfo[] {
-  return APPS.filter((app) => !app.permission || can(app.permission))
+type Viewer = { user: unknown; can: (permission: string) => boolean }
+
+/** 這個使用者看不看得到這個 APP；前端只是不顯示，真正的檢查在後端 */
+export function canSeeApp(app: AppInfo, { user, can }: Viewer): boolean {
+  return (!app.loginOnly || !!user) && (!app.permission || can(app.permission))
+}
+
+export function visibleApps(viewer: Viewer): AppInfo[] {
+  return APPS.filter((app) => canSeeApp(app, viewer))
 }
 
 export function appPath(app: AppInfo) {

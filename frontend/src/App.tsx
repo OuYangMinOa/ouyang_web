@@ -3,7 +3,7 @@ import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, use
 import { api, PERMISSIONS, type User } from './api'
 import AppLauncher from './apps/AppLauncher'
 import AppLayout, { AppMenu } from './apps/AppLayout'
-import { findAppByPath } from './apps/registry'
+import { canSeeApp, findAppByPath } from './apps/registry'
 import { AuthProvider, RequireAuth, useAuth } from './auth'
 import CalendarPage from './calendar/CalendarPage'
 import HolidaysPage from './calendar/HolidaysPage'
@@ -48,6 +48,8 @@ const ForecastPage = lazy(() => import('./weather/ForecastPage'))
 const QuakePage = lazy(() => import('./weather/QuakePage'))
 // 隱藏頁面：不在任何選單裡，只有知道網址的人進得來；條碼函式庫也只在這頁下載
 const DataMatrixPage = lazy(() => import('./datamatrix/DataMatrixPage'))
+const ThreadsSetup = lazy(() => import('./threads/SetupPage'))
+const ThreadsDownloads = lazy(() => import('./threads/DownloadsPage'))
 
 function Lazy({ page: Page }: { page: ComponentType }) {
   return (
@@ -131,11 +133,12 @@ function UserMenu({ user }: { user: User }) {
 }
 
 function Header() {
-  const { user, can } = useAuth()
+  const auth = useAuth()
+  const { user } = auth
   const { pathname } = useLocation()
   const found = findAppByPath(pathname)
   // 沒有權限的 APP 不顯示它的選單，頁面本身會由 RequireAuth 擋下
-  const app = found && (!found.permission || can(found.permission)) ? found : undefined
+  const app = found && canSeeApp(found, auth) ? found : undefined
 
   return (
     <header className={`site-header ${app ? 'in-app' : ''}`}>
@@ -240,6 +243,17 @@ function App() {
                     <Route path="standings" element={<Standings />} />
                     <Route path="match/:id" element={<MatchPage />} />
                   </Route>
+                </Route>
+                <Route
+                  path="/threads"
+                  element={
+                    <RequireAuth>
+                      <AppLayout />
+                    </RequireAuth>
+                  }
+                >
+                  <Route index element={<Lazy page={ThreadsSetup} />} />
+                  <Route path="downloads" element={<Lazy page={ThreadsDownloads} />} />
                 </Route>
                 <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
                 <Route path="/login" element={<Login />} />
