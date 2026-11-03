@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { api, errorMessage } from '../../api'
 import { useAuth } from '../../auth'
 import { loadPartyName, savePartyName, type ChatLine } from '../shared/useParty'
@@ -99,6 +99,17 @@ export function useLobby(): Lobby {
   const lobby = useContext(LobbyContext)
   if (!lobby) throw new Error('useLobby must be used inside GamesLayout')
   return lobby
+}
+
+/**
+ * 這間房間是不是目前遊戲室開的那一間（而且就在那款遊戲的頁面上）。是的話房間自己的代碼、邀請和離開都不顯示，
+ * 交給標題列的遊戲室：大家只要記得一個代碼，邀請的是遊戲室，下一款遊戲也跟得到。
+ */
+export function useInLobbyRoom(room: string | null | undefined): boolean {
+  const lobby = useContext(LobbyContext)
+  const { pathname } = useLocation()
+  const playing = lobby?.code ? lobby.playing : null
+  return !!room && playing !== null && playing.room === room && pathname === `/games/${playing.game}`
 }
 
 /** 只給 `GamesLayout` 用一次，其他地方用 `useLobby` */

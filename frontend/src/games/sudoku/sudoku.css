@@ -1,11 +1,11 @@
 /* ---- 數獨 ---- */
 
-/* 盤面、數字鍵盤、工具列同寬；桌機上限 480px，也不超過視窗高度（扣掉標題、鍵盤與工具列） */
+/* 盤面、數字鍵盤、工具列同寬；桌機上限 560px，也不超過標題列底下剩的高度（扣掉鍵盤與工具列） */
 .sudoku-stack {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(100%, 480px, calc(100dvh - 300px));
+  width: min(100%, 560px, calc(var(--game-vh) - 170px));
   min-width: min(100%, 300px);
   margin: 0 auto;
 }

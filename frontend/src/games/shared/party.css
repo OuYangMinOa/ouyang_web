@@ -54,6 +54,10 @@
 .party-header .error {
   flex-basis: 100%;
 }
+/* 遊戲室開的房間：只剩遊戲自己的按鈕，靠右 */
+.party-header.in-lobby {
+  justify-content: flex-end;
+}
 @media (max-width: 480px) {
   .party-header .game-toolbar {
     flex: 1 1 100%;
