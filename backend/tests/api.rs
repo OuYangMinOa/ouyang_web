@@ -120,9 +120,11 @@ async fn dot_paths_are_404_instead_of_index() {
         async move { app.oneshot(Request::builder().uri(path).body(Body::empty()).unwrap()).await.unwrap().status() }
     };
 
-    for path in ["/.env", "/.git/config", "/.vscode/sftp.json", "/foo/.env"] {
+    for path in ["/.git/config", "/.vscode/sftp.json", "/foo/.htaccess", "/.envrc"] {
         assert_eq!(status(path).await, StatusCode::NOT_FOUND, "{path}");
     }
+    // `.env` 會拿到假的設定檔（honeypot.rs），不是 index.html
+    assert_eq!(status("/.env").await, StatusCode::OK);
     // 前端路由照樣拿到 index.html
     assert_eq!(status("/games/tetris").await, StatusCode::OK);
     std::fs::remove_dir_all(&dir).unwrap();

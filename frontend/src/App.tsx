@@ -25,6 +25,7 @@ import Account from './pages/Account'
 import AdminAccess from './pages/admin/Access'
 import AdminFeedback from './pages/admin/Feedback'
 import AdminGames from './pages/admin/Games'
+import AdminHoneypot from './pages/admin/Honeypot'
 import AdminRegistrations from './pages/admin/Registrations'
 import AdminRoles from './pages/admin/Roles'
 import AdminSystem from './pages/admin/System'
@@ -283,6 +284,7 @@ function App() {
                   <Route path="registrations" element={<AdminRegistrations />} />
                   <Route path="feedback" element={<AdminFeedback />} />
                   <Route path="access" element={<AdminAccess />} />
+                  <Route path="honeypot" element={<AdminHoneypot />} />
                   <Route path="visits" element={<AdminVisits />} />
                   <Route path="system" element={<AdminSystem />} />
                   <Route path="games" element={<AdminGames />} />
