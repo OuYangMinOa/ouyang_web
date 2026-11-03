@@ -77,7 +77,7 @@ async fn handling_is_saved_per_account() {
     assert_eq!(app.get(HANDLING, None).await.status, StatusCode::UNAUTHORIZED);
     assert_eq!(app.get(HANDLING, Some(&alice)).await.body, json!({ "handling": null }));
 
-    let handling = json!({ "das": 200, "arr": 0 });
+    let handling = json!({ "das": 200, "arr": 0, "soft": 0 });
     let put = app.call("PUT", HANDLING, Some(&alice), Some(json!({ "handling": handling }))).await;
     assert_eq!(put.status, StatusCode::NO_CONTENT, "{}", put.body);
     assert_eq!(app.get(HANDLING, Some(&alice)).await.body["handling"], handling);
@@ -92,6 +92,16 @@ async fn handling_is_saved_per_account() {
 }
 
 #[tokio::test]
+async fn handling_without_soft_uses_default() {
+    // 加速下落是後來才加的，舊版前端送來的沒有這欄
+    let app = app().await;
+    let alice = login(&app, "alice").await;
+    let put = app.call("PUT", HANDLING, Some(&alice), Some(json!({ "handling": { "das": 200, "arr": 0 } }))).await;
+    assert_eq!(put.status, StatusCode::NO_CONTENT, "{}", put.body);
+    assert_eq!(app.get(HANDLING, Some(&alice)).await.body["handling"], json!({ "das": 200, "arr": 0, "soft": 30 }));
+}
+
+#[tokio::test]
 async fn rejects_strange_handling() {
     let app = app().await;
     let alice = login(&app, "alice").await;
@@ -100,6 +110,8 @@ async fn rejects_strange_handling() {
         json!({ "das": 170, "arr": 1000 }),
         json!({ "das": -1, "arr": 40 }),
         json!({ "das": 170 }),
+        json!({ "das": 170, "arr": 40, "soft": 101 }),
+        json!({ "das": 170, "arr": 40, "soft": -1 }),
         json!({ "das": 170, "arr": 40, "extra": 1 }),
         json!("fast"),
     ] {
