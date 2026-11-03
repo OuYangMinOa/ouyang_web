@@ -80,3 +80,12 @@ export function MusicButton({ music }: { music: { enabled: boolean; toggle: () =
     </button>
   )
 }
+
+/** 音效開關（和背景音樂分開） */
+export function SfxButton({ sfx }: { sfx: { enabled: boolean; toggle: () => void } }) {
+  return (
+    <button type="button" className="secondary" onClick={sfx.toggle} aria-pressed={sfx.enabled}>
+      {sfx.enabled ? '🔊 音效：開' : '🔈 音效：關'}
+    </button>
+  )
+}

@@ -1,62 +1,84 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { Board } from './board'
+import { Paper } from './paper'
 import {
   COLOR_NAMES,
   ERASER,
   H,
   MAX_BATCH,
+  MAX_FILLS,
   MAX_POINTS,
   MAX_STROKES,
   PALETTE,
-  PAPER,
   W,
   WIDTH_NAMES,
   WIDTHS,
   type DrawAction,
-  type Stroke,
 } from './types'
 
 /** 每隔多久把累積的點送出去（太頻繁會碰到伺服器的限速，太久別人看起來會一頓一頓的） */
 const FLUSH_MS = 50
-/** 兩個點至少隔這麼遠（畫布單位）才記，手抖和高頻率的觸控不會塞一堆幾乎重疊的點 */
+/** 兩個點至少隔這麼遠（畫布單位）才記，手抖和高頻率的觸控不會塞一堆幾乎重疊的點；粗的筆隔遠一點也看不出來 */
 const MIN_STEP = 3
+/** 送出前拿掉偏離不到這麼多（畫布單位）的點：直線和平順的曲線只要留幾個點 */
+const SIMPLIFY = 1
+
+const FULL = '這張畫的筆畫太多了，清除或復原一些再畫。'
+const TOO_MANY_FILLS = '這張畫倒太多次顏料了，清除或復原一些再倒。'
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n))
 }
 
-/** 整張重畫（點最多兩萬個，一次不到幾毫秒），用 requestAnimationFrame 合併 */
-function paint(el: HTMLCanvasElement, strokes: Stroke[]) {
-  const ctx = el.getContext('2d')
-  if (!ctx) return
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.fillStyle = PAPER
-  ctx.fillRect(0, 0, el.width, el.height)
-  ctx.setTransform(el.width / W, 0, 0, el.height / H, 0, 0)
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  for (const s of strokes) {
-    const color = PALETTE[s.c] ?? PALETTE[1]
-    const width = WIDTHS[s.w] ?? WIDTHS[1]
-    const p = s.p
-    if (p.length < 2) continue
-    if (p.length === 2) {
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.arc(p[0], p[1], width / 2, 0, Math.PI * 2)
-      ctx.fill()
-      continue
-    }
-    ctx.strokeStyle = color
-    ctx.lineWidth = width
-    ctx.beginPath()
-    ctx.moveTo(p[0], p[1])
-    for (let i = 2; i + 1 < p.length; i += 2) ctx.lineTo(p[i], p[i + 1])
-    ctx.stroke()
-  }
+/** 點到線段 a–b 的距離 */
+function distance(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const dx = bx - ax
+  const dy = by - ay
+  const len = dx * dx + dy * dy
+  const t = len === 0 ? 0 : clamp(((px - ax) * dx + (py - ay) * dy) / len, 0, 1)
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy)
 }
 
-type Active = { pointer: number; last: [number, number]; queue: number[] }
+/**
+ * 拿掉幾乎在一直線上的點（Ramer–Douglas–Peucker）：`from` 是已經送出去的上一個點，
+ * 回傳 `p` 裡要留下的點，最後一個點一定留著。
+ */
+function simplify(from: [number, number], p: number[]): number[] {
+  const xs = [from[0]]
+  const ys = [from[1]]
+  for (let i = 0; i + 1 < p.length; i += 2) {
+    xs.push(p[i])
+    ys.push(p[i + 1])
+  }
+  const n = xs.length
+  const keep = new Uint8Array(n)
+  keep[n - 1] = 1
+  const stack: [number, number][] = [[0, n - 1]]
+  while (stack.length > 0) {
+    const [a, b] = stack.pop()!
+    let far = SIMPLIFY
+    let worst = -1
+    for (let i = a + 1; i < b; i++) {
+      const d = distance(xs[i], ys[i], xs[a], ys[a], xs[b], ys[b])
+      if (d > far) {
+        far = d
+        worst = i
+      }
+    }
+    if (worst >= 0) {
+      keep[worst] = 1
+      stack.push([a, worst], [worst, b])
+    }
+  }
+  const out: number[] = []
+  for (let i = 1; i < n; i++) if (keep[i]) out.push(xs[i], ys[i])
+  return out
+}
+
+type Tool = 'pen' | 'eraser' | 'fill'
+
+/** `sent` 是已經送出去的最後一個點，`queue` 是還沒送的點 */
+type Active = { pointer: number; canvas: number; step: number; last: [number, number]; sent: [number, number]; queue: number[] }
 
 /**
  * 畫布：所有人都看得到，`canDraw` 時（輪到自己、作畫中）可以畫，下面多一排工具。
@@ -68,6 +90,7 @@ export function Sketch({
   canDraw,
   send,
   overlay,
+  toast,
 }: {
   board: Board
   /** 目前這一棒的畫布 id：本地的畫布還沒換成這一張（剛換人、view 還沒套用）時先不能畫 */
@@ -75,14 +98,20 @@ export function Sketch({
   canDraw: boolean
   send: (action: DrawAction) => void
   overlay?: ReactNode
+  /** 浮在畫布上方、不擋住畫面的短暫提示（例如「差一點！」） */
+  toast?: ReactNode
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const active = useRef<Active | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
+  const [paper] = useState(() => new Paper())
   const [color, setColor] = useState(1)
   const [width, setWidth] = useState(1)
-  const [eraser, setEraser] = useState(false)
-  const [full, setFull] = useState(false)
+  const [tool, setTool] = useState<Tool>('pen')
+  // 畫不下時的提示，只在同一張畫布顯示（換下一棒就不見）
+  const [full, setFull] = useState<{ canvas: number; message: string } | null>(null)
+  const fullMessage = full?.canvas === canvasId ? full.message : null
+  const eraser = tool === 'eraser'
   // 讓「復原」「清除」按鈕跟著畫布狀態更新
   const [, setVersion] = useState(0)
 
@@ -92,7 +121,7 @@ export function Sketch({
     let frame = 0
     const draw = () => {
       frame = 0
-      paint(el, board.strokes)
+      paper.paint(el, board.strokes)
     }
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(draw)
@@ -119,14 +148,23 @@ export function Sketch({
       unsubscribe()
       cancelAnimationFrame(frame)
     }
-  }, [board])
+  }, [board, paper])
 
   function flush() {
     const s = active.current
-    if (!s) return
-    while (s.queue.length > 0) {
-      const p = s.queue.splice(0, MAX_BATCH * 2)
-      send({ type: 'more', p })
+    if (!s || s.queue.length === 0) return
+    // 剛換下一棒、畫布已經換掉了：這些點沒地方接
+    if (board.id !== s.canvas) {
+      s.queue = []
+      return
+    }
+    const count = s.queue.length / 2
+    const points = simplify(s.sent, s.queue)
+    s.queue = []
+    s.sent = [points[points.length - 2], points[points.length - 1]]
+    board.replaceTail(count, points)
+    for (let i = 0; i < points.length; i += MAX_BATCH * 2) {
+      send({ type: 'more', p: points.slice(i, i + MAX_BATCH * 2) })
       board.sent()
     }
   }
@@ -156,16 +194,32 @@ export function Sketch({
     if (!canDraw || board.id !== canvasId || active.current) return
     if (e.pointerType === 'mouse' && e.button !== 0) return
     if (board.strokes.length >= MAX_STROKES || board.points >= MAX_POINTS) {
-      setFull(true)
+      setFull({ canvas: canvasId, message: FULL })
       return
     }
     e.preventDefault()
-    e.currentTarget.setPointerCapture(e.pointerId)
     const [x, y] = point(e)
+    if (tool === 'fill') {
+      if (board.fills >= MAX_FILLS) {
+        setFull({ canvas: canvasId, message: TOO_MANY_FILLS })
+        return
+      }
+      board.local({ kind: 'fill', c: color, p: [x, y] })
+      send({ type: 'fill', c: color, p: [x, y] })
+      return
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
     const c = eraser ? ERASER : color
     board.local({ kind: 'begin', c, w: width, p: [x, y] })
     send({ type: 'begin', c, w: width, p: [x, y] })
-    active.current = { pointer: e.pointerId, last: [x, y], queue: [] }
+    active.current = {
+      pointer: e.pointerId,
+      canvas: board.id,
+      step: Math.max(MIN_STEP, WIDTHS[width] / 4),
+      last: [x, y],
+      sent: [x, y],
+      queue: [],
+    }
     clearInterval(timer.current)
     timer.current = setInterval(flush, FLUSH_MS)
   }
@@ -180,9 +234,9 @@ export function Sketch({
       const [x, y] = point(ev)
       const dx = x - s.last[0]
       const dy = y - s.last[1]
-      if (dx * dx + dy * dy < MIN_STEP * MIN_STEP) continue
+      if (dx * dx + dy * dy < s.step * s.step) continue
       if (board.points + added.length / 2 >= MAX_POINTS) {
-        setFull(true)
+        setFull({ canvas: canvasId, message: FULL })
         break
       }
       added.push(x, y)
@@ -202,7 +256,7 @@ export function Sketch({
     if (active.current || board.strokes.length === 0) return
     board.local({ kind: 'undo' })
     send({ type: 'undo' })
-    setFull(false)
+    setFull(null)
   }
 
   function clear() {
@@ -210,7 +264,7 @@ export function Sketch({
     if (board.strokes.length > 5 && !window.confirm('清除整張畫？')) return
     board.local({ kind: 'clear' })
     send({ type: 'clear' })
-    setFull(false)
+    setFull(null)
   }
 
   // 鍵盤：Ctrl／Cmd + Z 復原
@@ -232,7 +286,7 @@ export function Sketch({
 
   return (
     <div className="dg-sketch">
-      <div className={`dg-paper${canDraw ? ' drawing' : ''}`}>
+      <div className={`dg-paper${canDraw ? ` drawing${tool === 'fill' ? ' filling' : ''}` : ''}`}>
         <canvas
           ref={canvas}
           onPointerDown={down}
@@ -243,6 +297,7 @@ export function Sketch({
           aria-label={canDraw ? '畫布：在這裡畫' : '畫布'}
         />
         {overlay && <div className="dg-overlay">{overlay}</div>}
+        {toast}
       </div>
       {canDraw && (
         <div className="dg-tools" aria-label="畫筆工具">
@@ -260,7 +315,7 @@ export function Sketch({
                   style={{ background: hex }}
                   onClick={() => {
                     setColor(i)
-                    setEraser(false)
+                    if (eraser) setTool('pen')
                   }}
                 />
               ),
@@ -277,7 +332,10 @@ export function Sketch({
                   aria-label={WIDTH_NAMES[i]}
                   title={WIDTH_NAMES[i]}
                   className={`dg-width${width === i ? ' active' : ' secondary'}`}
-                  onClick={() => setWidth(i)}
+                  onClick={() => {
+                    setWidth(i)
+                    if (tool === 'fill') setTool('pen')
+                  }}
                 >
                   <span style={{ width: 4 + w * 0.6, height: 4 + w * 0.6 }} />
                 </button>
@@ -285,9 +343,18 @@ export function Sketch({
             </div>
             <button
               type="button"
+              className={`dg-tool${tool === 'fill' ? '' : ' secondary'}`}
+              aria-pressed={tool === 'fill'}
+              title="點一下，把那一塊塗滿目前的顏色"
+              onClick={() => setTool((t) => (t === 'fill' ? 'pen' : 'fill'))}
+            >
+              🪣 倒顏料
+            </button>
+            <button
+              type="button"
               className={`dg-tool${eraser ? '' : ' secondary'}`}
               aria-pressed={eraser}
-              onClick={() => setEraser((on) => !on)}
+              onClick={() => setTool((t) => (t === 'eraser' ? 'pen' : 'eraser'))}
             >
               橡皮擦
             </button>
@@ -298,7 +365,7 @@ export function Sketch({
               清除
             </button>
           </div>
-          {full && <p className="error">這張畫的筆畫太多了，清除或復原一些再畫。</p>}
+          {fullMessage && <p className="error">{fullMessage}</p>}
         </div>
       )}
     </div>

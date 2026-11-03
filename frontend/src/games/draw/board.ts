@@ -1,4 +1,4 @@
-import type { CanvasSnapshot, DrawOp, OpEvent, Stroke } from './types'
+import type { CanvasSnapshot, DrawEvent, DrawOp, OpEvent, Stroke } from './types'
 
 /** 最多留幾則還接不上的事件（照理只會有幾則：新的 view 還沒套用前就到的筆畫） */
 const MAX_PENDING = 500
@@ -45,7 +45,7 @@ export class Board {
     this.notify()
   }
 
-  receive(event: OpEvent) {
+  receive(event: DrawEvent) {
     if (!event || event.type !== 'op') return
     this.pending.push(event)
     if (this.pending.length > MAX_PENDING) this.pending.shift()
@@ -73,12 +73,16 @@ export class Board {
         break
       case 'more': {
         const last = this.strokes.at(-1)
-        if (last) {
+        if (last && !last.f) {
           last.p.push(...op.p)
           this.points += op.p.length / 2
         }
         break
       }
+      case 'fill':
+        this.strokes.push({ c: op.c, w: 0, p: [...op.p], f: true })
+        this.points += 1
+        break
       case 'undo': {
         const last = this.strokes.pop()
         if (last) this.points -= last.p.length / 2
@@ -107,8 +111,21 @@ export class Board {
     this.notify()
   }
 
+  /** 畫的人正在畫的那一筆最後 `count` 個點換成 `points`（送出前拿掉幾乎在一直線上的點） */
+  replaceTail(count: number, points: number[]) {
+    const last = this.strokes.at(-1)
+    if (!last) return
+    last.p.splice(last.p.length - count * 2, count * 2, ...points)
+    this.points += points.length / 2 - count
+    this.notify()
+  }
+
   /** 送出一批 `more`：點已經在 `extend` 時加上去了，只要加版本 */
   sent() {
     this.v++
+  }
+
+  get fills() {
+    return this.strokes.reduce((n, s) => n + (s.f ? 1 : 0), 0)
   }
 }
