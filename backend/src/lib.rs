@@ -196,6 +196,11 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/weather/quakes/ws", get(weather::quake::connect))
         .route("/invoice/winning", get(invoice::winning))
         .route("/threads/video", get(threads::video))
+        .route("/threads/setup", get(threads::setup))
+        .route("/threads/setup/key", post(threads::reset_key))
+        .route("/threads/setup/shortcut", put(threads::set_shortcut))
+        .route("/threads/downloads", get(threads::downloads))
+        .route("/threads/downloads/{id}", delete(threads::delete_download))
         .route("/nav/pins", get(nav_pins::list))
         .route("/nav/pins/{app}", put(nav_pins::set))
         .fallback(api_not_found);

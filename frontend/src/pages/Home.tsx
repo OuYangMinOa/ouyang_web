@@ -169,7 +169,7 @@ type Work = {
 }
 
 function Works() {
-  const { can } = useAuth()
+  const auth = useAuth()
   const works: Work[] = [
     {
       glyph: '俠',
@@ -186,7 +186,7 @@ function Works() {
       link: { to: '#guestbook', label: '去留言' },
     },
     // APP 卡片來自 apps/registry.ts，沒權限的不會出現
-    ...visibleApps(can).map((app) => ({
+    ...visibleApps(auth).map((app) => ({
       glyph: app.glyph,
       title: app.name,
       body: app.blurb,

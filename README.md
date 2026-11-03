@@ -89,7 +89,7 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 
 ### 新增 APP
 
-1. 在 `frontend/src/apps/registry.ts` 的 `APPS` 加一筆：`id`（網址前綴）、名稱、圖示、首頁卡片文字，以及 `nav`（側邊欄的頁面，可以分組）。需要權限才能用的 APP 設 `permission`，沒權限的人在切換面板和首頁都看不到。
+1. 在 `frontend/src/apps/registry.ts` 的 `APPS` 加一筆：`id`（網址前綴）、名稱、圖示、首頁卡片文字，以及 `nav`（側邊欄的頁面，可以分組）。需要權限才能用的 APP 設 `permission`，沒權限的人在切換面板和首頁都看不到；只要登入就能用的設 `loginOnly`。
 2. 在 `App.tsx` 把路由包在 `<AppLayout />` 底下（要權限就再包一層 `<RequireAuth>`）：
    ```tsx
    <Route path="/notes" element={<AppLayout />}>
@@ -373,16 +373,32 @@ DELETE /api/calendar/events/{id}
 
 ## Threads 影片下載
 
-沒有頁面，給 iPhone 捷徑用：在 Threads 按「分享 → 捷徑」，捷徑把網址丟給這個 API，再下載回傳的 mp4 存進相簿。程式在 `backend/src/threads.rs`。
+`/threads`（只有登入的人看得到）：安裝捷徑、複製自己的下載金鑰、看下載紀錄。在 Threads 按「分享 → Threads 影片下載器」，
+捷徑把網址和金鑰丟給 API，再下載回傳的 mp4 存進相簿。後端在 `backend/src/threads.rs`，前端在 `frontend/src/threads/`。
+
+- 捷徑只有一個，大家共用：管理員在 iPhone 做好、分享成 iCloud 連結，貼到 `/threads` 頁面下方（存在 `site_settings.threads_shortcut_url`）。
+  iOS 15 之後只能安裝簽署過的捷徑，簽署要用 Mac 的 `shortcuts sign`，伺服器沒辦法替每個人產生一份，所以改成每個人一把金鑰。
+- 金鑰每個帳號一把（`threads_keys`，存原文，頁面上隨時能複製），可以換新的，舊的馬上失效；停用的帳號金鑰也不能用。
+  捷徑第一次執行時要求貼上，存在 iCloud 雲碟「捷徑」資料夾的 `ouyang-threads-key.txt`，之後放在 `X-Threads-Key` 標頭送來（不放網址，才不會進到 IP 訪問紀錄）。
+  金鑰錯誤的訊息一定有「金鑰」兩個字，捷徑看到就刪掉存著的金鑰，下次重新詢問。
+- 查到影片就記一筆在那個帳號的下載紀錄（`threads_downloads`：貼文網址、作者、說明前 300 字、影片數），每個帳號留最近 500 筆，可以刪除。
 
 ```
-GET /api/threads/video?url=<貼文或分享連結>
+GET    /api/threads/video?url=<貼文或分享連結>     標頭 X-Threads-Key: <金鑰>
 → 200 {"code","author","caption","videos":[{"url","thumbnail","width","height"}]}   輪播有幾支影片就有幾筆
+→ 401 {"error"}                    沒帶金鑰或金鑰無效
 → 400 {"error"}                    不是 Threads 的網址、找不到貼文、沒有影片（或要登入才看得到）
 → 429 {"error","retry_after":10}   同一個 IP 10 秒只能查一次（不管成功與否），回應帶 Retry-After
 → 503 {"error"}                    Threads 連不上
+
+GET    /api/threads/setup               {"key","shortcut_url"}   第一次來就產生金鑰（要登入）
+POST   /api/threads/setup/key           換一把新的金鑰
+PUT    /api/threads/setup/shortcut      {"url"}  共用捷徑的 iCloud 連結，空字串是清掉（要 admin.users）
+GET    /api/threads/downloads           自己的下載紀錄，新的在前
+DELETE /api/threads/downloads/{id}
 ```
 
+- url 可以是一整段文字（分享時可能連貼文內容一起送來），取第一個 Threads 網址。
 - 只接受 `threads.com`／`threads.net` 的 https 網址，分享連結（`/share/xxx`）的轉址也只跟到 Threads 自己的網址，不會被拿來打其他主機。
 - Threads 沒有查別人貼文的公開 API，一般瀏覽器拿到的頁面也沒有貼文資料（登入後由前端另外查），
   只有搜尋引擎拿到的頁面把資料放在 `<script type="application/json">` 裡，所以用 Googlebot 的 User-Agent 抓，從裡面找這則貼文的 `video_versions`。
