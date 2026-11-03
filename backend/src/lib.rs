@@ -9,6 +9,7 @@ pub mod feedback;
 pub mod game_monitor;
 pub mod game_settings;
 pub mod games;
+pub mod honeypot;
 pub mod invoice;
 pub mod minesrace;
 pub mod monitor;
@@ -86,6 +87,8 @@ pub struct AppState {
     /// 統一發票中獎號碼的快取（見 invoice.rs）
     pub invoice: Arc<invoice::Invoice>,
     pub visit_limiter: Arc<visits::VisitLimiter>,
+    /// 假的 `.env` 每個 IP 最多記幾筆（見 honeypot.rs）
+    pub honeypot_limiter: Arc<visits::VisitLimiter>,
     /// 全站的 IP 訪問紀錄，背景整批寫進資料庫（見 access_log.rs）
     pub access_log: Arc<access_log::AccessLog>,
     /// 主機監控：背景取樣的 CPU、記憶體、磁碟和各服務的用量（見 monitor.rs）
@@ -116,6 +119,7 @@ impl AppState {
             weather: Arc::default(),
             invoice: Arc::default(),
             visit_limiter: Arc::default(),
+            honeypot_limiter: Arc::default(),
             access_log: Arc::default(),
             monitor: Arc::default(),
             threads: Arc::default(),
@@ -142,6 +146,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/registrations/{id}/reject", post(registration::reject))
         .route("/admin/access", get(access_log::report))
         .route("/admin/access/requests", get(access_log::requests))
+        .route("/admin/honeypot", get(honeypot::report))
+        .route("/admin/honeypot/hits", get(honeypot::hits))
         .route("/admin/feedback", get(feedback::admin_list))
         .route("/admin/feedback/{id}", get(feedback::admin_get).delete(feedback::admin_delete))
         .route("/admin/feedback/{id}/messages", post(feedback::admin_reply))
@@ -219,6 +225,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
     Router::new()
         .nest("/api", api)
         .fallback_service(spa)
+        // 在 /api 和前端之前攔下 `.env`（含 `/api/.env`），IP 訪問紀錄在外層，所以也會記到
+        .layer(middleware::from_fn_with_state(state.clone(), honeypot::intercept))
         .layer(middleware::from_fn_with_state(recorder, access_log::record))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -300,7 +308,8 @@ async fn api_not_found() -> AppError {
     AppError::NotFound
 }
 
-/// 掃描器常找 `/.env`、`/.git/config`：前端不會有點開頭的路徑，直接 404，不要回 index.html 讓它們以為找到東西。
+/// 掃描器常找 `/.git/config`、`/.vscode/sftp.json`：前端不會有點開頭的路徑，直接 404，不要回 index.html 讓它們以為找到東西。
+/// `.env` 在更外層就被 `honeypot::intercept` 攔下來回假檔案，不會走到這裡。
 async fn hide_dot_paths(request: Request, next: Next) -> Response {
     if request.uri().path().split('/').any(|segment| segment.starts_with('.')) {
         return StatusCode::NOT_FOUND.into_response();

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { api, errorMessage } from '../../api'
 import { describeAgent } from './agent'
+import { IpLink } from './IpLink'
 import type { AccessIp, AccessReport, AccessRequest } from './types'
 
 const RANGES = [
@@ -36,16 +37,6 @@ function fullPath(r: Pick<AccessRequest, 'path' | 'query'>) {
 
 function statusClass(status: number) {
   return status >= 500 ? 'chip access-status is-5xx' : status >= 400 ? 'chip access-status is-4xx' : 'chip access-status'
-}
-
-/** 本機開發沒有 X-Forwarded-For，IP 會是 local */
-function IpLink({ ip }: { ip: string }) {
-  if (ip === 'local') return <code>{ip}</code>
-  return (
-    <a href={`https://ipinfo.io/${encodeURIComponent(ip)}`} target="_blank" rel="noreferrer" title="在 ipinfo.io 查詢">
-      <code>{ip}</code>
-    </a>
-  )
 }
 
 /** `showIp`：所有請求混在一起時才需要標出 IP；點 IP 用它篩選 */

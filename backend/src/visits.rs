@@ -41,7 +41,8 @@ pub struct VisitLimiter {
 }
 
 impl VisitLimiter {
-    fn allow(&self, key: &str) -> bool {
+    /// 也給假的 `.env`（honeypot.rs）用，另開一個 limiter，數字一樣
+    pub(crate) fn allow(&self, key: &str) -> bool {
         let mut counts = self.counts.lock().unwrap();
         if counts.len() > 10_000 {
             counts.retain(|_, (_, since)| since.elapsed() < WINDOW);

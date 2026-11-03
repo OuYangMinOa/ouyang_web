@@ -44,7 +44,7 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/games`、`/admin/system` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 回報與許願
 
@@ -435,10 +435,26 @@ GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可
 
 - 用 middleware 記錄，IP 跟登入限制一樣取 Traefik 的 X-Forwarded-For。前端打包出來的靜態檔（`STATIC_DIR` 最上層有的檔案和資料夾）、
   `/api/health` 和這個頁面自己的查詢不記；不存在的路徑（掃描器找的 `/wp-login.php`、`/.env`）會記。
-  前端沒有點開頭的路徑，所以 `/.env`、`/.git/config` 這類直接回 404，不會拿到 index.html（`lib.rs` 的 `hide_dot_paths`）。
+  前端沒有點開頭的路徑，所以 `/.git/config` 這類直接回 404，不會拿到 index.html（`lib.rs` 的 `hide_dot_paths`）；`.env` 會拿到假的設定檔，見下面的 .env 蜜罐。
 - 請求本身不碰資料庫：先放在記憶體，背景每 2 秒整批寫進 `access_logs`，帳號也是那時才從 session 查（登入那一次還沒有 cookie、
   登出那一次 session 已刪，都算訪客）。關機時會寫完剩下的，被強制結束的話最後幾秒會遺失。
 - 保留 30 天，每小時清一次。同一個 IP 10 分鐘超過 1000 筆的部分不記，避免被灌爆。
+
+## .env 蜜罐
+
+掃描器常來找 `/.env`、`/.env.local`、`/api/.env` 這類設定檔想偷資料庫密碼和金鑰。這些網址會回一份假的設定檔，並記下是誰拿走的，
+在「系統管理 › .env 蜜罐」（`/admin/honeypot`，需要 `admin.users`）看：每個 IP 來了幾次、找過哪些路徑、裝置，展開看每一次的時間和網址。程式在 `backend/src/honeypot.rs`。
+
+```
+GET /api/admin/honeypot            統計、最近的 300 個 IP、被找最多次的 30 個路徑
+GET /api/admin/honeypot/hits?ip=   最近 500 次（可以只看某個 IP）
+```
+
+- 路徑最後一段是 `.env` 或 `.env.<任何字>` 都算，在哪一層底下都一樣（`/laravel/.env`、`/.env.production`…），任何 method 都回同一份。
+  用最外層的 middleware 攔，所以 `/api/.env` 也會被攔到；`.envrc`、`/.git/config` 這類照舊回 404。
+- 假檔案裡的主機是連不到的內網 IP，密碼和金鑰在每次啟動時隨機產生，跟真正的設定無關，也不在 git 裡。同一個容器裡每次拿到的內容一樣，看起來才像真的。
+- 紀錄存在 `honeypot_hits`，保留 180 天；帳號是當時有登入的人（通常是管理員自己點開來看）。同一個 IP 10 分鐘超過 200 筆的部分不記，照樣回假檔案。
+- IP 訪問紀錄也會記到這些請求，狀態碼是 200。
 
 ## 主機監控
 
