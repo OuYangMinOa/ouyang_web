@@ -1,5 +1,6 @@
 pub mod access_log;
 pub mod admin;
+pub mod antique;
 pub mod arena;
 pub mod auth;
 pub mod bigtwo;
@@ -78,6 +79,7 @@ pub struct AppState {
     pub bigtwo: Arc<party::Parties<bigtwo::BigTwo>>,
     pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
     pub draw: Arc<party::Parties<draw::Draw>>,
+    pub antique: Arc<party::Parties<antique::Antique>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
@@ -119,6 +121,7 @@ impl AppState {
             bigtwo: Arc::default(),
             minesrace: Arc::default(),
             draw: Arc::default(),
+            antique: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
@@ -204,6 +207,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
         .route("/games/draw/party", post(party::create::<draw::Draw>))
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
+        .route("/games/antique/party", post(party::create::<antique::Antique>))
+        .route("/games/antique/party/{code}/ws", get(party::connect::<antique::Antique>))
         .route("/games/lobby", post(lobby::create))
         .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))
