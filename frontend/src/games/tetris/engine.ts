@@ -95,16 +95,18 @@ const SCORE_COMBO = 50
 
 export const LOCK_MS = 500
 const MAX_LOCK_RESETS = 15
-const SOFT_DROP_MS = 30
 /** 收到的垃圾行等這麼久才會升上來，之前消行可以抵銷 */
 export const GARBAGE_DELAY_MS = 2000
 /** 一次鎖定最多升幾行垃圾，其餘留到下一塊 */
 const GARBAGE_PER_LOCK = 8
 export const PREVIEW = 5
 
-/** 每下降一格的毫秒數；比官方曲線平緩，最高級也還玩得下去 */
+/** 到這一級就是 20G：方塊一出現就落到底，只剩鎖定延遲可以移動、旋轉 */
+const MAX_GRAVITY_LEVEL = 30
+
+/** 每下降一格的毫秒數，0 是 20G；前期比官方曲線平緩，第 29 級約 4ms 一格 */
 export function gravityMs(level: number): number {
-  return Math.max(1000 * 0.82 ** (level - 1), 30)
+  return level >= MAX_GRAVITY_LEVEL ? 0 : 1000 * 0.82 ** (level - 1)
 }
 
 
@@ -143,6 +145,8 @@ export class Tetris {
   /** 大逃殺的徽章點數，由伺服器告知 */
   badges = 0
   softDrop = false
+  /** 加速下落每格的毫秒數，0 是直接落到底；由操作手感設定 */
+  softDropMs = 30
   lines = 0
   /** 單人模式的分數 */
   score = 0
@@ -211,6 +215,7 @@ export class Tetris {
       if (this.fits(kind, 0, x, y + dy)) {
         this.piece = { kind, rot: 0, x, y: y + dy }
         this.lowest = y + dy
+        this.settle()
         return
       }
     }
@@ -248,6 +253,7 @@ export class Tetris {
     p.x += dx
     this.lastKick = -1
     this.moved()
+    this.settle()
     this.sounds.push('move')
     return true
   }
@@ -266,6 +272,7 @@ export class Tetris {
         p.rot = to
         this.lastKick = i
         this.moved()
+        this.settle()
         this.sounds.push(this.spin() === 'none' ? 'rotate' : 'spin')
         return true
       }
@@ -282,11 +289,19 @@ export class Tetris {
   }
 
   setSoftDrop(on: boolean) {
+    if (on === this.softDrop) return
     // 照原本重力累積的時間不能拿來算加速後的格數，否則按下的瞬間會一口氣掉好幾格
-    if (on !== this.softDrop) this.fall = 0
-    // 按下的瞬間先掉一格，不用等第一個間隔
-    if (on && !this.softDrop && this.piece && !this.over && this.fallOne()) this.score++
+    this.fall = 0
     this.softDrop = on
+    // 按下的瞬間先掉一格，不用等第一個間隔
+    if (on && this.piece && !this.over && this.fallOne()) this.score++
+    this.settle()
+  }
+
+  /** 現在每格的毫秒數：重力，按住加速下落時取比較快的那個；0 是直接落到底 */
+  private stepMs(): number {
+    const g = gravityMs(this.level)
+    return this.softDrop ? Math.min(g, this.softDropMs) : g
   }
 
   /** 往下掉一格；已經在地上就回傳 false */
@@ -300,6 +315,12 @@ export class Tetris {
       this.lockResets = 0
     }
     return true
+  }
+
+  /** 20G 或瞬間加速下落時，移動、旋轉、出生後馬上落到底，不等下一幀，ARR 0 滑過去也不會越過坑洞 */
+  private settle() {
+    if (this.stepMs() > 0) return
+    while (this.fallOne()) if (this.softDrop) this.score++
   }
 
   hardDrop() {
@@ -342,8 +363,7 @@ export class Tetris {
       if (this.lockTimer >= LOCK_MS) this.lock()
       return
     }
-    const g = gravityMs(this.level)
-    const step = this.softDrop ? Math.min(g, SOFT_DROP_MS) : g
+    const step = this.stepMs()
     this.fall += dt
     while (this.fall >= step && this.piece) {
       this.fall -= step

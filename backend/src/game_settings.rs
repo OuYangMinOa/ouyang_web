@@ -4,7 +4,7 @@
 //! 後端不認得有哪些動作（那是前端的事），只檢查格式和大小，避免被塞進奇怪的東西：
 //! `{ 動作: [按鍵代碼, …] }`，動作是小寫英數字，按鍵代碼是 `KeyboardEvent.code`（英數字）。
 //!
-//! 操作手感（DAS、ARR）放在 `game_handling`，用遊戲 id 區分。
+//! 操作手感（DAS、ARR、加速下落）放在 `game_handling`，用遊戲 id 區分。
 
 use std::collections::BTreeMap;
 
@@ -112,17 +112,25 @@ pub async fn put_tetris(
     put_settings(&state, &user, &TETRIS, settings).await
 }
 
-/// 左右鍵按住多久開始連續移動、之後每格的間隔（毫秒）；ARR 0 是直接滑到底
+/// 左右鍵按住多久開始連續移動、之後每格的間隔、加速下落每格的間隔（毫秒）；ARR 0 是直接滑到底，soft 0 是直接落到底
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Handling {
     pub das: u32,
     pub arr: u32,
+    /// 後來才加的，舊的資料沒有這欄
+    #[serde(default = "default_soft")]
+    pub soft: u32,
+}
+
+fn default_soft() -> u32 {
+    30
 }
 
 /// 範圍跟前端的滑桿一樣
 const DAS_RANGE: std::ops::RangeInclusive<u32> = 50..=400;
 const ARR_RANGE: std::ops::RangeInclusive<u32> = 0..=200;
+const SOFT_RANGE: std::ops::RangeInclusive<u32> = 0..=100;
 
 #[derive(Serialize, Deserialize)]
 pub struct HandlingSettings {
@@ -156,8 +164,11 @@ async fn put_handling(
                 .await?;
         }
         Some(handling) => {
-            if !DAS_RANGE.contains(&handling.das) || !ARR_RANGE.contains(&handling.arr) {
-                return Err(AppError::BadRequest("DAS 或 ARR 超出範圍".into()));
+            if !DAS_RANGE.contains(&handling.das)
+                || !ARR_RANGE.contains(&handling.arr)
+                || !SOFT_RANGE.contains(&handling.soft)
+            {
+                return Err(AppError::BadRequest("DAS、ARR 或加速下落超出範圍".into()));
             }
             let raw = serde_json::to_string(&handling).map_err(|err| AppError::Internal(err.to_string()))?;
             sqlx::query(

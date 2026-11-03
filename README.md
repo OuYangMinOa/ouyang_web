@@ -168,6 +168,7 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 - 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
 - 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
 - 單人模式每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限；分數照官方規則（消行、spin、B2B、連擊、全消乘上等級，加上下落格數）。
+  下落速度第 1 級 1 秒一格、每級乘 0.82（第 29 級約 4ms 一格），第 30 級起是 20G：方塊出生、移動、旋轉後都直接落到底，只能靠鎖定延遲調整。對戰的等級最高 15，不會到 20G。
   登入的人的成績會上傳到排行榜（`backend/src/tetris_scores.rs`，每個帳號只留最高分）：
 
   ```
@@ -184,7 +185,7 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
   加上低通濾波和一點回音讓聲音柔和；速度跟著等級變快，按 M 或按鈕開關。
 - 音效也是即時合成（`tetris/sfx.ts`），開關和音樂分開：移動、旋轉、保留、鎖定、直接落下、消行、垃圾行升起各有一個短音。
   旋轉後卡在 spin 的位置會多一聲高音的「叮」，還沒放下就知道卡對了。引擎把要發的音效放進 `sounds`，盤面每一幀取走，同一幀一樣的只響一次。
-- 按下加速下落的瞬間先掉一格，之後每 30ms 一格。
+- 按下加速下落的瞬間先掉一格，之後照操作手感設定的間隔（預設 30ms）一格。
 - 快捷鍵可以自訂（`games/shared/keys.ts`、`games/shared/KeyEditor.tsx`，和魔法氣泡共用），每個動作最多兩個鍵。沒登入存在瀏覽器，有登入存在帳號（`backend/src/game_settings.rs`），
   換裝置也一樣；帳號還沒存過時沿用瀏覽器的設定：
 
@@ -195,10 +196,11 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 
 - 操作手感也可以調（`games/shared/handling.ts`、`games/shared/HandlingEditor.tsx`）：DAS 是左右鍵按住多久開始連續移動（50～400 ms，預設 180），
   ARR 是之後每格的間隔（0～200 ms，預設 40，0 是直接滑到底）。按下先走一格、按住滿 DAS 走第二格，時間從按下的那一刻算，不受每幀長短影響。
+  加速下落間隔（soft，0～100 ms，預設 30）是按住下時每格的間隔，0 是瞬間落到底但不鎖定，按住時移動、旋轉後也會馬上落到底（和 20G 一樣）。
   存法和快捷鍵一樣，但分開存（`game_handling` 表）：
 
   ```
-  GET /api/games/tetris/handling  →  {"handling":{"das":180,"arr":40}|null}
+  GET /api/games/tetris/handling  →  {"handling":{"das":180,"arr":40,"soft":30}|null}   舊資料沒有 soft 時當作 30
   PUT /api/games/tetris/handling  {"handling":{…}|null}  →  204   超出範圍回 400
   ```
 

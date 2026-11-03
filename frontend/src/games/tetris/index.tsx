@@ -73,7 +73,7 @@ function Help({ settings, handling, onEdit }: { settings: KeySettings; handling:
                 ⌨ 自訂快捷鍵
               </button>
               <button type="button" className="secondary" onClick={() => edit('handling')}>
-                ⚙ 操作手感（DAS {handling.handling.das} / ARR {handling.handling.arr}）
+                ⚙ 操作手感（DAS {handling.handling.das} / ARR {handling.handling.arr} / 下落 {handling.handling.soft || '瞬間'}）
               </button>
             </div>
           </>
