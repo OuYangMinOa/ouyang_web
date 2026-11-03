@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Link } from 'react-router'
 import {
   formatLatLon,
@@ -11,10 +11,11 @@ import {
   windText,
   type TyphoonReport,
 } from './data'
+import { lazyPage } from '../lazyPage'
 import './weather.css'
 
 // 地圖（Leaflet）只在真的有颱風時才下載
-const TyphoonMap = lazy(() => import('./TyphoonMap'))
+const TyphoonMap = lazyPage(() => import('./TyphoonMap'))
 
 /** 首頁的颱風區：西北太平洋有颱風才出現 */
 export default function TyphoonHome() {

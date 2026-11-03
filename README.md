@@ -519,13 +519,14 @@ GET /api/music/s/{hex}.{ext}   同上，分享用：檔名（不含副檔名）�
 `/weather`：總覽、`/weather/typhoon` 颱風、`/weather/forecast` 全台天氣、`/weather/quake` 地震。後端在 `backend/src/weather/`，外部資料都由後端抓、整理過再給前端。
 
 ```
-GET /api/weather/typhoons      颱風（各來源合併）  快取 10 分鐘
-GET /api/weather/forecast      22 縣市天氣與空氣品質  快取 15 分鐘
-GET /api/weather/quakes        最新速報、各國地震報告、速報連線狀態  報告快取 3 分鐘
+GET /api/weather/typhoons      颱風（各來源合併）  快取 10 分鐘，背景每 8 分鐘重抓
+GET /api/weather/forecast      22 縣市天氣與空氣品質  快取 15 分鐘，背景每 13 分鐘重抓
+GET /api/weather/quakes        最新速報、各國地震報告、速報連線狀態  報告快取 3 分鐘，背景每 2 分鐘重抓
 GET /api/weather/quakes/ws     即時速報  server → client  {type:"snapshot", eew:[...]}、{type:"eew", eew}
 ```
 
-- 有人來看才抓，同一時間只有一個請求真的打外部 API；外部來源掛掉時繼續回上一次成功的資料，頁尾標出哪個來源暫時連不上。
+- 伺服器啟動後就在背景定時重抓（間隔比快取時間短），有人來看時直接回現成的資料，不用等外部 API（颱風一次要好幾秒）。
+  背景沒跟上、快取過期時才由請求自己去抓，同一時間只有一個請求真的打外部 API；外部來源掛掉時繼續回上一次成功的資料，頁尾標出哪個來源暫時連不上。
 - **颱風・官方路徑**：日本氣象廳（過去路徑、強度、70% 機率圓、暴風圈）、GDACS 整理的 JTWC／NHC（全球，含不確定範圍）、中央氣象署（要金鑰）。
   各來源的颱風依目前位置合併（600 公里內視為同一個）。GDACS 在颱風消散後還會掛一陣子，美國那邊用 NHC 自己的清單過濾。
 - **颱風・AI 系集**：Google DeepMind Weather Lab 的系集預報（`OPER` 模型，每 6 小時起報，發布比起報晚 6～8 小時），平均路徑加上 50 個成員。即時資料受其使用條款約束，頁面上有標示。

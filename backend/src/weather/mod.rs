@@ -1,7 +1,9 @@
 //! 天氣與環境：颱風路徑、全台天氣、地震。資料都從外部公開來源抓，整理成前端好用的格式。
 //!
-//! 颱風與天氣是有人來看才去抓，結果在記憶體裡快取一段時間（同一時間只會有一個請求真的去抓，其他人等它）；
-//! 外部來源出錯時繼續回上一次成功的資料。地震則是伺服器啟動後就一直連著 wolfx 的 WebSocket（見 `quake.rs`）。
+//! 颱風、天氣和地震報告的結果放在記憶體快取裡，伺服器啟動後由背景每隔一段時間重抓（`spawn_refresh`），
+//! 有人來看時直接回快取，不用等外部 API。背景重抓沒跟上（例如外部來源一直很慢）時，請求才自己去抓，
+//! 這時同一時間只會有一個請求真的去抓，其他人等它；外部來源出錯時繼續回上一次成功的資料。
+//! 地震速報則是伺服器啟動後就一直連著 wolfx 的 WebSocket（見 `quake.rs`）。
 
 pub mod forecast;
 pub mod quake;
@@ -106,6 +108,54 @@ impl<T> Cached<T> {
             },
         }
     }
+
+    /// 背景重抓：抓的時候不拿鎖，請求照樣拿得到舊資料；抓到才換上去，抓失敗就留著舊的。
+    pub async fn refresh<F, Fut>(&self, fetch: F)
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, String>>,
+    {
+        match fetch().await {
+            Ok(value) => *self.slot.lock().await = Some((Instant::now(), Arc::new(value))),
+            Err(error) => tracing::warn!(%error, "background refresh failed, keeping old data"),
+        }
+    }
+}
+
+/// 伺服器啟動時呼叫：每個快取在過期前就先重抓，有人來看時一定是現成的。
+/// 間隔比各自的 TTL 短一點，留時間給外部 API 回應；第一次在啟動時就抓。
+pub fn spawn_refresh(weather: Arc<Weather>) {
+    let w = weather.clone();
+    every(typhoon::REFRESH_EVERY, move || {
+        let w = w.clone();
+        async move { w.typhoons.refresh(|| async { Ok(typhoon::build_report(&w).await) }).await }
+    });
+    let w = weather.clone();
+    every(forecast::REFRESH_EVERY, move || {
+        let w = w.clone();
+        async move { w.forecast.refresh(|| forecast::build_report(&w.http)).await }
+    });
+    let w = weather;
+    every(quake::REFRESH_EVERY, move || {
+        let w = w.clone();
+        async move { w.quake_reports.refresh(|| async { Ok(quake::fetch_reports(&w).await) }).await }
+    });
+}
+
+fn every<F, Fut>(period: Duration, mut task: F)
+where
+    F: FnMut() -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send,
+{
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(period);
+        // 抓得比較久時從抓完開始重新計時，不要連著補抓
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            task().await;
+        }
+    });
 }
 
 /// 每個外部來源這次有沒有抓成功，前端用來顯示「某某來源暫時無法連線」
@@ -191,5 +241,17 @@ mod tests {
         assert_eq!(*stale, 1);
         let empty = Cached::<u32>::default();
         assert!(empty.get(Duration::ZERO, || async { Err("down".into()) }).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn background_refresh_fills_cache_and_keeps_old_data_on_failure() {
+        let cache = Cached::<u32>::default();
+        cache.refresh(|| async { Ok(1) }).await;
+        // 還在 TTL 內，請求直接拿背景抓好的，不會自己去抓
+        let hit = cache.get(Duration::from_secs(60), || async { panic!("should not fetch") }).await.unwrap();
+        assert_eq!(*hit, 1);
+        cache.refresh(|| async { Err("down".into()) }).await;
+        let kept = cache.get(Duration::from_secs(60), || async { panic!("should not fetch") }).await.unwrap();
+        assert_eq!(*kept, 1);
     }
 }

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { api, PERMISSIONS, type User } from './api'
 import AppLauncher from './apps/AppLauncher'
@@ -37,21 +37,22 @@ import Register from './pages/Register'
 import ToolPage from './tools/ToolPage'
 import ToolsHub from './tools/ToolsHub'
 import { getThemePreference, setThemePreference, type ThemePreference } from './theme'
+import { lazyPage } from './lazyPage'
 import QuakeAlert from './weather/QuakeAlert'
 import { QuakeFeedProvider } from './weather/quakeFeed'
 import './App.css'
 
 // 天氣與環境的頁面帶著 Leaflet 地圖，進到那一頁才下載
-const WeatherHub = lazy(() => import('./weather/WeatherHub'))
-const TyphoonPage = lazy(() => import('./weather/TyphoonPage'))
-const TyphoonNames = lazy(() => import('./weather/TyphoonNames'))
-const ForecastPage = lazy(() => import('./weather/ForecastPage'))
-const QuakePage = lazy(() => import('./weather/QuakePage'))
+const WeatherHub = lazyPage(() => import('./weather/WeatherHub'))
+const TyphoonPage = lazyPage(() => import('./weather/TyphoonPage'))
+const TyphoonNames = lazyPage(() => import('./weather/TyphoonNames'))
+const ForecastPage = lazyPage(() => import('./weather/ForecastPage'))
+const QuakePage = lazyPage(() => import('./weather/QuakePage'))
 // 隱藏頁面：不在任何選單裡，只有知道網址的人進得來；條碼函式庫也只在這頁下載
-const DataMatrixPage = lazy(() => import('./datamatrix/DataMatrixPage'))
-const ThreadsSetup = lazy(() => import('./threads/SetupPage'))
-const ThreadsDownloads = lazy(() => import('./threads/DownloadsPage'))
-const ThreadsPaste = lazy(() => import('./threads/PastePage'))
+const DataMatrixPage = lazyPage(() => import('./datamatrix/DataMatrixPage'))
+const ThreadsSetup = lazyPage(() => import('./threads/SetupPage'))
+const ThreadsDownloads = lazyPage(() => import('./threads/DownloadsPage'))
+const ThreadsPaste = lazyPage(() => import('./threads/PastePage'))
 
 function Lazy({ page: Page }: { page: ComponentType }) {
   return (

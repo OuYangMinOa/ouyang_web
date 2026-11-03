@@ -94,13 +94,13 @@ p.fineprint {
   gap: 6px;
 }
 
-.live-dot {
+.live-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 13px;
 }
-.live-dot::before {
+.live-status::before {
   content: '';
   width: 8px;
   height: 8px;
@@ -108,7 +108,7 @@ p.fineprint {
   background: var(--border);
   flex-shrink: 0;
 }
-.live-dot.on::before {
+.live-status.on::before {
   background: var(--ok);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
 }

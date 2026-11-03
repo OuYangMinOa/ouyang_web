@@ -51,6 +51,8 @@ const USGS_QUERY: &str = "https://earthquake.usgs.gov/fdsnws/event/1/query";
 const USGS_GLOBAL: &str = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson";
 const CWA_DATASTORE: &str = "https://opendata.cwa.gov.tw/api/v1/rest/datastore";
 const REPORT_TTL: Duration = Duration::from_secs(3 * 60);
+/// 背景重抓地震報告的間隔，比 TTL 短，快取才不會過期
+pub(super) const REFRESH_EVERY: Duration = Duration::from_secs(2 * 60);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// wolfx 每分鐘送一次 heartbeat、relay 每 9 秒 ping 一次；這麼久都沒動靜就重連
 const UPSTREAM_IDLE: Duration = Duration::from_secs(150);
@@ -463,7 +465,7 @@ pub async fn quakes(State(state): State<AppState>) -> Result<Json<QuakeSnapshot>
     }))
 }
 
-async fn fetch_reports(weather: &Weather) -> ReportLists {
+pub(super) async fn fetch_reports(weather: &Weather) -> ReportLists {
     let http = &weather.http;
     let start = (Utc::now() - ChronoDuration::days(30)).format("%Y-%m-%d");
     let taiwan_url = format!(
