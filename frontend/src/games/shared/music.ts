@@ -195,10 +195,12 @@ export class Music {
   }
 }
 
-/** 在遊戲進行中（`playing`）播放背景音樂；開關記在 localStorage 的 `<game>:music` */
+/**
+ * 在遊戲進行中（`playing`）播放背景音樂。開關記在 localStorage 的 `music`，所有遊戲共用，
+ * 在一個遊戲關掉，換到別的遊戲也是關的；還沒存過就沿用以前各遊戲自己記的 `<game>:music`
+ */
 export function useMusic(game: string, song: Song, playing: boolean, level: number) {
-  const storageKey = `${game}:music`
-  const [enabled, setEnabled] = useState(() => load<boolean>(storageKey, true))
+  const [enabled, setEnabled] = useState(() => load<boolean | null>('music', null) ?? load<boolean>(`${game}:music`, true))
   const [music] = useState(() => new Music(song))
   useEffect(() => () => music.dispose(), [music])
   useEffect(() => music.setLevel(level), [music, level])
@@ -208,10 +210,10 @@ export function useMusic(game: string, song: Song, playing: boolean, level: numb
   }, [music, playing, enabled])
   const toggle = useCallback(() => {
     setEnabled((on) => {
-      save(storageKey, !on)
+      save('music', !on)
       return !on
     })
-  }, [storageKey])
+  }, [])
   return { enabled, toggle }
 }
 
