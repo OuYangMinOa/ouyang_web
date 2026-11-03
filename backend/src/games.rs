@@ -40,7 +40,7 @@ use crate::{
     game_monitor::{PlayerInfo, RoomInfo},
 };
 
-const GAMES: [&str; 7] = ["gomoku", "xiangqi", "chess", "reversi", "connect4", "ab", "battleship"];
+pub(crate) const GAMES: [&str; 7] = ["gomoku", "xiangqi", "chess", "reversi", "connect4", "ab", "battleship"];
 /// 去掉容易看錯的 I、O、0、1；剛好 32 個字，`byte % 32` 不會有偏差
 const CODE_CHARS: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LEN: usize = 5;
@@ -129,7 +129,13 @@ impl Room {
 }
 
 impl Rooms {
-    async fn create(&self, pool: &SqlitePool, game: &str) -> Result<String, AppError> {
+    /// 開一間新房間；`seats` 是先排好的兩個座位（遊戲室替房主挑的兩個人開房時），其他人連進來就是 `full`
+    pub(crate) async fn create(
+        &self,
+        pool: &SqlitePool,
+        game: &str,
+        seats: [Option<String>; 2],
+    ) -> Result<String, AppError> {
         let live: Vec<String> = self.live.lock().unwrap().keys().cloned().collect();
         sqlx::query(
             "DELETE FROM game_rooms WHERE created_at <= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?)
@@ -146,11 +152,16 @@ impl Rooms {
         }
         loop {
             let code = random_code()?;
-            let inserted = sqlx::query("INSERT INTO game_rooms (code, game) VALUES (?, ?) ON CONFLICT DO NOTHING")
-                .bind(&code)
-                .bind(game)
-                .execute(pool)
-                .await?;
+            let [seat0, seat1] = &seats;
+            let inserted = sqlx::query(
+                "INSERT INTO game_rooms (code, game, seat0, seat1) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+            )
+            .bind(&code)
+            .bind(game)
+            .bind(seat0)
+            .bind(seat1)
+            .execute(pool)
+            .await?;
             if inserted.rows_affected() == 1 {
                 return Ok(code);
             }
@@ -436,7 +447,7 @@ pub async fn create_room(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let game =
         GAMES.into_iter().find(|g| *g == input.game).ok_or_else(|| AppError::BadRequest("不支援這個遊戲".into()))?;
-    let code = state.rooms.create(&state.pool, game).await?;
+    let code = state.rooms.create(&state.pool, game, [None, None]).await?;
     Ok((StatusCode::CREATED, Json(json!({ "code": code }))))
 }
 

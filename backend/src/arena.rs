@@ -174,6 +174,8 @@ struct Conn {
 
 struct Arena<R: Rules> {
     public: bool,
+    /// 遊戲室開的房間：照遊戲室的順序決定房主（見 `host`），其他房間是空的
+    hosts: Vec<String>,
     /// 開房間的時間
     opened: Instant,
     /// 從表裡移除後設為 true，剛好拿到這個房間的人要當作找不到
@@ -221,6 +223,7 @@ impl<R: Rules> Arena<R> {
     fn new(public: bool, now: Instant) -> Self {
         Self {
             public,
+            hosts: Vec::new(),
             opened: now,
             closed: false,
             phase: Phase::Lobby,
@@ -246,9 +249,10 @@ impl<R: Rules> Arena<R> {
         self.players.iter().filter(|p| p.conn.is_some()).count()
     }
 
-    /// 房主：最早進來、還連著的人
+    /// 房主：還連著的人裡，排在 `hosts`（遊戲室的順序）最前面的；都不在裡面就是最早進來的
     fn host(&self) -> Option<u32> {
-        self.players.iter().find(|p| p.conn.is_some()).map(|p| p.pid)
+        let rank = |p: &Player<R::Bot>| p.key.as_ref().and_then(|k| self.hosts.iter().position(|h| h == k));
+        self.players.iter().filter(|p| p.conn.is_some()).min_by_key(|p| rank(p).unwrap_or(usize::MAX)).map(|p| p.pid)
     }
 
     fn alive(&self) -> Vec<usize> {
@@ -796,8 +800,9 @@ enum ClientMessage {
 }
 
 impl<R: Rules> Arenas<R> {
-    /// 建立房間；`public` 是快速配對：有還沒開局的公開房間就加入人最多的那間
-    fn open(self: &Arc<Self>, public: bool) -> Result<String, AppError> {
+    /// 建立房間；`public` 是快速配對：有還沒開局的公開房間就加入人最多的那間。
+    /// `hosts` 是遊戲室替大家開房時的房主順序，自己開的是空的
+    pub(crate) fn open(self: &Arc<Self>, public: bool, hosts: Vec<String>) -> Result<String, AppError> {
         let mut live = self.live.lock().unwrap();
         if public && R::PUBLIC {
             let best = live
@@ -821,7 +826,9 @@ impl<R: Rules> Arenas<R> {
                 break code;
             }
         };
-        let arena = Arc::new(Mutex::new(Arena::<R>::new(public && R::PUBLIC, Instant::now())));
+        let mut arena = Arena::<R>::new(public && R::PUBLIC, Instant::now());
+        arena.hosts = hosts;
+        let arena = Arc::new(Mutex::new(arena));
         live.insert(code.clone(), arena.clone());
         tokio::spawn(run(self.clone(), code.clone(), arena));
         Ok(code)
@@ -870,7 +877,7 @@ pub async fn create_arena<R: Rules>(
     State(state): State<AppState>,
     Json(input): Json<NewArena>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    let code = R::arenas(&state).open(input.public)?;
+    let code = R::arenas(&state).open(input.public, Vec::new())?;
     Ok((StatusCode::CREATED, Json(json!({ "code": code }))))
 }
 
@@ -1056,6 +1063,23 @@ mod tests {
     fn pacing() {
         report::<Tetris>("tetris");
         report::<Puyo>("puyo");
+    }
+
+    #[test]
+    fn lobby_order_decides_the_host() {
+        // 遊戲室開的房間：不管誰先連上，房主都照遊戲室的順序
+        let now = Instant::now();
+        let mut arena = Arena::<Tetris>::new(false, now);
+        arena.hosts = vec!["guest:a".into(), "guest:b".into()];
+        let join = |arena: &mut Arena<Tetris>, key: &str, id| {
+            let (tx, _) = mpsc::unbounded_channel();
+            arena.join(key, key.to_owned(), Conn { id, tx, ip: "local".into(), since: now }, now).unwrap()
+        };
+        let b = join(&mut arena, "guest:b", 1);
+        join(&mut arena, "guest:c", 2);
+        assert_eq!(arena.host(), Some(b));
+        let a = join(&mut arena, "guest:a", 3);
+        assert_eq!(arena.host(), Some(a));
     }
 
     #[test]

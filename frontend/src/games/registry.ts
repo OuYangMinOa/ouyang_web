@@ -17,6 +17,11 @@ export type GameInfo = {
   component: LazyExoticComponent<ComponentType>
   /** 背景音樂（標題旁有開關）；俄羅斯方塊、魔法氣泡在遊戲裡自己播，不用填 */
   music?: () => Promise<{ default: Song }>
+  /**
+   * 能從遊戲室開（後端 `lobby.rs` 的 `GAMES` 也要登記）：`duel` 是兩個人的棋類，房主挑誰上場；
+   * `party`、`arena` 所有人一起去。`players` 是給房主看的人數說明。
+   */
+  lobby?: { kind: 'duel' | 'party' | 'arena'; players: string }
 }
 
 // 每個遊戲各自打包，進到那一頁才下載
@@ -29,6 +34,7 @@ export const GAMES: GameInfo[] = [
     tags: ['多人', '線上', '練習'],
     category: '多人對戰',
     component: lazyPage(() => import('./tetris')),
+    lobby: { kind: 'arena', players: '最多 99 人，電腦補位' },
   },
   {
     id: 'puyo',
@@ -38,6 +44,7 @@ export const GAMES: GameInfo[] = [
     tags: ['單人', '電腦', '多人', '線上'],
     category: '多人對戰',
     component: lazyPage(() => import('./puyo')),
+    lobby: { kind: 'arena', players: '最多 99 人，電腦補位' },
   },
   {
     id: 'undercover',
@@ -47,6 +54,7 @@ export const GAMES: GameInfo[] = [
     tags: ['多人', '線上', '電腦'],
     category: '派對',
     component: lazyPage(() => import('./undercover')),
+    lobby: { kind: 'party', players: '3～10 人，可以加電腦' },
     music: () => import('./undercover/song'),
   },
   {
@@ -57,6 +65,7 @@ export const GAMES: GameInfo[] = [
     tags: ['多人', '線上', '電腦'],
     category: '派對',
     component: lazyPage(() => import('./bigtwo')),
+    lobby: { kind: 'party', players: '4 人，電腦補位' },
     music: () => import('./bigtwo/song'),
   },
   {
@@ -67,6 +76,7 @@ export const GAMES: GameInfo[] = [
     tags: ['多人', '線上'],
     category: '派對',
     component: lazyPage(() => import('./draw')),
+    lobby: { kind: 'party', players: '2～10 人' },
     music: () => import('./draw/song'),
   },
   {
@@ -87,6 +97,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazyPage(() => import('./gomoku')),
+    lobby: { kind: 'duel', players: '2 人' },
     music: () => import('./gomoku/song'),
   },
   {
@@ -97,6 +108,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazyPage(() => import('./connect4')),
+    lobby: { kind: 'duel', players: '2 人' },
     music: () => import('./connect4/song'),
   },
   {
@@ -107,6 +119,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazyPage(() => import('./xiangqi')),
+    lobby: { kind: 'duel', players: '2 人' },
     music: () => import('./xiangqi/song'),
   },
   {
@@ -117,6 +130,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazyPage(() => import('./chess')),
+    lobby: { kind: 'duel', players: '2 人' },
     music: () => import('./chess/song'),
   },
   {
@@ -127,6 +141,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazyPage(() => import('./reversi')),
+    lobby: { kind: 'duel', players: '2 人' },
     music: () => import('./reversi/song'),
   },
   {
@@ -137,6 +152,7 @@ export const GAMES: GameInfo[] = [
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
     component: lazyPage(() => import('./battleship')),
+    lobby: { kind: 'duel', players: '2 人' },
     music: () => import('./battleship/song'),
   },
   {
@@ -147,6 +163,7 @@ export const GAMES: GameInfo[] = [
     tags: ['你猜', '電腦猜', '對戰', '線上'],
     category: '雙人對戰',
     component: lazyPage(() => import('./ab')),
+    lobby: { kind: 'duel', players: '2 人' },
     music: () => import('./ab/song'),
   },
   {
@@ -167,6 +184,7 @@ export const GAMES: GameInfo[] = [
     tags: ['單人', '線上', '電腦'],
     category: '多人對戰',
     component: lazyPage(() => import('./minesweeper')),
+    lobby: { kind: 'party', players: '1～8 人競速，可以加電腦' },
     music: () => import('./minesweeper/song'),
   },
 ]
