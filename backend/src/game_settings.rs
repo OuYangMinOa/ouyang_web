@@ -1,8 +1,10 @@
-//! 即時方塊遊戲（俄羅斯方塊、魔法氣泡）的個人設定：目前只有快捷鍵。沒登入的人存在瀏覽器（localStorage），有登入就存在這裡。
-//! 每個遊戲一張表（`tetris_settings`、`puyo_settings`），格式一樣。
+//! 即時方塊遊戲（俄羅斯方塊、魔法氣泡）的個人設定：快捷鍵和操作手感。沒登入的人存在瀏覽器（localStorage），有登入就存在這裡。
 //!
+//! 快捷鍵每個遊戲一張表（`tetris_settings`、`puyo_settings`），格式一樣。
 //! 後端不認得有哪些動作（那是前端的事），只檢查格式和大小，避免被塞進奇怪的東西：
 //! `{ 動作: [按鍵代碼, …] }`，動作是小寫英數字，按鍵代碼是 `KeyboardEvent.code`（英數字）。
+//!
+//! 操作手感（DAS、ARR）放在 `game_handling`，用遊戲 id 區分。
 
 use std::collections::BTreeMap;
 
@@ -108,6 +110,83 @@ pub async fn put_tetris(
     Json(settings): Json<Settings>,
 ) -> Result<StatusCode, AppError> {
     put_settings(&state, &user, &TETRIS, settings).await
+}
+
+/// 左右鍵按住多久開始連續移動、之後每格的間隔（毫秒）；ARR 0 是直接滑到底
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Handling {
+    pub das: u32,
+    pub arr: u32,
+}
+
+/// 範圍跟前端的滑桿一樣
+const DAS_RANGE: std::ops::RangeInclusive<u32> = 50..=400;
+const ARR_RANGE: std::ops::RangeInclusive<u32> = 0..=200;
+
+#[derive(Serialize, Deserialize)]
+pub struct HandlingSettings {
+    /// 還沒存過是 null，前端就用預設值
+    pub handling: Option<Handling>,
+}
+
+async fn get_handling(state: &AppState, user: &CurrentUser, game: &str) -> Result<Json<HandlingSettings>, AppError> {
+    let raw: Option<String> = sqlx::query_scalar("SELECT handling FROM game_handling WHERE user_id = ? AND game = ?")
+        .bind(user.id)
+        .bind(game)
+        .fetch_optional(&state.pool)
+        .await?;
+    let handling = raw.and_then(|raw| serde_json::from_str(&raw).ok());
+    Ok(Json(HandlingSettings { handling }))
+}
+
+async fn put_handling(
+    state: &AppState,
+    user: &CurrentUser,
+    game: &str,
+    settings: HandlingSettings,
+) -> Result<StatusCode, AppError> {
+    match settings.handling {
+        // 傳 null 是恢復預設
+        None => {
+            sqlx::query("DELETE FROM game_handling WHERE user_id = ? AND game = ?")
+                .bind(user.id)
+                .bind(game)
+                .execute(&state.pool)
+                .await?;
+        }
+        Some(handling) => {
+            if !DAS_RANGE.contains(&handling.das) || !ARR_RANGE.contains(&handling.arr) {
+                return Err(AppError::BadRequest("DAS 或 ARR 超出範圍".into()));
+            }
+            let raw = serde_json::to_string(&handling).map_err(|err| AppError::Internal(err.to_string()))?;
+            sqlx::query(
+                "INSERT INTO game_handling (user_id, game, handling) VALUES (?, ?, ?)
+                 ON CONFLICT (user_id, game) DO UPDATE SET handling = excluded.handling, updated_at = excluded.updated_at",
+            )
+            .bind(user.id)
+            .bind(game)
+            .bind(raw)
+            .execute(&state.pool)
+            .await?;
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn get_tetris_handling(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> Result<Json<HandlingSettings>, AppError> {
+    get_handling(&state, &user, "tetris").await
+}
+
+pub async fn put_tetris_handling(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Json(settings): Json<HandlingSettings>,
+) -> Result<StatusCode, AppError> {
+    put_handling(&state, &user, "tetris", settings).await
 }
 
 pub async fn get_puyo(State(state): State<AppState>, user: CurrentUser) -> Result<Json<Settings>, AppError> {
