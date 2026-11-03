@@ -23,6 +23,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
+          # PR 只讀 dev/main 存好的快取，不另存一份（每份約 400 MB，Actions 快取整個 repo 只有 10 GB）
+          save-if: ${{ github.event_name != 'pull_request' }}
       - name: Backend tests
         working-directory: backend
         run: cargo test --locked
@@ -42,6 +44,8 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    # 平常 2–5 分鐘；下載 layer 卡住時直接失敗，重跑就好，不要乾等
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -54,10 +58,12 @@ jobs:
         # GHCR 的名稱必須全小寫
         run: |
           repo="ghcr.io/${GITHUB_REPOSITORY,,}"
-          if [ "$GITHUB_REF_NAME" = main ]; then env_name=prod; else env_name=staging; fi
+          if [ "$GITHUB_REF_NAME" = main ]; then env_name=prod other=staging; else env_name=staging other=prod; fi
           echo "env_name=$env_name" >> "$GITHUB_OUTPUT"
           echo "image=$repo:$env_name-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "latest=$repo:$env_name-latest" >> "$GITHUB_OUTPUT"
+          echo "cache=$repo:buildcache-$env_name" >> "$GITHUB_OUTPUT"
+          echo "cache_other=$repo:buildcache-$other" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -74,8 +80,12 @@ jobs:
             ${{ steps.meta.outputs.image }}
             ${{ steps.meta.outputs.latest }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Docker 層快取放在 GHCR 的 buildcache-<env>，不佔 Actions 快取。
+          # 先讀自己環境的，沒有再借另一個環境的（dev→main 的程式碼通常一樣）。
+          cache-from: |
+            type=registry,ref=${{ steps.meta.outputs.cache }}
+            type=registry,ref=${{ steps.meta.outputs.cache_other }}
+          cache-to: type=registry,ref=${{ steps.meta.outputs.cache }},mode=max,image-manifest=true,oci-mediatypes=true
 
   deploy:
     needs: build
@@ -109,7 +119,9 @@ jobs:
           envs: GHCR_USER,GHCR_TOKEN,IMAGE,ENV_NAME
           script: bash "/home/ubuntu/ouyang_web/$ENV_NAME/deploy.sh" "$ENV_NAME" "$IMAGE"
 
-  # 部署成功後清 GHCR：只動這個環境的 tag，留最近 10 版當回滾用，<env>-latest 永遠保留
+  # 部署成功後清 GHCR：只動這個環境的 tag，留最近 10 版當回滾用，<env>-latest 永遠保留。
+  # buildcache-<env> 不在 delete-tags 的範圍內；它每次被覆蓋後留下的舊版沒有 tag，由 delete-untagged 清掉
+  # （attestation 這類掛在有 tag 映像底下的子項目，這個 action 會自動略過）。
   cleanup:
     needs: [build, deploy]
     runs-on: ubuntu-latest
@@ -121,3 +133,4 @@ jobs:
           delete-tags: ${{ needs.build.outputs.env_name }}-*
           exclude-tags: ${{ needs.build.outputs.env_name }}-latest
           keep-n-tagged: 10
+          delete-untagged: true
