@@ -382,11 +382,15 @@ DELETE /api/calendar/events/{id}
   捷徑第一次執行時要求貼上，存在 iCloud 雲碟「捷徑」資料夾的 `ouyang-threads-key.txt`，之後放在 `X-Threads-Key` 標頭送來（不放網址，才不會進到 IP 訪問紀錄）。
   金鑰錯誤的訊息一定有「金鑰」兩個字，捷徑看到就刪掉存著的金鑰，下次重新詢問。
 - 查到影片就記一筆在那個帳號的下載紀錄（`threads_downloads`：貼文網址、作者、說明前 300 字、影片數），每個帳號留最近 500 筆，可以刪除。
+- **貼網址下載**（`/threads/paste`）：不用捷徑，直接在網頁貼上網址，電腦和 Android 也能用。打同一支 API，沒帶金鑰就用登入的帳號，一樣記在下載紀錄。
+  - 空的輸入框貼上會直接送出，也可以用 `/threads/paste?url=<網址>` 帶進來。前端先檢查是不是 Threads 的網址才送出，查完倒數 10 秒，免得白白吃掉冷卻時間。
+  - 預覽和下載都由瀏覽器直接跟 Meta CDN 拿（影片和封面都有 `Access-Control-Allow-Origin: *`），不經過我們的伺服器。
+    手機用分享選單存（iPhone 選「儲存影片」進相簿），電腦直接存成 `threads_<作者>_<代碼>.mp4`。
 
 ```
-GET    /api/threads/video?url=<貼文或分享連結>     標頭 X-Threads-Key: <金鑰>
+GET    /api/threads/video?url=<貼文或分享連結>     標頭 X-Threads-Key: <金鑰>（網頁沒帶就用登入的 session）
 → 200 {"code","author","caption","videos":[{"url","thumbnail","width","height"}]}   輪播有幾支影片就有幾筆
-→ 401 {"error"}                    沒帶金鑰或金鑰無效
+→ 401 {"error"}                    沒帶金鑰也沒登入，或金鑰無效（有帶金鑰就只看金鑰）
 → 400 {"error"}                    不是 Threads 的網址、找不到貼文、沒有影片（或要登入才看得到）
 → 429 {"error","retry_after":10}   同一個 IP 10 秒只能查一次（不管成功與否），回應帶 Retry-After
 → 503 {"error"}                    Threads 連不上

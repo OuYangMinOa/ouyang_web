@@ -92,6 +92,28 @@ async fn each_account_has_its_own_key() {
 }
 
 #[tokio::test]
+async fn web_page_uses_the_login_session() {
+    let app = app().await;
+    let alice = login_user(&app, "alice").await;
+    let path = "/api/threads/video?url=https%3A%2F%2Fexample.com%2Ft%2Fabc";
+
+    // 有帶金鑰就只看金鑰：錯的金鑰不會改用登入的帳號
+    let request = Request::get(path).header("cookie", &alice).header("x-threads-key", "nope");
+    let response = app.router.clone().oneshot(request.body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // 沒有金鑰、有登入就過得了驗證（網址不對才回 400）
+    let reply = app.get(path, Some(&alice)).await;
+    assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{}", reply.body);
+    assert_eq!(reply.body["error"], "請貼上 Threads 貼文的網址");
+
+    // 停用的帳號，登入狀態也不能用
+    sqlx::query("UPDATE users SET disabled = 1 WHERE username = 'alice'").execute(&app.state.pool).await.unwrap();
+    let reply = app.get(path, Some(&alice)).await;
+    assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn admin_sets_the_shared_shortcut() {
     let app = app().await;
     let admin = login(&app, "admin").await;

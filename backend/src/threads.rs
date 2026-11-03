@@ -9,6 +9,7 @@
 //!
 //! 只給登入的人用：每個帳號在 `/threads` 頁面拿一把下載金鑰，大家共用同一個捷徑（iCloud 連結由管理員設定），
 //! 捷徑第一次執行時要求貼上金鑰，之後放在 `X-Threads-Key` 標頭送來（不放網址，才不會進到 IP 訪問紀錄）。
+//! 網頁版（`/threads/paste`）不用金鑰，直接用登入的帳號。
 //! 查到影片就記一筆在那個帳號的下載紀錄。每個 IP 10 秒只能查一次。
 
 use std::{
@@ -121,21 +122,11 @@ pub struct Video {
 
 pub async fn video(
     State(state): State<AppState>,
+    user: Option<CurrentUser>,
     headers: HeaderMap,
     Query(query): Query<VideoQuery>,
 ) -> Result<Response, AppError> {
-    // 錯誤訊息都要有「金鑰」兩個字：捷徑看到就刪掉存著的金鑰，下次執行重新詢問
-    let key = headers.get(KEY_HEADER).and_then(|v| v.to_str().ok()).map(str::trim).unwrap_or_default();
-    if key.is_empty() {
-        return Err(AppError::Unauthorized("缺少下載金鑰，請到 ouyang.app/threads 登入後複製"));
-    }
-    let user_id: i64 = sqlx::query_scalar(
-        "SELECT k.user_id FROM threads_keys k JOIN users u ON u.id = k.user_id WHERE k.key = ? AND NOT u.disabled",
-    )
-    .bind(key)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(AppError::Unauthorized("下載金鑰無效，請到 ouyang.app/threads 複製新的金鑰"))?;
+    let user_id = video_user(&state.pool, &headers, user).await?;
 
     if let Err(wait) = state.threads.limiter.check(&client_key(&headers), Instant::now()) {
         let body = json!({ "error": format!("查詢太頻繁，請 {wait} 秒後再試"), "retry_after": wait });
@@ -156,6 +147,23 @@ pub async fn video(
     }
     record_download(&state.pool, user_id, &post).await?;
     Ok(Json(post).into_response())
+}
+
+/// 誰在查：捷徑帶 `X-Threads-Key`，網頁（`/threads/paste`）沒帶金鑰就用登入的帳號。
+/// 有帶金鑰就只看金鑰，錯了不會改用登入的帳號。
+async fn video_user(pool: &SqlitePool, headers: &HeaderMap, user: Option<CurrentUser>) -> Result<i64, AppError> {
+    // 錯誤訊息都要有「金鑰」兩個字：捷徑看到就刪掉存著的金鑰，下次執行重新詢問
+    let key = headers.get(KEY_HEADER).and_then(|v| v.to_str().ok()).map(str::trim).unwrap_or_default();
+    if key.is_empty() {
+        return user.map(|u| u.id).ok_or(AppError::Unauthorized("缺少下載金鑰，請到 ouyang.app/threads 登入後複製"));
+    }
+    sqlx::query_scalar(
+        "SELECT k.user_id FROM threads_keys k JOIN users u ON u.id = k.user_id WHERE k.key = ? AND NOT u.disabled",
+    )
+    .bind(key)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(AppError::Unauthorized("下載金鑰無效，請到 ouyang.app/threads 複製新的金鑰"))
 }
 
 async fn record_download(pool: &SqlitePool, user_id: i64, post: &Post) -> Result<(), AppError> {

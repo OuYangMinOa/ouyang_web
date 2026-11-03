@@ -50,6 +50,7 @@ const QuakePage = lazy(() => import('./weather/QuakePage'))
 const DataMatrixPage = lazy(() => import('./datamatrix/DataMatrixPage'))
 const ThreadsSetup = lazy(() => import('./threads/SetupPage'))
 const ThreadsDownloads = lazy(() => import('./threads/DownloadsPage'))
+const ThreadsPaste = lazy(() => import('./threads/PastePage'))
 
 function Lazy({ page: Page }: { page: ComponentType }) {
   return (
@@ -253,6 +254,7 @@ function App() {
                   }
                 >
                   <Route index element={<Lazy page={ThreadsSetup} />} />
+                  <Route path="paste" element={<Lazy page={ThreadsPaste} />} />
                   <Route path="downloads" element={<Lazy page={ThreadsDownloads} />} />
                 </Route>
                 <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
