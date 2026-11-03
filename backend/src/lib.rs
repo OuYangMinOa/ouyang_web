@@ -19,6 +19,7 @@ pub mod party;
 pub mod puyo;
 pub mod puyo_scores;
 pub mod registration;
+pub mod short_links;
 pub mod tetris;
 pub mod tetris_scores;
 pub mod threads;
@@ -95,6 +96,8 @@ pub struct AppState {
     pub monitor: Arc<monitor::Monitor>,
     /// Threads 影片下載的 HTTP client 和每個 IP 的查詢間隔（見 threads.rs）
     pub threads: Arc<threads::Threads>,
+    /// 短網址每個 IP 最多記幾次點擊（見 short_links.rs）
+    pub short_link_limiter: Arc<visits::VisitLimiter>,
 }
 
 impl AppState {
@@ -123,6 +126,7 @@ impl AppState {
             access_log: Arc::default(),
             monitor: Arc::default(),
             threads: Arc::default(),
+            short_link_limiter: Arc::default(),
         }
     }
 }
@@ -211,6 +215,9 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/threads/setup/shortcut", put(threads::set_shortcut))
         .route("/threads/downloads", get(threads::downloads))
         .route("/threads/downloads/{id}", delete(threads::delete_download))
+        .route("/links", get(short_links::list).post(short_links::create))
+        .route("/links/{id}", get(short_links::get).put(short_links::update).delete(short_links::delete))
+        .route("/links/{id}/stats", get(short_links::stats))
         .route("/nav/pins", get(nav_pins::list))
         .route("/nav/pins/{app}", put(nav_pins::set))
         .fallback(api_not_found);
@@ -224,6 +231,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
     let recorder = access_log::Recorder::new(state.clone(), static_dir);
     Router::new()
         .nest("/api", api)
+        // 短網址不放在 /api 底下，網址才短
+        .route("/s/{code}", get(short_links::follow))
         .fallback_service(spa)
         // 在 /api 和前端之前攔下 `.env`（含 `/api/.env`），IP 訪問紀錄在外層，所以也會記到
         .layer(middleware::from_fn_with_state(state.clone(), honeypot::intercept))

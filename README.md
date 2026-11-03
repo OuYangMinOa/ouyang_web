@@ -423,6 +423,28 @@ DELETE /api/threads/downloads/{id}
   非公開格式，Meta 改版時要跟著調整。沒登入看不到的內容抓不到，例如引用了限制瀏覽的貼文（`quoted_attachment_post_unavailable`）。
 - 回傳的是 Meta CDN 的網址，帶簽章、幾天後失效，不用 cookie 就能下載；影片不經過我們的伺服器。
 
+## 短網址
+
+`/links`（只有登入的人看得到）：把長網址變成 `https://ouyang.app/s/<代碼>`，詳細頁有 QR Code（複製、分享、下載 PNG／SVG）和點擊統計。
+後端在 `backend/src/short_links.rs`，前端在 `frontend/src/links/`，QR Code 沿用小工具的 `tools/qrcode/matrix.ts`。
+
+```
+GET    /s/{code}                  303 跳到目的網址並記一筆點擊；要登入的短網址沒登入時導到 /login?next=/s/{code}；找不到回 404
+GET    /api/links                 自己的短網址（含點擊數、不同 IP 數、最後一次），新的在前
+POST   /api/links                 {"url","code","title","require_login"}  →  201   code 空的就隨機產生；撞到別人的回 409
+GET    /api/links/{id}
+PUT    /api/links/{id}            {"url","title","require_login"}   代碼不能改，印出去的 QR Code 才不會失效
+DELETE /api/links/{id}            點擊紀錄一起刪掉
+GET    /api/links/{id}/stats      {"link","ips":[…],"clicks":[…],"days":[{day,clicks}]}   前 300 個 IP、最近 300 次、最近 30 天每天的次數
+```
+
+- 隨機代碼 4 碼，用小寫英文加數字並去掉 0 o 1 l i；撞到就重抽，一直撞才多一碼。自訂代碼是 2～32 個英數字、`-`、`_`，大小寫有分。
+- 網址只接受 http／https，沒寫 scheme 當 https。每個帳號最多 500 個，只看得到、改得到自己的（別人的回 404）。
+- 「要登入」只是要求登入本站任何帳號，不限建立的人。登入頁看到 `?next=`（只接受站內路徑）會在登入後整頁跳過去，交給後端處理。
+- 每一次跳轉記下 IP（Traefik 的 X-Forwarded-For）、帳號、User-Agent 和 Referer，存在 `short_link_clicks`，保留 180 天。
+  跳轉帶 `Cache-Control: no-store`，瀏覽器不會快取，每次都算得到。同一個 IP 10 分鐘超過 200 次的部分照樣跳轉但不記。
+- 本機開發時 Vite 也把 `/s/` proxy 到後端。
+
 ## IP 訪問紀錄
 
 「系統管理 › IP 訪問紀錄」（`/admin/access`，需要 `admin.users`）：全站每個請求的來源 IP、方法、路徑、狀態碼、花費時間、登入的帳號和 User-Agent，

@@ -53,6 +53,9 @@ const DataMatrixPage = lazyPage(() => import('./datamatrix/DataMatrixPage'))
 const ThreadsSetup = lazyPage(() => import('./threads/SetupPage'))
 const ThreadsDownloads = lazyPage(() => import('./threads/DownloadsPage'))
 const ThreadsPaste = lazyPage(() => import('./threads/PastePage'))
+// 詳細頁帶著產生 QR Code 的 bwip-js
+const LinksPage = lazyPage(() => import('./links/LinksPage'))
+const LinkPage = lazyPage(() => import('./links/LinkPage'))
 
 function Lazy({ page: Page }: { page: ComponentType }) {
   return (
@@ -258,6 +261,17 @@ function App() {
                   <Route index element={<Lazy page={ThreadsSetup} />} />
                   <Route path="paste" element={<Lazy page={ThreadsPaste} />} />
                   <Route path="downloads" element={<Lazy page={ThreadsDownloads} />} />
+                </Route>
+                <Route
+                  path="/links"
+                  element={
+                    <RequireAuth>
+                      <AppLayout />
+                    </RequireAuth>
+                  }
+                >
+                  <Route index element={<Lazy page={LinksPage} />} />
+                  <Route path=":id" element={<Lazy page={LinkPage} />} />
                 </Route>
                 <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
                 <Route path="/login" element={<Login />} />
