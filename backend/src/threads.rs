@@ -6,7 +6,10 @@
 //! 這是非公開的格式，Meta 改版時要跟著調整。沒登入看不到的內容（例如引用了限制瀏覽的貼文）抓不到。
 //!
 //! CDN 網址帶簽章和到期時間（幾天），拿到後要盡快下載，不用 cookie 也能直接抓。
-//! 每個 IP 10 秒只能查一次。
+//!
+//! 只給登入的人用：每個帳號在 `/threads` 頁面拿一把下載金鑰，大家共用同一個捷徑（iCloud 連結由管理員設定），
+//! 捷徑第一次執行時要求貼上金鑰，之後放在 `X-Threads-Key` 標頭送來（不放網址，才不會進到 IP 訪問紀錄）。
+//! 查到影片就記一筆在那個帳號的下載紀錄。每個 IP 10 秒只能查一次。
 
 use std::{
     collections::HashMap,
@@ -16,15 +19,19 @@ use std::{
 
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use reqwest::{Url, redirect};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sqlx::SqlitePool;
 
-use crate::{AppError, AppState, auth::client_key};
+use crate::{
+    AppError, AppState,
+    auth::{AdminUsers, CurrentUser, Require, client_key, random_token},
+};
 
 const USER_AGENT: &str = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 const HOSTS: &[&str] = &["threads.com", "www.threads.com", "threads.net", "www.threads.net"];
@@ -32,6 +39,12 @@ const HOSTS: &[&str] = &["threads.com", "www.threads.com", "threads.net", "www.t
 const COOLDOWN: Duration = Duration::from_secs(10);
 /// 一則貼文的頁面大約 600 KB
 const MAX_PAGE_BYTES: usize = 8 * 1024 * 1024;
+const KEY_HEADER: &str = "x-threads-key";
+const SHORTCUT_SETTING: &str = "threads_shortcut_url";
+const SHORTCUT_PREFIX: &str = "https://www.icloud.com/shortcuts/";
+/// 每個帳號留最近幾筆下載紀錄；說明文字只存前面一段
+const MAX_DOWNLOADS: i64 = 500;
+const MAX_CAPTION_CHARS: usize = 300;
 
 pub struct Threads {
     http: reqwest::Client,
@@ -111,6 +124,19 @@ pub async fn video(
     headers: HeaderMap,
     Query(query): Query<VideoQuery>,
 ) -> Result<Response, AppError> {
+    // 錯誤訊息都要有「金鑰」兩個字：捷徑看到就刪掉存著的金鑰，下次執行重新詢問
+    let key = headers.get(KEY_HEADER).and_then(|v| v.to_str().ok()).map(str::trim).unwrap_or_default();
+    if key.is_empty() {
+        return Err(AppError::Unauthorized("缺少下載金鑰，請到 ouyang.app/threads 登入後複製"));
+    }
+    let user_id: i64 = sqlx::query_scalar(
+        "SELECT k.user_id FROM threads_keys k JOIN users u ON u.id = k.user_id WHERE k.key = ? AND NOT u.disabled",
+    )
+    .bind(key)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::Unauthorized("下載金鑰無效，請到 ouyang.app/threads 複製新的金鑰"))?;
+
     if let Err(wait) = state.threads.limiter.check(&client_key(&headers), Instant::now()) {
         let body = json!({ "error": format!("查詢太頻繁，請 {wait} 秒後再試"), "retry_after": wait });
         return Ok(
@@ -128,16 +154,159 @@ pub async fn video(
     if post.videos.is_empty() {
         return Err(AppError::BadRequest("這則貼文沒有影片，或要登入才看得到".into()));
     }
+    record_download(&state.pool, user_id, &post).await?;
     Ok(Json(post).into_response())
 }
+
+async fn record_download(pool: &SqlitePool, user_id: i64, post: &Post) -> Result<(), AppError> {
+    let url = if post.author.is_empty() {
+        format!("https://www.threads.com/t/{}", post.code)
+    } else {
+        format!("https://www.threads.com/@{}/post/{}", post.author, post.code)
+    };
+    let caption: String = post.caption.chars().take(MAX_CAPTION_CHARS).collect();
+    sqlx::query("INSERT INTO threads_downloads (user_id, url, author, caption, video_count) VALUES (?, ?, ?, ?, ?)")
+        .bind(user_id)
+        .bind(url)
+        .bind(&post.author)
+        .bind(caption)
+        .bind(post.videos.len() as i64)
+        .execute(pool)
+        .await?;
+    sqlx::query(
+        "DELETE FROM threads_downloads WHERE user_id = ? AND id NOT IN
+           (SELECT id FROM threads_downloads WHERE user_id = ? ORDER BY id DESC LIMIT ?)",
+    )
+    .bind(user_id)
+    .bind(user_id)
+    .bind(MAX_DOWNLOADS)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+// ---- /threads 頁面 ----
+
+#[derive(Serialize)]
+pub struct Setup {
+    pub key: String,
+    /// 共用捷徑的 iCloud 連結，管理員還沒設定就是 null
+    pub shortcut_url: Option<String>,
+}
+
+/// 自己的金鑰（第一次來就產生一把）和捷徑連結
+pub async fn setup(State(state): State<AppState>, user: CurrentUser) -> Result<Json<Setup>, AppError> {
+    sqlx::query("INSERT INTO threads_keys (user_id, key) VALUES (?, ?) ON CONFLICT (user_id) DO NOTHING")
+        .bind(user.id)
+        .bind(random_token()?)
+        .execute(&state.pool)
+        .await?;
+    let key = sqlx::query_scalar("SELECT key FROM threads_keys WHERE user_id = ?")
+        .bind(user.id)
+        .fetch_one(&state.pool)
+        .await?;
+    Ok(Json(Setup { key, shortcut_url: shortcut_url(&state.pool).await? }))
+}
+
+/// 換一把新的金鑰，舊的馬上失效（金鑰外流時用）
+pub async fn reset_key(State(state): State<AppState>, user: CurrentUser) -> Result<Json<Setup>, AppError> {
+    sqlx::query(
+        "INSERT INTO threads_keys (user_id, key) VALUES (?, ?)
+         ON CONFLICT (user_id) DO UPDATE SET key = excluded.key, created_at = excluded.created_at",
+    )
+    .bind(user.id)
+    .bind(random_token()?)
+    .execute(&state.pool)
+    .await?;
+    setup(State(state), user).await
+}
+
+async fn shortcut_url(pool: &SqlitePool) -> Result<Option<String>, AppError> {
+    let url: Option<String> = sqlx::query_scalar("SELECT value FROM site_settings WHERE key = ?")
+        .bind(SHORTCUT_SETTING)
+        .fetch_optional(pool)
+        .await?;
+    Ok(url.filter(|url| !url.is_empty()))
+}
+
+#[derive(Deserialize)]
+pub struct ShortcutUpdate {
+    pub url: String,
+}
+
+/// 管理員設定共用捷徑的 iCloud 連結；空字串是清掉
+pub async fn set_shortcut(
+    State(state): State<AppState>,
+    _: Require<AdminUsers>,
+    Json(input): Json<ShortcutUpdate>,
+) -> Result<StatusCode, AppError> {
+    let url = input.url.trim();
+    let id = url.strip_prefix(SHORTCUT_PREFIX).unwrap_or_default();
+    if !url.is_empty() && (id.is_empty() || !id.bytes().all(|b| b.is_ascii_alphanumeric())) {
+        return Err(AppError::BadRequest(format!("請貼上 {SHORTCUT_PREFIX}… 的捷徑連結")));
+    }
+    sqlx::query(
+        "INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(SHORTCUT_SETTING)
+    .bind(url)
+    .execute(&state.pool)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct Download {
+    pub id: i64,
+    pub url: String,
+    pub author: String,
+    pub caption: String,
+    pub video_count: i64,
+    pub created_at: String,
+}
+
+/// 自己的下載紀錄，新的在前
+pub async fn downloads(State(state): State<AppState>, user: CurrentUser) -> Result<Json<Vec<Download>>, AppError> {
+    let rows = sqlx::query_as::<_, Download>(
+        "SELECT id, url, author, caption, video_count, created_at FROM threads_downloads
+         WHERE user_id = ? ORDER BY id DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(rows))
+}
+
+/// 刪掉自己的一筆紀錄（別人的回 404）
+pub async fn delete_download(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, AppError> {
+    let result = sqlx::query("DELETE FROM threads_downloads WHERE id = ? AND user_id = ?")
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---- 解析 ----
 
 fn is_threads_url(url: &Url) -> bool {
     url.scheme() == "https" && url.host_str().is_some_and(|host| HOSTS.contains(&host))
 }
 
 /// 使用者貼上的網址 → 要抓的頁面。只接受 Threads 的網址，查詢字串（追蹤參數）拿掉。
+/// 分享時可能連貼文內容一起送來，所以從整段文字裡找第一個像 Threads 網址的部分。
 fn page_url(input: &str) -> Option<Url> {
-    let input = input.trim();
+    input.split_whitespace().find_map(parse_page_url)
+}
+
+fn parse_page_url(input: &str) -> Option<Url> {
     let input = if input.contains("://") { input.to_owned() } else { format!("https://{input}") };
     let mut url = Url::parse(&input).ok()?;
     if url.scheme() == "http" {
@@ -268,6 +437,14 @@ mod tests {
             Some("https://www.threads.com/@someone/post/DfO0iKfiWfz")
         );
         assert_eq!(page("http://threads.com/t/ABC").as_deref(), Some("https://www.threads.com/t/ABC"));
+        assert_eq!(
+            page(
+                "笑死 https://www.threads.com/@a/post/X?xmt=1
+來自 Threads"
+            )
+            .as_deref(),
+            Some("https://www.threads.com/@a/post/X")
+        );
         for bad in [
             "https://evil.com/@a/post/X",
             "https://threads.com.evil.com/t/X",

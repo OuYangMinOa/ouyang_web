@@ -9,10 +9,10 @@ const SEARCH_FROM = 10
 
 /** 拆成獨立元件：每次打開都是新的，搜尋字會清掉 */
 function LauncherPanel({ id, current, onClick }: { id: string; current?: AppInfo; onClick: (e: MouseEvent) => void }) {
-  const { can } = useAuth()
+  const auth = useAuth()
   const { pathname } = useLocation()
   const [query, setQuery] = useState('')
-  const apps = visibleApps(can)
+  const apps = visibleApps(auth)
   const keyword = query.trim().toLowerCase()
   const shown = keyword ? apps.filter((app) => `${app.name} ${app.blurb}`.toLowerCase().includes(keyword)) : apps
 

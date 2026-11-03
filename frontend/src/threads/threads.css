@@ -1,0 +1,56 @@
+/* ---- Threads 影片下載 ---- */
+
+.threads {
+  max-width: 720px;
+  min-width: 0;
+}
+.threads .card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.threads .card p {
+  margin: 0;
+}
+
+/* 安裝連結做成按鈕的樣子 */
+.threads-install {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  text-decoration: none;
+}
+
+.threads-key {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  font-family: var(--mono);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.threads-steps {
+  margin: 0;
+  padding-left: 1.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 說明文字太長時只顯示兩行 */
+.threads-post {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
