@@ -11,6 +11,8 @@ use super::{SourceStatus, get_json};
 use crate::{AppError, AppState};
 
 const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+/// 背景重抓的間隔，比 TTL 短，快取才不會過期
+pub(super) const REFRESH_EVERY: Duration = Duration::from_secs(13 * 60);
 const FORECAST_URL: &str = "https://api.open-meteo.com/v1/forecast";
 const AIR_URL: &str = "https://air-quality-api.open-meteo.com/v1/air-quality";
 
@@ -82,7 +84,7 @@ pub async fn forecast(State(state): State<AppState>) -> Result<Json<Arc<Forecast
     Ok(Json(report))
 }
 
-async fn build_report(http: &reqwest::Client) -> Result<ForecastReport, String> {
+pub(super) async fn build_report(http: &reqwest::Client) -> Result<ForecastReport, String> {
     let join = |f: fn(&City) -> f64| CITIES.iter().map(|c| f(c).to_string()).collect::<Vec<_>>().join(",");
     let (lats, lons) = (join(|c| c.lat), join(|c| c.lon));
     let forecast_url = format!(

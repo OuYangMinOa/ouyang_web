@@ -76,6 +76,34 @@ export type AccessRequest = {
   created_at: string
 }
 
+/** 假的 .env 被拿走的紀錄，見後端 honeypot.rs */
+export type HoneypotIp = {
+  ip: string
+  hits: number
+  first_at: string
+  last_at: string
+  paths: string[]
+  users: string[]
+  user_agent: string
+}
+
+export type HoneypotReport = {
+  summary: { hits: number; ips: number; last_day: number; last_day_ips: number }
+  ips: HoneypotIp[]
+  paths: { path: string; hits: number; ips: number }[]
+}
+
+export type HoneypotHit = {
+  id: number
+  ip: string
+  method: string
+  path: string
+  query: string
+  username: string | null
+  user_agent: string
+  created_at: string
+}
+
 /** 自行註冊的申請，見後端 registration.rs */
 export type Registration = {
   id: number

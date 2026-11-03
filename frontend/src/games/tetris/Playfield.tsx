@@ -136,7 +136,8 @@ export function Playfield({ game, running, keys, handling, sound, hooks, overlay
       if (g && running && !g.over) {
         // 從按下的那一刻算時間，不會因為一幀比較長就提早多走一格
         const h = held.current
-        const { das, arr } = latest.current.handling
+        const { das, arr, soft } = latest.current.handling
+        g.softDropMs = soft
         const t = h ? now - h.since - das : -1
         if (h && t >= 0) {
           if (arr === 0) {

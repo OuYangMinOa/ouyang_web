@@ -44,7 +44,7 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/games`、`/admin/system` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 回報與許願
 
@@ -168,6 +168,7 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 - 房間只放在記憶體：**重啟或換版時進行中的對局會中斷**。沒人連線 2 分鐘就收掉，最多 200 間。
 - 對局中斷線 10 秒判出局；重新整理後手上沒有這局的盤面，會直接認輸、等下一局。
 - 單人模式每消 10 行或每玩 1 分鐘升一級（看哪個先到），沒有上限；分數照官方規則（消行、spin、B2B、連擊、全消乘上等級，加上下落格數）。
+  下落速度第 1 級 1 秒一格、每級乘 0.82（第 29 級約 4ms 一格），第 30 級起是 20G：方塊出生、移動、旋轉後都直接落到底，只能靠鎖定延遲調整。對戰的等級最高 15，不會到 20G。
   登入的人的成績會上傳到排行榜（`backend/src/tetris_scores.rs`，每個帳號只留最高分）：
 
   ```
@@ -184,7 +185,7 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
   加上低通濾波和一點回音讓聲音柔和；速度跟著等級變快，按 M 或按鈕開關。
 - 音效也是即時合成（`tetris/sfx.ts`），開關和音樂分開：移動、旋轉、保留、鎖定、直接落下、消行、垃圾行升起各有一個短音。
   旋轉後卡在 spin 的位置會多一聲高音的「叮」，還沒放下就知道卡對了。引擎把要發的音效放進 `sounds`，盤面每一幀取走，同一幀一樣的只響一次。
-- 按下加速下落的瞬間先掉一格，之後每 30ms 一格。
+- 按下加速下落的瞬間先掉一格，之後照操作手感設定的間隔（預設 30ms）一格。
 - 快捷鍵可以自訂（`games/shared/keys.ts`、`games/shared/KeyEditor.tsx`，和魔法氣泡共用），每個動作最多兩個鍵。沒登入存在瀏覽器，有登入存在帳號（`backend/src/game_settings.rs`），
   換裝置也一樣；帳號還沒存過時沿用瀏覽器的設定：
 
@@ -195,10 +196,11 @@ GET  /api/games/tetris/rooms/{code}/ws?player=<id>&name=<暱稱>           升�
 
 - 操作手感也可以調（`games/shared/handling.ts`、`games/shared/HandlingEditor.tsx`）：DAS 是左右鍵按住多久開始連續移動（50～400 ms，預設 180），
   ARR 是之後每格的間隔（0～200 ms，預設 40，0 是直接滑到底）。按下先走一格、按住滿 DAS 走第二格，時間從按下的那一刻算，不受每幀長短影響。
+  加速下落間隔（soft，0～100 ms，預設 30）是按住下時每格的間隔，0 是瞬間落到底但不鎖定，按住時移動、旋轉後也會馬上落到底（和 20G 一樣）。
   存法和快捷鍵一樣，但分開存（`game_handling` 表）：
 
   ```
-  GET /api/games/tetris/handling  →  {"handling":{"das":180,"arr":40}|null}
+  GET /api/games/tetris/handling  →  {"handling":{"das":180,"arr":40,"soft":30}|null}   舊資料沒有 soft 時當作 30
   PUT /api/games/tetris/handling  {"handling":{…}|null}  →  204   超出範圍回 400
   ```
 
@@ -433,10 +435,26 @@ GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可
 
 - 用 middleware 記錄，IP 跟登入限制一樣取 Traefik 的 X-Forwarded-For。前端打包出來的靜態檔（`STATIC_DIR` 最上層有的檔案和資料夾）、
   `/api/health` 和這個頁面自己的查詢不記；不存在的路徑（掃描器找的 `/wp-login.php`、`/.env`）會記。
-  前端沒有點開頭的路徑，所以 `/.env`、`/.git/config` 這類直接回 404，不會拿到 index.html（`lib.rs` 的 `hide_dot_paths`）。
+  前端沒有點開頭的路徑，所以 `/.git/config` 這類直接回 404，不會拿到 index.html（`lib.rs` 的 `hide_dot_paths`）；`.env` 會拿到假的設定檔，見下面的 .env 蜜罐。
 - 請求本身不碰資料庫：先放在記憶體，背景每 2 秒整批寫進 `access_logs`，帳號也是那時才從 session 查（登入那一次還沒有 cookie、
   登出那一次 session 已刪，都算訪客）。關機時會寫完剩下的，被強制結束的話最後幾秒會遺失。
 - 保留 30 天，每小時清一次。同一個 IP 10 分鐘超過 1000 筆的部分不記，避免被灌爆。
+
+## .env 蜜罐
+
+掃描器常來找 `/.env`、`/.env.local`、`/api/.env` 這類設定檔想偷資料庫密碼和金鑰。這些網址會回一份假的設定檔，並記下是誰拿走的，
+在「系統管理 › .env 蜜罐」（`/admin/honeypot`，需要 `admin.users`）看：每個 IP 來了幾次、找過哪些路徑、裝置，展開看每一次的時間和網址。程式在 `backend/src/honeypot.rs`。
+
+```
+GET /api/admin/honeypot            統計、最近的 300 個 IP、被找最多次的 30 個路徑
+GET /api/admin/honeypot/hits?ip=   最近 500 次（可以只看某個 IP）
+```
+
+- 路徑最後一段是 `.env` 或 `.env.<任何字>` 都算，在哪一層底下都一樣（`/laravel/.env`、`/.env.production`…），任何 method 都回同一份。
+  用最外層的 middleware 攔，所以 `/api/.env` 也會被攔到；`.envrc`、`/.git/config` 這類照舊回 404。
+- 假檔案裡的主機是連不到的內網 IP，密碼和金鑰在每次啟動時隨機產生，跟真正的設定無關，也不在 git 裡。同一個容器裡每次拿到的內容一樣，看起來才像真的。
+- 紀錄存在 `honeypot_hits`，保留 180 天；帳號是當時有登入的人（通常是管理員自己點開來看）。同一個 IP 10 分鐘超過 200 筆的部分不記，照樣回假檔案。
+- IP 訪問紀錄也會記到這些請求，狀態碼是 200。
 
 ## 主機監控
 
@@ -501,13 +519,14 @@ GET /api/music/s/{hex}.{ext}   同上，分享用：檔名（不含副檔名）�
 `/weather`：總覽、`/weather/typhoon` 颱風、`/weather/forecast` 全台天氣、`/weather/quake` 地震。後端在 `backend/src/weather/`，外部資料都由後端抓、整理過再給前端。
 
 ```
-GET /api/weather/typhoons      颱風（各來源合併）  快取 10 分鐘
-GET /api/weather/forecast      22 縣市天氣與空氣品質  快取 15 分鐘
-GET /api/weather/quakes        最新速報、各國地震報告、速報連線狀態  報告快取 3 分鐘
+GET /api/weather/typhoons      颱風（各來源合併）  快取 10 分鐘，背景每 8 分鐘重抓
+GET /api/weather/forecast      22 縣市天氣與空氣品質  快取 15 分鐘，背景每 13 分鐘重抓
+GET /api/weather/quakes        最新速報、各國地震報告、速報連線狀態  報告快取 3 分鐘，背景每 2 分鐘重抓
 GET /api/weather/quakes/ws     即時速報  server → client  {type:"snapshot", eew:[...]}、{type:"eew", eew}
 ```
 
-- 有人來看才抓，同一時間只有一個請求真的打外部 API；外部來源掛掉時繼續回上一次成功的資料，頁尾標出哪個來源暫時連不上。
+- 伺服器啟動後就在背景定時重抓（間隔比快取時間短），有人來看時直接回現成的資料，不用等外部 API（颱風一次要好幾秒）。
+  背景沒跟上、快取過期時才由請求自己去抓，同一時間只有一個請求真的打外部 API；外部來源掛掉時繼續回上一次成功的資料，頁尾標出哪個來源暫時連不上。
 - **颱風・官方路徑**：日本氣象廳（過去路徑、強度、70% 機率圓、暴風圈）、GDACS 整理的 JTWC／NHC（全球，含不確定範圍）、中央氣象署（要金鑰）。
   各來源的颱風依目前位置合併（600 公里內視為同一個）。GDACS 在颱風消散後還會掛一陣子，美國那邊用 NHC 自己的清單過濾。
 - **颱風・AI 系集**：Google DeepMind Weather Lab 的系集預報（`OPER` 模型，每 6 小時起報，發布比起報晚 6～8 小時），平均路徑加上 50 個成員。即時資料受其使用條款約束，頁面上有標示。
@@ -581,6 +600,12 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 - `main` 受保護：只能透過 PR 合併，且 CI 的 `test` 必須通過，不能 force push 或刪除。
 - 對 `dev` / `main` 開的 PR 只會跑測試，merge 後才會建置並部署。
 
+CI 的快取：
+- Docker 層快取存在 GHCR 的 `buildcache-staging` / `buildcache-prod`，先讀自己環境的，沒有再讀另一個環境的。
+  沒放在 Actions 快取：整個 repo 只有 10 GB，Docker 層快取一份就要好幾 GB，超過上限時 GitHub 會一直清掉舊快取。
+- Rust 和 npm 的快取在 Actions 快取。Rust 快取只在 push 到 `dev` / `main` 時存，PR 只讀。
+- `build` job 超過 15 分鐘會直接失敗（平常 2–5 分鐘），通常是下載 layer 卡住，重跑就好。
+
 ### 不斷線部署（Traefik + docker-rollout）
 
 ```
@@ -610,7 +635,7 @@ Traefik 每秒主動檢查 health，看到 503 就把它移出負載平衡，之
 `/api/health` 會回傳 `commit`，可以用來確認目前是哪一版在接流量。
 
 每次部署成功後會清掉同環境的舊 image：伺服器上只留這次的加上前 2 版（`deploy.sh` 的 `KEEP_PREVIOUS_IMAGES`），
-GHCR 上留最近 10 版（workflow 的 `cleanup` job）。
+GHCR 上留最近 10 版（workflow 的 `cleanup` job，同時清掉沒有 tag 的舊版，例如被覆蓋掉的 `buildcache-*`）。
 
 回滾：在伺服器上改 `.env` 的 `IMAGE` 再 rollout（本機現有的版本用 `docker image ls` 看，更舊的 tag 在 GitHub 的 Packages 頁面，要先 `docker login ghcr.io` 才拉得到）：
 

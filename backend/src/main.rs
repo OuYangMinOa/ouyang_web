@@ -63,6 +63,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     state.weather = Arc::new(Weather::from_env());
     // 地震速報要一直連著，不等有人來看；本機的 relay 見 weather/quake.rs
     weather::quake::spawn(state.weather.clone(), env::var("EEW_RELAY_URL").ok());
+    // 颱風、天氣、地震報告在背景先抓好，有人來看時直接回快取
+    weather::spawn_refresh(state.weather.clone());
     access_log::spawn(state.access_log.clone(), pool.clone());
     // 容器裡要讀主機的 /proc（compose.yaml 掛在 /host/proc），本機開發直接讀 /proc
     let host_proc = env::var("HOST_PROC").unwrap_or_else(|_| "/proc".into());

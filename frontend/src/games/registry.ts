@@ -1,4 +1,5 @@
-import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
+import type { ComponentType, LazyExoticComponent } from 'react'
+import { lazyPage } from '../lazyPage'
 import type { Song } from './shared/music'
 
 /** 側邊欄的分組，順序就是顯示順序 */
@@ -27,7 +28,7 @@ export const GAMES: GameInfo[] = [
     blurb: '最多 99 人同場的大逃殺：消行攻擊、KO 搶徽章，活到最後的人獲勝。人不夠由電腦補位。',
     tags: ['多人', '線上', '練習'],
     category: '多人對戰',
-    component: lazy(() => import('./tetris')),
+    component: lazyPage(() => import('./tetris')),
   },
   {
     id: 'puyo',
@@ -36,7 +37,7 @@ export const GAMES: GameInfo[] = [
     blurb: '同色四顆連起來就消掉，疊出大連鎖！單人模式衝排行榜、和電腦一對一，或開房間和朋友打最多 99 人的大逃殺。',
     tags: ['單人', '電腦', '多人', '線上'],
     category: '多人對戰',
-    component: lazy(() => import('./puyo')),
+    component: lazyPage(() => import('./puyo')),
   },
   {
     id: 'undercover',
@@ -45,7 +46,7 @@ export const GAMES: GameInfo[] = [
     blurb: '大家拿到相近的兩個詞，輪流用一句話描述，再投票找出臥底。3～10 人，可以加電腦，也能當面玩。',
     tags: ['多人', '線上', '電腦'],
     category: '派對',
-    component: lazy(() => import('./undercover')),
+    component: lazyPage(() => import('./undercover')),
     music: () => import('./undercover/song'),
   },
   {
@@ -55,7 +56,7 @@ export const GAMES: GameInfo[] = [
     blurb: '台灣玩法的大老二：4 人輪流出牌，先出完的人贏。開房間邀朋友，人不夠由電腦補位，規則細節可以調。',
     tags: ['多人', '線上', '電腦'],
     category: '派對',
-    component: lazy(() => import('./bigtwo')),
+    component: lazyPage(() => import('./bigtwo')),
     music: () => import('./bigtwo/song'),
   },
   {
@@ -65,7 +66,7 @@ export const GAMES: GameInfo[] = [
     blurb: '輪流畫圖，其他人在聊天室猜答案，越早猜中分數越高。2～10 人，手機也能畫。',
     tags: ['多人', '線上'],
     category: '派對',
-    component: lazy(() => import('./draw')),
+    component: lazyPage(() => import('./draw')),
     music: () => import('./draw/song'),
   },
   {
@@ -75,7 +76,7 @@ export const GAMES: GameInfo[] = [
     blurb: '三段速度、會跑的蘋果，還有吃到就頭尾互換的「來回」模式。',
     tags: ['單人'],
     category: '單人',
-    component: lazy(() => import('./snake')),
+    component: lazyPage(() => import('./snake')),
     music: () => import('./snake/song'),
   },
   {
@@ -85,7 +86,7 @@ export const GAMES: GameInfo[] = [
     blurb: '先連成五子的一方獲勝。',
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
-    component: lazy(() => import('./gomoku')),
+    component: lazyPage(() => import('./gomoku')),
     music: () => import('./gomoku/song'),
   },
   {
@@ -95,7 +96,7 @@ export const GAMES: GameInfo[] = [
     blurb: '棋子從上方落下，先在橫、直、斜連成四子的一方獲勝。',
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
-    component: lazy(() => import('./connect4')),
+    component: lazyPage(() => import('./connect4')),
     music: () => import('./connect4/song'),
   },
   {
@@ -105,7 +106,7 @@ export const GAMES: GameInfo[] = [
     blurb: '楚河漢界，將死對方的帥／將。',
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
-    component: lazy(() => import('./xiangqi')),
+    component: lazyPage(() => import('./xiangqi')),
     music: () => import('./xiangqi/song'),
   },
   {
@@ -115,7 +116,7 @@ export const GAMES: GameInfo[] = [
     blurb: '完整規則：入堡、吃過路兵、升變。',
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
-    component: lazy(() => import('./chess')),
+    component: lazyPage(() => import('./chess')),
     music: () => import('./chess/song'),
   },
   {
@@ -125,7 +126,7 @@ export const GAMES: GameInfo[] = [
     blurb: '夾住就翻面，最後棋子多的一方獲勝。',
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
-    component: lazy(() => import('./reversi')),
+    component: lazyPage(() => import('./reversi')),
     music: () => import('./reversi/song'),
   },
   {
@@ -135,7 +136,7 @@ export const GAMES: GameInfo[] = [
     blurb: '各自擺好 5 艘船，輪流朝對方海域開砲，先擊沉整支艦隊的人獲勝。線上對戰的佈局不經過伺服器。',
     tags: ['電腦', '本地', '線上'],
     category: '雙人對戰',
-    component: lazy(() => import('./battleship')),
+    component: lazyPage(() => import('./battleship')),
     music: () => import('./battleship/song'),
   },
   {
@@ -145,7 +146,7 @@ export const GAMES: GameInfo[] = [
     blurb: '根據 A／B 提示推理四位不重複數字，結束後分析你的每一步。也能各藏一組數字，和電腦或朋友線上對戰。',
     tags: ['你猜', '電腦猜', '對戰', '線上'],
     category: '雙人對戰',
-    component: lazy(() => import('./ab')),
+    component: lazyPage(() => import('./ab')),
     music: () => import('./ab/song'),
   },
   {
@@ -155,7 +156,7 @@ export const GAMES: GameInfo[] = [
     blurb: '四種難度，支援筆記與提示。',
     tags: ['單人'],
     category: '單人',
-    component: lazy(() => import('./sudoku')),
+    component: lazyPage(() => import('./sudoku')),
     music: () => import('./sudoku/song'),
   },
   {
@@ -165,7 +166,7 @@ export const GAMES: GameInfo[] = [
     blurb: '第一下保證安全，手機可切換插旗模式。也能開房間線上競速：大家同一個盤面、地雷只在伺服器上，比誰先解開。',
     tags: ['單人', '線上', '電腦'],
     category: '多人對戰',
-    component: lazy(() => import('./minesweeper')),
+    component: lazyPage(() => import('./minesweeper')),
     music: () => import('./minesweeper/song'),
   },
 ]

@@ -291,7 +291,7 @@ export default function QuakePage() {
     <div className="weather-page">
       <div className="weather-head">
         <h1>地震</h1>
-        <span className={`live-dot ${live ? 'on' : ''}`}>{live ? '即時連線中' : '重新連線中…'}</span>
+        <span className={`live-status ${live ? 'on' : ''}`}>{live ? '即時連線中' : '重新連線中…'}</span>
       </div>
 
       {active.map((eew) => (
@@ -373,7 +373,7 @@ export default function QuakePage() {
             <ul>
               {data.feeds.map((f) => (
                 <li key={f.path}>
-                  <span className={`live-dot ${f.connected ? 'on' : ''}`}>{f.name}</span>
+                  <span className={`live-status ${f.connected ? 'on' : ''}`}>{f.name}</span>
                   <span className="muted">
                     {f.connected ? (f.via === 'relay' ? '經由 relay' : '直接連線') : (f.last_error ?? '未連線')}
                   </span>
