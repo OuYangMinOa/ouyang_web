@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { OnlinePanel } from '../shared/OnlinePanel'
 import { load, save } from '../shared/storage'
+import { TakebackButton, TakebackNotice } from '../shared/TakebackControls'
 import { GameLayout, Segmented, StatusLine, Toolbar, type Option } from '../shared/ui'
 import { useRoom } from '../shared/useRoom'
 import type { Level } from './ai'
@@ -61,7 +62,7 @@ export default function Gomoku() {
   let canPlay = false
   if (mode === 'ai') canPlay = !result && game.toMove === human
   else if (mode === 'local') canPlay = !result
-  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === game.toMove
+  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === game.toMove && !online.takeback.pending
 
   // 預覽（落子確認）只在同一個局面有效，局面一變就自動失效
   const positionKey = `${mode}:${online.round}:${game.moves.length}`
@@ -152,6 +153,8 @@ export default function Gomoku() {
     tone = 'accent'
   } else if (mode === 'local') {
     status = `輪到${stoneName(game.toMove)}`
+  } else if (mode === 'online' && online.takeback.pending) {
+    status = '悔棋請求中，暫停落子'
   } else if (mine(game.toMove)) {
     status = `輪到你（${stoneName(game.toMove)}）`
     tone = 'accent'
@@ -162,6 +165,13 @@ export default function Gomoku() {
   let ghost: Ghost | null = null
   if (pendingPos !== null) ghost = { pos: pendingPos, color: game.toMove, kind: 'pending' }
   else if (canPlay && hover !== null && !confirmMove) ghost = { pos: hover, color: game.toMove, kind: 'hover' }
+
+  const takebackProps = {
+    takeback: online.takeback,
+    seat: room.seat,
+    active: !result && room.connected && room.peerOnline,
+    send: room.send,
+  }
 
   const blackIsSeat0 = blackSeat(online.round) === 0
   const seatNames: [string, string] = blackIsSeat0 ? ['黑棋（先手）', '白棋（後手）'] : ['白棋（後手）', '黑棋（先手）']
@@ -213,6 +223,7 @@ export default function Gomoku() {
   return (
     <GameLayout side={side}>
       <StatusLine tone={tone}>{status}</StatusLine>
+      {mode === 'online' && <TakebackNotice {...takebackProps} />}
       <div className="board-box">
         <GomokuBoard
           board={game.board}
@@ -232,14 +243,17 @@ export default function Gomoku() {
               再來一局
             </button>
           ) : (
-            <button
-              type="button"
-              className="danger"
-              onClick={resign}
-              disabled={!room.connected || myOnlineColor === null}
-            >
-              認輸
-            </button>
+            <>
+              <TakebackButton {...takebackProps} />
+              <button
+                type="button"
+                className="danger"
+                onClick={resign}
+                disabled={!room.connected || myOnlineColor === null}
+              >
+                認輸
+              </button>
+            </>
           ))
         ) : (
           <>

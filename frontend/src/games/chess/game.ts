@@ -18,6 +18,8 @@ import {
   squareName,
   type Color,
 } from './engine.ts'
+import { isTakebackEvent, Takeback, type TakebackEvent, type TakebackView } from '../shared/takeback.ts'
+import type { Seat } from '../shared/useRoom.ts'
 
 export type DrawReason = 'stalemate' | 'fifty' | 'repetition' | 'material'
 export type Result = { winner: Color; reason: 'checkmate' | 'resign' } | { winner: null; reason: DrawReason }
@@ -98,6 +100,7 @@ export type ChessEvent =
   | { type: 'move'; from: string; to: string; promotion?: PromoLetter }
   | { type: 'resign' }
   | { type: 'restart' }
+  | TakebackEvent
 
 const PROMO_TYPES: Record<string, number> = { q: QUEEN, r: ROOK, b: BISHOP, n: KNIGHT }
 const PROMO_LETTERS = ['', '', 'n', 'b', 'r', 'q'] as const
@@ -122,25 +125,32 @@ export function seatColor(seat: number, round: number): Color {
   return (seat + round) % 2 === 0 ? WHITE : BLACK
 }
 
-export type OnlineState = { round: number; game: ChessGame }
+export type OnlineState = { round: number; game: ChessGame; takeback: TakebackView }
 
 /** 把伺服器的事件序列從頭重播成目前局面；不合法、不是輪到該 seat、或對局結束後的棋步都忽略 */
-export function reduceOnline(events: readonly { seat: number; data: ChessEvent }[]): OnlineState {
+export function reduceOnline(events: readonly { seat: Seat; data: ChessEvent }[]): OnlineState {
   let round = 0
   let game = new ChessGame()
+  const takeback = new Takeback()
   for (const { seat, data } of events) {
     if (!data || typeof data !== 'object') continue
-    if (data.type === 'move') {
+    if (isTakebackEvent(data)) {
+      // ChessGame 會就地修改，悔棋時用剩下的走法重播
+      const plies = takeback.handle(seat, data, !!game.result)
+      if (plies) game = replay(game.played.slice(0, -plies).map((p) => p.move))
+    } else if (data.type === 'move') {
       if (game.result || seatColor(seat, round) !== game.turn) continue
       const m = findMove(game.legal, data.from, data.to, data.promotion)
-      if (m !== null) game.play(m)
+      if (m !== null && game.play(m)) takeback.moved(seat)
     } else if (data.type === 'resign') {
       game.resign(seatColor(seat, round))
+      takeback.reset(false)
     } else if (data.type === 'restart' && game.result) {
       // 只有結束後才接受，兩人同時按「再來一局」時第二個會被忽略
       round++
       game = new ChessGame()
+      takeback.reset(true)
     }
   }
-  return { round, game }
+  return { round, game, takeback: takeback.view() }
 }

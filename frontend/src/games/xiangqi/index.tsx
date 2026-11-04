@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { OnlinePanel } from '../shared/OnlinePanel'
 import { load, save } from '../shared/storage'
+import { TakebackButton, TakebackNotice } from '../shared/TakebackControls'
 import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
 import { useRoom } from '../shared/useRoom'
 import type { Level } from './ai.ts'
@@ -68,7 +69,7 @@ export default function Xiangqi() {
     !result &&
     (mode === 'local' ||
       (mode === 'ai' && pos.turn === playerSide) ||
-      (mode === 'online' && onlineReady && mySide === pos.turn))
+      (mode === 'online' && onlineReady && mySide === pos.turn && !online.takeback.pending))
   const flipped = mode !== 'local' && mySide === BLACK
 
   const legal = useMemo(() => (result ? [] : legalMoves(pos)), [pos, result])
@@ -226,6 +227,7 @@ export default function Xiangqi() {
   } else {
     tone = check ? 'danger' : undefined
     if (thinking) status = `${check}電腦思考中…`
+    else if (mode === 'online' && online.takeback.pending) status = '悔棋請求中，暫停走棋'
     else if (mode === 'local' || mySide === null) status = `${check}輪到${sideName(pos.turn)}`
     else if (pos.turn === mySide) status = `${check}輪到你（${sideName(mySide)}）`
     else status = `${check}等對手下（${sideName(pos.turn)}）`
@@ -233,6 +235,7 @@ export default function Xiangqi() {
 
   const showOverlay = result !== null && dismissed !== game
   const canPlayAgain = mode !== 'online' || room.connected
+  const takebackProps = { takeback: online.takeback, seat: room.seat, active: !result && onlineReady, send: room.send }
 
   const seatNames: [string, string] = redSeat(online.round) === 0 ? ['紅方（先手）', '黑方'] : ['黑方', '紅方（先手）']
 
@@ -299,6 +302,7 @@ export default function Xiangqi() {
   return (
     <GameLayout side={side}>
       <StatusLine tone={tone}>{status}</StatusLine>
+      {mode === 'online' && <TakebackNotice {...takebackProps} />}
       <div className="board-box xiangqi-box">
         <XiangqiBoard
           board={pos.board}
@@ -332,14 +336,17 @@ export default function Xiangqi() {
               再來一局
             </button>
           ) : (
-            <button
-              type="button"
-              className="danger"
-              onClick={() => room.send({ type: 'resign' })}
-              disabled={!onlineReady || mySide === null}
-            >
-              認輸
-            </button>
+            <>
+              <TakebackButton {...takebackProps} />
+              <button
+                type="button"
+                className="danger"
+                onClick={() => room.send({ type: 'resign' })}
+                disabled={!onlineReady || mySide === null}
+              >
+                認輸
+              </button>
+            </>
           )
         ) : (
           <>

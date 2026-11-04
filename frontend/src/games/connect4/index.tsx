@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type KeyboardEvent } from 'react'
 import { OnlinePanel } from '../shared/OnlinePanel'
 import { load, save } from '../shared/storage'
+import { TakebackButton, TakebackNotice } from '../shared/TakebackControls'
 import { GameLayout, Segmented, StatusLine, Toolbar, type Option } from '../shared/ui'
 import { useRoom } from '../shared/useRoom'
 import type { Level } from './ai'
@@ -77,7 +78,7 @@ export default function Connect4() {
   let canPlay = false
   if (mode === 'ai') canPlay = !result && game.toMove === human
   else if (mode === 'local') canPlay = !result
-  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === game.toMove
+  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === game.toMove && !online.takeback.pending
 
   // 預覽（落子確認）只在同一個局面有效，局面一變就自動失效
   const positionKey = `${mode}:${online.round}:${game.moves.length}`
@@ -191,6 +192,9 @@ export default function Connect4() {
   } else if (mode === 'local') {
     status = `輪到${discName(game.toMove)}`
     chip = game.toMove
+  } else if (mode === 'online' && online.takeback.pending) {
+    status = '悔棋請求中，暫停落子'
+    chip = game.toMove
   } else if (mine(game.toMove)) {
     status = `輪到你（${discName(game.toMove)}）`
     tone = 'accent'
@@ -255,12 +259,20 @@ export default function Connect4() {
     </>
   )
 
+  const takebackProps = {
+    takeback: online.takeback,
+    seat: room.seat,
+    active: !result && room.connected && room.peerOnline,
+    send: room.send,
+  }
+
   return (
     <GameLayout side={side}>
       <StatusLine tone={tone}>
         {chip !== null && <Chip disc={chip} />}
         {status}
       </StatusLine>
+      {mode === 'online' && <TakebackNotice {...takebackProps} />}
       <div className="board-box c4-box">
         <Connect4Board
           board={game.board}
@@ -282,14 +294,17 @@ export default function Connect4() {
               再來一局
             </button>
           ) : (
-            <button
-              type="button"
-              className="danger"
-              onClick={resign}
-              disabled={!room.connected || myOnlineColor === null}
-            >
-              認輸
-            </button>
+            <>
+              <TakebackButton {...takebackProps} />
+              <button
+                type="button"
+                className="danger"
+                onClick={resign}
+                disabled={!room.connected || myOnlineColor === null}
+              >
+                認輸
+              </button>
+            </>
           ))
         ) : (
           <>

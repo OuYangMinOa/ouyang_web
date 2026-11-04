@@ -127,6 +127,8 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
   之後新增的多人遊戲也要沿用這個規則。
 - 同一個 player 從別處連進來時，舊連線會收到 `replaced` 錯誤後被關掉，前端不再自動重連（避免兩個分頁互踢），改顯示「在這裡繼續」。
 - 任何一方送出的訊息，伺服器加上 seat 後依序存進歷史並廣播給兩邊（包含送出者），所以兩邊看到的順序完全一樣。
+- 五子棋、四子棋、黑白棋、象棋、西洋棋的線上悔棋要對方同意（`frontend/src/games/shared/takeback.ts`）：事件是 `takeback`、`takeback-accept`、`takeback-decline`、`takeback-cancel`，
+  一樣只在兩端的 reducer 裡處理，後端不用改。退回到提出的人上一次輪到自己的局面（1 或 2 手）；請求中雙方都不能下，被拒絕後要等下一手才能再提，對局結束就不能悔棋。
 - 連線一律先升級，有問題再送 `error` 後關閉（瀏覽器讀不到升級失敗的 HTTP 狀態）：`not_found`、`game_mismatch`、`full`、`bad_request`、`replaced`、`internal`，
   以及送太快（每秒超過 20 則）的 `rate_limited`、太大（data 超過 4KB）的 `too_large`、歷史超過 2000 筆的 `history_full`。
 - 伺服器每 25 秒送一次 ping；60 秒沒收到任何東西就當作斷線。

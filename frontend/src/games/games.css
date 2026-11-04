@@ -238,6 +238,40 @@
   flex: 1 1 auto;
 }
 
+/* 線上悔棋的請求與結果（shared/Takeback.tsx） */
+.takeback-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  box-sizing: border-box;
+  width: var(--board-w, 100%);
+  max-width: 100%;
+  margin-inline: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: center;
+}
+.takeback-notice.ask {
+  border-color: var(--accent);
+  color: var(--text-h);
+  font-weight: 600;
+}
+.takeback-notice.declined {
+  color: var(--danger);
+}
+.takeback-actions {
+  display: flex;
+  gap: 8px;
+}
+.takeback-actions > button {
+  min-height: 40px;
+}
+
 .game-overlay {
   position: absolute;
   inset: 0;
