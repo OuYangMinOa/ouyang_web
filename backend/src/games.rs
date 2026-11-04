@@ -1,7 +1,8 @@
 //! 小遊戲的線上對戰：伺服器只負責轉送，不懂遊戲規則（協定說明見 `frontend/src/games/shared/useRoom.ts`）。
 //!
-//! 每個房間兩個座位。用戶端送來的訊息加上 seat 後依序存進歷史，並廣播給兩個座位（包含送出者）；
-//! 同一個房間的修改、寫入資料庫與廣播都在那個房間的鎖裡完成，兩邊看到的順序才會一致。
+//! 每個房間兩個座位。用戶端送來的訊息加上 seat 後依序存進歷史，並廣播給兩個座位（包含送出者）和觀戰的人；
+//! 同一個房間的修改、寫入資料庫與廣播都在那個房間的鎖裡完成，大家看到的順序才會一致。
+//! 座位都有人之後，其他人連進來就是觀戰：收得到完整歷史和之後的每一則訊息，但不能送。
 //!
 //! 房間和歷史存在資料庫（migrations/0003），記憶體裡只放有人連線的房間：最後一個人離開就丟掉，
 //! 下次有人連進來再從資料庫載入。所以重啟或換版後，用戶端自動重連就能接著下。
@@ -51,6 +52,8 @@ const MAX_DATA_BYTES: usize = 4 * 1024;
 const MAX_FRAME_BYTES: usize = 16 * 1024;
 const MAX_PLAYER_LEN: usize = 64;
 const MAX_MSGS_PER_SEC: u32 = 20;
+/// 一間房間最多幾個人同時觀戰
+const MAX_WATCHERS: usize = 50;
 /// 沒有任何人連線超過這麼久的房間會被清掉
 const EMPTY_TTL: Duration = Duration::from_secs(30 * 60);
 const ROOM_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -63,7 +66,7 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 type Reject = (&'static str, &'static str);
 
 const NOT_FOUND: Reject = ("not_found", "找不到這個房間（可能已過期）");
-const FULL: Reject = ("full", "房間已滿");
+const FULL: Reject = ("full", "觀戰的人太多了");
 const REPLACED: Reject = ("replaced", "你在其他分頁或裝置開啟了這個房間");
 const INTERNAL: Reject = ("internal", "伺服器發生錯誤，請稍後再試");
 
@@ -86,8 +89,18 @@ pub struct Rooms {
 struct Room {
     game: String,
     seats: [Seat; 2],
+    /// 觀戰的人：不佔座位、不能送訊息，可以有很多條（同一個人開兩個分頁也沒關係）
+    watchers: Vec<Watcher>,
     history: Vec<Event>,
 }
+
+struct Watcher {
+    player: String,
+    conn: Conn,
+}
+
+/// 連線在房間裡的身分：坐在哪個座位，或是觀戰（`None`）
+type Role = Option<usize>;
 
 #[derive(Default)]
 struct Seat {
@@ -112,8 +125,37 @@ struct Event {
 }
 
 impl Room {
-    fn is_current(&self, seat: usize, id: u64) -> bool {
-        self.seats[seat].conn.as_ref().is_some_and(|conn| conn.id == id)
+    fn is_current(&self, role: Role, id: u64) -> bool {
+        match role {
+            Some(seat) => self.seats[seat].conn.as_ref().is_some_and(|conn| conn.id == id),
+            None => self.watchers.iter().any(|w| w.conn.id == id),
+        }
+    }
+
+    fn online(&self) -> [bool; 2] {
+        [self.seats[0].conn.is_some(), self.seats[1].conn.is_some()]
+    }
+
+    /// 兩個座位的連線狀態改變了：觀戰的人才知道誰離線
+    fn send_online(&self) {
+        let message = text(json!({ "type": "online", "online": self.online() }));
+        for watcher in &self.watchers {
+            let _ = watcher.conn.tx.send(message.clone());
+        }
+    }
+
+    /// 觀戰人數改變了：告訴所有人
+    fn send_watchers(&self) {
+        self.broadcast(&text(json!({ "type": "watchers", "count": self.watchers.len() })));
+    }
+
+    /// 送給兩個座位和所有觀戰的人
+    fn broadcast(&self, text: &Utf8Bytes) {
+        self.send(0, text);
+        self.send(1, text);
+        for watcher in &self.watchers {
+            let _ = watcher.conn.tx.send(text.clone());
+        }
     }
 
     fn seat_of(&self, player: &str) -> Option<usize> {
@@ -168,7 +210,8 @@ impl Rooms {
         }
     }
 
-    /// 坐下：同一個 player 拿回原本的座位（踢掉舊連線），否則坐第一個空位。回傳 `(房間, seat, 連線 id)`。
+    /// 坐下：同一個 player 拿回原本的座位（踢掉舊連線），否則坐第一個空位；座位都有人就觀戰。
+    /// 回傳 `(房間, 身分, 連線 id)`。
     async fn join(
         &self,
         pool: &SqlitePool,
@@ -177,7 +220,7 @@ impl Rooms {
         player: &str,
         tx: mpsc::UnboundedSender<Utf8Bytes>,
         ip: String,
-    ) -> Result<(Slot, usize, u64), Reject> {
+    ) -> Result<(Slot, Role, u64), Reject> {
         loop {
             let (slot, fresh) = {
                 let mut live = self.live.lock().unwrap();
@@ -215,7 +258,23 @@ impl Rooms {
             if room.game != game {
                 return Err(("game_mismatch", "這個房間是其他遊戲的"));
             }
-            let seat = take_seat(pool, code, room, player).await?;
+            let seat = match take_seat(pool, code, room, player).await {
+                Ok(seat) => seat,
+                Err(FULL) => {
+                    if room.watchers.len() >= MAX_WATCHERS {
+                        return Err(FULL);
+                    }
+                    let id = self.next_conn.fetch_add(1, Ordering::Relaxed) + 1;
+                    let conn = Conn { id, tx, ip, since: Instant::now() };
+                    let welcome =
+                        json!({ "type": "welcome", "seat": null, "online": room.online(), "history": room.history });
+                    let _ = conn.tx.send(text(welcome));
+                    room.watchers.push(Watcher { player: player.to_owned(), conn });
+                    room.send_watchers();
+                    return Ok((slot, None, id));
+                }
+                Err(reject) => return Err(reject),
+            };
             let id = self.next_conn.fetch_add(1, Ordering::Relaxed) + 1;
             if let Some(old) = room.seats[seat].conn.replace(Conn { id, tx, ip, since: Instant::now() }) {
                 // 舊連線收到這則錯誤後就不會再自動重連，兩邊才不會一直互踢
@@ -224,7 +283,11 @@ impl Rooms {
             let peer = room.seats[1 - seat].conn.is_some();
             room.send(seat, &text(json!({ "type": "welcome", "seat": seat, "peer": peer, "history": room.history })));
             room.send(1 - seat, &text(json!({ "type": "peer", "online": true })));
-            return Ok((slot, seat, id));
+            if !room.watchers.is_empty() {
+                room.send(seat, &text(json!({ "type": "watchers", "count": room.watchers.len() })));
+                room.send_online();
+            }
+            return Ok((slot, Some(seat), id));
         }
     }
 
@@ -239,7 +302,7 @@ impl Rooms {
     ) -> Result<(), Reject> {
         let mut guard = slot.lock().await;
         // 房間被關掉或座位被新連線拿走：這條連線的佇列已經關閉，迴圈會自己結束
-        let Some(room) = guard.as_mut().filter(|room| room.is_current(seat, id)) else {
+        let Some(room) = guard.as_mut().filter(|room| room.is_current(Some(seat), id)) else {
             return Ok(());
         };
         if room.history.len() >= MAX_HISTORY {
@@ -262,19 +325,27 @@ impl Rooms {
         }
         let message = text(json!({ "type": "msg", "seat": seat, "data": data }));
         room.history.push(Event { seat, data });
-        room.send(0, &message);
-        room.send(1, &message);
+        room.broadcast(&message);
         Ok(())
     }
 
-    async fn leave(&self, pool: &SqlitePool, code: &str, slot: &Slot, seat: usize, id: u64) {
+    async fn leave(&self, pool: &SqlitePool, code: &str, slot: &Slot, role: Role, id: u64) {
         let mut guard = slot.lock().await;
-        let Some(room) = guard.as_mut().filter(|room| room.is_current(seat, id)) else {
+        let Some(room) = guard.as_mut().filter(|room| room.is_current(role, id)) else {
             return;
         };
-        room.seats[seat].conn = None;
-        room.send(1 - seat, &text(json!({ "type": "peer", "online": false })));
-        if room.seats.iter().any(|s| s.conn.is_some()) {
+        match role {
+            Some(seat) => {
+                room.seats[seat].conn = None;
+                room.send(1 - seat, &text(json!({ "type": "peer", "online": false })));
+                room.send_online();
+            }
+            None => {
+                room.watchers.retain(|w| w.conn.id != id);
+                room.send_watchers();
+            }
+        }
+        if room.seats.iter().any(|s| s.conn.is_some()) || !room.watchers.is_empty() {
             return;
         }
         *guard = None;
@@ -314,6 +385,7 @@ impl Rooms {
             // 記憶體裡的比資料庫新，連線狀態也只在記憶體裡
             let mut seats = [seat0, seat1];
             let mut conns = [None, None];
+            let mut watchers = Vec::new();
             let mut events = events as usize;
             if let Some(slot) = live.get(&code)
                 && let Some(room) = slot.lock().await.as_ref()
@@ -322,11 +394,12 @@ impl Rooms {
                     seats[i] = seat.player.clone();
                     conns[i] = seat.conn.as_ref().map(|c| (c.ip.clone(), c.since));
                 }
+                watchers = room.watchers.iter().map(|w| (w.player.clone(), w.conn.ip.clone(), w.conn.since)).collect();
                 events = room.history.len();
             }
             let online = conns.iter().flatten().count();
             let taken = seats.iter().flatten().count();
-            let players = (0..2)
+            let mut players: Vec<PlayerInfo> = (0..2)
                 .filter_map(|i| {
                     let conn = conns[i].as_ref().map(|(ip, since)| (ip.as_str(), *since));
                     Some(
@@ -334,6 +407,9 @@ impl Rooms {
                     )
                 })
                 .collect();
+            players.extend(watchers.iter().map(|(player, ip, since)| {
+                PlayerInfo::new(player, String::new(), Some((ip.as_str(), *since)), now).status("觀戰")
+            }));
             rooms.push(RoomInfo {
                 kind: "duel",
                 game: GAMES.into_iter().find(|g| *g == game).unwrap_or("unknown"),
@@ -384,7 +460,7 @@ async fn load(pool: &SqlitePool, code: &str) -> Result<Option<Room>, sqlx::Error
             .map(|(seat, data)| Event { seat: seat as usize, data: serde_json::from_str(&data).unwrap_or(Value::Null) })
             .collect();
     let seats = [Seat { player: seat0, conn: None }, Seat { player: seat1, conn: None }];
-    Ok(Some(Room { game, seats, history }))
+    Ok(Some(Room { game, seats, watchers: Vec::new(), history }))
 }
 
 /// 找出 player 的座位，還沒坐下就搶一個空位
@@ -495,7 +571,7 @@ async fn session(
         (Some(game), Some(player)) => rooms.join(&state.pool, &code, game, player, tx, ip).await,
         _ => Err(("bad_request", "缺少 game 或 player，或 player 太長")),
     };
-    let (slot, seat, id) = match joined {
+    let (slot, role, id) = match joined {
         Ok(joined) => joined,
         Err(reject) => return close_with(socket, reject).await,
     };
@@ -518,7 +594,7 @@ async fn session(
                 let Some(Ok(message)) = incoming else { break None };
                 last_seen = Instant::now();
                 if let Message::Text(text) = message
-                    && let Err(reject) = handle(&state, &code, &slot, seat, id, &text, &mut window).await
+                    && let Err(reject) = handle(&state, &code, &slot, role, id, &text, &mut window).await
                 {
                     break Some(reject);
                 }
@@ -531,7 +607,7 @@ async fn session(
             _ = tokio::time::sleep_until(last_seen + IDLE_TIMEOUT) => break None,
         }
     };
-    rooms.leave(&state.pool, &code, &slot, seat, id).await;
+    rooms.leave(&state.pool, &code, &slot, role, id).await;
     match error {
         Some(reject) => close_with(socket, reject).await,
         // 被取代時的錯誤已經從佇列送出了，這裡只要關閉（對方已經斷線就會失敗，忽略）
@@ -546,7 +622,7 @@ async fn handle(
     state: &AppState,
     code: &str,
     slot: &Slot,
-    seat: usize,
+    role: Role,
     id: u64,
     text: &str,
     window: &mut (Instant, u32),
@@ -568,9 +644,8 @@ async fn handle(
         data: Value,
     }
     let Ok(ClientMessage { kind, data }) = serde_json::from_str(text) else { return Ok(()) };
-    if kind != "msg" {
-        return Ok(());
-    }
+    // 觀戰的人只能看
+    let (Some(seat), "msg") = (role, kind.as_str()) else { return Ok(()) };
     if data.to_string().len() > MAX_DATA_BYTES {
         return Err(("too_large", "訊息太大"));
     }

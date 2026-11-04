@@ -504,6 +504,94 @@ function useHashChecks(battle: Battle): [boolean | null, boolean | null] {
   return [result(0), result(1)]
 }
 
+/**
+ * 觀戰：雙方的佈局只在各自的瀏覽器，觀戰的人和對手一樣，對局中只看得到砲擊結果和擊沉的船；
+ * 結束後雙方公開佈局，才畫出沒被擊沉的船，並驗證雜湊。
+ */
+function SpectateGame({ modeSwitch, room }: { modeSwitch: ReactNode; room: Room<BsEvent> }) {
+  const battle = useMemo(() => reduceEvents(room.events), [room.events])
+  const hashOk = useHashChecks(battle)
+  const { phase, result, first } = battle
+  const names: [string, string] = first === 0 ? ['先攻', '後攻'] : ['後攻', '先攻']
+  const cheatOf = (side: Side) =>
+    battle.cheat[side] ?? (hashOk[side] === false ? '公開的佈局和開局時送出的雜湊不符' : null)
+
+  let status: string
+  let tone: Tone
+  let verify: string | null = null
+  const last = describeShot(battle.shots.at(-1), { me: first, names })
+  if (room.error) {
+    status = room.error
+    tone = 'danger'
+  } else if (!room.connected) status = '連線中…'
+  else if (result) {
+    const cheater = ([0, 1] as const).find((side) => cheatOf(side))
+    if (cheater !== undefined) {
+      status = `${names[cheater]}回報不實，判${names[other(cheater)]}獲勝`
+      verify = `⚠️ ${cheatOf(cheater)}`
+      tone = 'ok'
+    } else {
+      ;({ text: status, tone } = overText(battle, null, names))
+      const pending = ([0, 1] as const).some((side) => battle.commits[side] !== null && !battle.reveals[side])
+      if (pending) verify = '等待雙方公開佈局來驗證這局…'
+      else if (hashOk[0] === true && hashOk[1] === true)
+        verify = '✓ 已驗證：雙方的佈局和開局時的雜湊一致，每一次回報都屬實'
+      else verify = '驗證中…'
+    }
+  } else if (phase === 'setup') {
+    const ready = ([0, 1] as const).filter((side) => battle.commits[side] !== null)
+    status = ready.length ? `${names[ready[0]]}已經擺好船，等待${names[other(ready[0])]}…` : '雙方正在擺船…'
+  } else if (!room.peerOnline) status = last ? `${last}　等待對局的人連線…` : '等待對局的人連線…'
+  else if (battle.pending) status = `${names[battle.pending.by]}開砲中…`
+  else status = last ? `${last}　輪到${names[battle.toMove]}` : `${names[battle.toMove]}先開砲`
+
+  // 固定從先攻的角度看：上面（窄螢幕是大的那片）是後攻的海域
+  const me = first
+  /** 公開的佈局；認輸時公開的是空的 */
+  const revealed = (side: Side) => {
+    const layout = battle.reveals[side]?.layout
+    return layout?.length ? layout : null
+  }
+  const side = (
+    <>
+      {modeSwitch}
+      <OnlinePanel room={room} seatNames={names} />
+      {phase !== 'setup' && <FleetPanel battle={battle} me={me} names={names} />}
+      <RulesNote online />
+    </>
+  )
+
+  return (
+    <GameLayout side={side}>
+      <StatusLine tone={tone}>{status}</StatusLine>
+      {verify && (
+        <p className={`bs-verify${verify.startsWith('⚠️') ? ' bad' : verify.startsWith('✓') ? ' good' : ''}`}>
+          {verify}
+        </p>
+      )}
+      {phase === 'setup' ? (
+        <div className="bs-handoff">
+          <p className="bs-handoff-icon" aria-hidden="true">
+            ⚓
+          </p>
+          <p>雙方擺好船後就會開始。</p>
+          <p className="muted">佈局只存在各自的裝置，觀戰時和對手一樣，只看得到被擊沉的船；結束後雙方公開佈局。</p>
+        </div>
+      ) : (
+        <Battlefield
+          battle={battle}
+          me={me}
+          myLayout={revealed(me)}
+          enemyLayout={revealed(other(me))}
+          canShoot={false}
+          onShoot={() => {}}
+          titles={[`${names[other(me)]}的海域`, `${names[me]}的海域`]}
+        />
+      )}
+    </GameLayout>
+  )
+}
+
 function OnlineGame({ modeSwitch, room }: { modeSwitch: ReactNode; room: Room<BsEvent> }) {
   const battle = useMemo(() => reduceEvents(room.events), [room.events])
   const { phase, result } = battle
@@ -758,5 +846,6 @@ export default function Battleship() {
   const modeSwitch = <Segmented label="模式" value={mode} options={MODES} onChange={changeMode} />
   if (mode === 'ai') return <ComputerGame modeSwitch={modeSwitch} options={options} setOptions={setOptions} />
   if (mode === 'local') return <LocalGame modeSwitch={modeSwitch} options={options} setOptions={setOptions} />
+  if (room.spectator) return <SpectateGame modeSwitch={modeSwitch} room={room} />
   return <OnlineGame modeSwitch={modeSwitch} room={room} />
 }

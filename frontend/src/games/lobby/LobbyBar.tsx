@@ -4,7 +4,7 @@ import { useInvite } from '../shared/share'
 import { includes, lobbyPath, playingPath, useLobby, type Lobby } from './useLobby'
 import './lobby.css'
 
-/** 現在在玩的那一間：我有份、但不在那一頁（被換頁、重新整理後）就可以回去 */
+/** 現在在玩的那一間：不在那一頁（被換頁、重新整理後）就可以回去；沒上場的人（兩人的棋類）可以去觀戰 */
 function useRejoin(lobby: Lobby) {
   const location = useLocation()
   const { playing } = lobby
@@ -13,8 +13,10 @@ function useRejoin(lobby: Lobby) {
     playing !== null &&
     location.pathname === `/games/${playing.game}` &&
     new URLSearchParams(location.search).get('room') === playing.room
-  const canRejoin = playing !== null && !here && includes(playing, lobby.you) && game !== undefined
-  return { game, canRejoin }
+  const canGo = playing !== null && !here && game !== undefined
+  const canRejoin = canGo && includes(playing, lobby.you)
+  const canWatch = canGo && !canRejoin
+  return { game, canRejoin, canWatch }
 }
 
 /** 斷線、被別的分頁搶走、遊戲室關了：可以在這裡接回來或離開 */
@@ -44,7 +46,7 @@ export function LobbyChip() {
   const lobby = useLobby()
   const navigate = useNavigate()
   const invite = useInvite(lobby.inviteUrl)
-  const { game, canRejoin } = useRejoin(lobby)
+  const { game, canRejoin, canWatch } = useRejoin(lobby)
   const { code, state, playing } = lobby
   if (!code) return null
 
@@ -68,6 +70,11 @@ export function LobbyChip() {
             回到{game?.name}
           </button>
         )}
+        {canWatch && playing && (
+          <button type="button" className="secondary" onClick={() => navigate(playingPath(playing))}>
+            觀戰{game?.name}
+          </button>
+        )}
         {!lobby.error && (
           <>
             <button type="button" className="secondary" onClick={invite.share}>
@@ -88,7 +95,7 @@ export function LobbyBar() {
   const lobby = useLobby()
   const navigate = useNavigate()
   const invite = useInvite(lobby.inviteUrl)
-  const { game, canRejoin } = useRejoin(lobby)
+  const { game, canRejoin, canWatch } = useRejoin(lobby)
   const { code, playing, state } = lobby
   if (!code) return null
 
@@ -116,6 +123,11 @@ export function LobbyBar() {
         {canRejoin && playing && (
           <button type="button" onClick={() => navigate(playingPath(playing))}>
             回到{game?.name}
+          </button>
+        )}
+        {canWatch && playing && (
+          <button type="button" className="secondary" onClick={() => navigate(playingPath(playing))}>
+            觀戰{game?.name}
           </button>
         )}
         {!lobby.error && (
