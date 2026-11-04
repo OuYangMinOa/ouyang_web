@@ -12,6 +12,7 @@ pub mod game_settings;
 pub mod games;
 pub mod honeypot;
 pub mod invoice;
+pub mod justone;
 pub mod lobby;
 pub mod minesrace;
 pub mod monitor;
@@ -80,6 +81,7 @@ pub struct AppState {
     pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
     pub draw: Arc<party::Parties<draw::Draw>>,
     pub antique: Arc<party::Parties<antique::Antique>>,
+    pub justone: Arc<party::Parties<justone::JustOne>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
@@ -122,6 +124,7 @@ impl AppState {
             minesrace: Arc::default(),
             draw: Arc::default(),
             antique: Arc::default(),
+            justone: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
@@ -209,6 +212,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
         .route("/games/antique/party", post(party::create::<antique::Antique>))
         .route("/games/antique/party/{code}/ws", get(party::connect::<antique::Antique>))
+        .route("/games/justone/party", post(party::create::<justone::JustOne>))
+        .route("/games/justone/party/{code}/ws", get(party::connect::<justone::JustOne>))
         .route("/games/lobby", post(lobby::create))
         .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))

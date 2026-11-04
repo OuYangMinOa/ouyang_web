@@ -91,6 +91,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./antique/song'),
   },
   {
+    id: 'justone',
+    name: '只有一個詞',
+    icon: '💡',
+    blurb: '合作派對遊戲：每題輪一個人猜，其他人各寫一個提示詞，一樣的提示會互相抵消。13 張牌，看大家能猜對幾張。3～10 人，也能當面玩。',
+    tags: ['多人', '線上', '合作'],
+    category: '派對',
+    component: lazyPage(() => import('./justone')),
+    lobby: { kind: 'party', players: '3～10 人' },
+    music: () => import('./justone/song'),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',
