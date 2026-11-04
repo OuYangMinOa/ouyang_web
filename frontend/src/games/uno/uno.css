@@ -150,6 +150,20 @@
 .uno-seat.turn {
   border: 2px solid var(--accent);
   padding: 7px 9px;
+  animation: uno-turn 1.2s ease-in-out infinite alternate;
+}
+@keyframes uno-turn {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .uno-seat.turn {
+    animation: none;
+  }
 }
 .uno-seat.won {
   border: 2px solid var(--ok);
@@ -260,6 +274,7 @@ button.uno-shout.armed {
   color: var(--on-felt);
   box-shadow: inset 0 0 0 5px var(--uno-now);
   text-align: center;
+  transition: box-shadow 0.35s ease;
 }
 .uno-felt.tint-yellow {
   --uno-now: var(--uno-yellow);
@@ -317,6 +332,81 @@ button.uno-pile:not(:disabled):hover .uno-pile-back {
 }
 .uno-pile-count {
   font-size: 12px;
+}
+
+/* 桌上的牌：上一張斜斜地壓在下面 */
+.uno-discard {
+  position: relative;
+  display: inline-flex;
+}
+.uno-discard-top {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+}
+.uno-discard-under {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  transform: rotate(-10deg) translate(-4px, 2px);
+  filter: brightness(0.85);
+}
+
+/* 飛行中的牌：放在畫面最上層，不擋點擊 */
+.uno-flyer {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+.uno-flyer-back {
+  box-sizing: border-box;
+  border: 4px solid var(--uno-oval);
+  border-radius: 9px;
+  background: var(--uno-wild);
+  box-shadow:
+    inset 0 0 0 6px var(--uno-red),
+    0 4px 12px rgb(0 0 0 / 0.35);
+}
+.uno-card.uno-flyer {
+  box-shadow:
+    0 0 0 1px var(--card-edge),
+    0 6px 16px rgb(0 0 0 / 0.35);
+}
+
+/* 方向換了轉一圈、罰抽累積時跳一下 */
+.uno-dir {
+  display: inline-block;
+  animation: uno-spin 0.5s ease;
+}
+.uno-pending {
+  animation: uno-pop 0.35s ease;
+}
+.uno-said {
+  animation: uno-pop 0.35s ease;
+}
+@keyframes uno-spin {
+  from {
+    transform: rotate(-360deg) scale(0.6);
+  }
+}
+@keyframes uno-pop {
+  0% {
+    transform: scale(0.4);
+  }
+  70% {
+    transform: scale(1.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .uno-felt,
+  .uno-dir,
+  .uno-pending,
+  .uno-said {
+    transition: none;
+    animation: none;
+  }
 }
 .uno-felt-info {
   display: flex;
@@ -407,6 +497,9 @@ button.uno-pile:not(:disabled):hover .uno-pile-back {
 .uno-hand .uno-card.drawn,
 .uno-hand .uno-card.picked {
   box-shadow: 0 0 0 3px var(--accent), 0 6px 14px rgb(0 0 0 / 0.25);
+}
+.uno-hand .uno-card.incoming {
+  visibility: hidden;
 }
 .uno-hand .uno-card:focus-visible {
   outline: 3px solid var(--accent);
