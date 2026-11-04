@@ -17,6 +17,7 @@ use backend::{
     monitor::{self, Monitor},
     router,
     weather::{self, Weather},
+    youtube::{self, YouTube},
 };
 use sqlx::{
     SqlitePool,
@@ -60,6 +61,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(dir) = env::var("MUSIC_DIR") {
         state.music_dir = dir.into();
     }
+    if let Ok(bin) = env::var("YTDLP") {
+        state.youtube = Arc::new(YouTube::new(bin));
+    }
+    youtube::spawn_cleanup(state.youtube.clone());
     state.weather = Arc::new(Weather::from_env());
     // 地震速報要一直連著，不等有人來看；本機的 relay 見 weather/quake.rs
     weather::quake::spawn(state.weather.clone(), env::var("EEW_RELAY_URL").ok());

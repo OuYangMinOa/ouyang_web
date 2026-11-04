@@ -26,11 +26,22 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY backend/ ./
 RUN cargo build --release --locked && mkdir -p /out/data
 
+# ---- YouTube 下載工具（見 backend/src/youtube.rs）----
+# yt-dlp 用 PyInstaller 打包的版本（不用裝 Python），另外要 libz；Deno 給 yt-dlp 解 YouTube 的簽章，ffmpeg 合併影音。
+# YouTube 改版時 yt-dlp 會壞掉，到 https://github.com/yt-dlp/yt-dlp/releases 換新版號重新部署
+FROM debian:bookworm-slim AS youtube
+ARG YTDLP_VERSION=2026.10.26
+ADD --chmod=755 https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_linux /out/yt-dlp
+
 # ---- 執行：distroless 只有 glibc，沒有 shell ----
 FROM gcr.io/distroless/cc-debian12:nonroot
 WORKDIR /app
 COPY --from=builder /app/target/release/backend /app/backend
 COPY --from=frontend /app/dist /app/static
+COPY --from=youtube /out/yt-dlp /usr/local/bin/yt-dlp
+COPY --from=youtube /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/libz.so.1
+COPY --from=denoland/deno:bin-2.9.8 /deno /usr/local/bin/deno
+COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /usr/local/bin/ffmpeg
 # 讓第一次掛上的 named volume 繼承 nonroot 的擁有者
 COPY --from=builder --chown=65532:65532 /out/data /data
 ARG GIT_SHA=unknown

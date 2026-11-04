@@ -56,7 +56,7 @@ async fn needs_a_key_and_one_lookup_per_ip_every_ten_seconds() {
     // 網址不對也算一次，不會打到 Threads
     let (status, body) = lookup(&app, Some(&key), "https%3A%2F%2Fexample.com%2Ft%2Fabc").await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    assert_eq!(body["error"], "請貼上 Threads 貼文的網址");
+    assert_eq!(body["error"], "請貼上 Threads 貼文或 YouTube 影片的網址");
     let (status, body) = lookup(&app, Some(&key), "https%3A%2F%2Fwww.threads.com%2Ft%2Fabc").await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{body}");
     assert_eq!(body["retry_after"], 10);
@@ -105,7 +105,10 @@ async fn web_page_uses_the_login_session() {
     // 沒有金鑰、有登入就過得了驗證（網址不對才回 400）
     let reply = app.get(path, Some(&alice)).await;
     assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{}", reply.body);
-    assert_eq!(reply.body["error"], "請貼上 Threads 貼文的網址");
+    assert_eq!(reply.body["error"], "請貼上 Threads 貼文或 YouTube 影片的網址");
+
+    // YouTube 下載好的檔案用隨機代碼拿，不存在的代碼是 404
+    assert_eq!(app.get("/api/threads/files/nope", None).await.status, StatusCode::NOT_FOUND);
 
     // 停用的帳號，登入狀態也不能用
     sqlx::query("UPDATE users SET disabled = 1 WHERE username = 'alice'").execute(&app.state.pool).await.unwrap();
