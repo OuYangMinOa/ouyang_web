@@ -58,7 +58,7 @@ struct Game {
 }
 
 /// 遊戲室能開的遊戲；新增派對遊戲或大逃殺時記得加在這裡和 `open_room`
-const GAMES: [Game; 17] = [
+const GAMES: [Game; 18] = [
     Game { id: "undercover", name: "誰是臥底", kind: Kind::Party },
     Game { id: "bigtwo", name: "大老二", kind: Kind::Party },
     Game { id: "draw", name: "你畫我猜", kind: Kind::Party },
@@ -66,6 +66,7 @@ const GAMES: [Game; 17] = [
     Game { id: "uno", name: "UNO", kind: Kind::Party },
     Game { id: "justone", name: "只有一個詞", kind: Kind::Party },
     Game { id: "telephone", name: "傳話畫畫", kind: Kind::Party },
+    Game { id: "poker", name: "德州撲克", kind: Kind::Party },
     Game { id: "minesweeper", name: "踩地雷競速", kind: Kind::Party },
     Game { id: "tetris", name: "俄羅斯方塊 99", kind: Kind::Arena },
     Game { id: "puyo", name: "魔法氣泡", kind: Kind::Arena },
@@ -555,6 +556,7 @@ async fn open_room(state: &AppState, plan: &Plan) -> Result<String, AppError> {
         (Kind::Party, "uno") => state.uno.open(hosts),
         (Kind::Party, "justone") => state.justone.open(hosts),
         (Kind::Party, "telephone") => state.telephone.open(hosts),
+        (Kind::Party, "poker") => state.poker.open(hosts),
         (Kind::Party, "minesweeper") => state.minesrace.open(hosts),
         (Kind::Arena, "tetris") => state.tetris.open(false, hosts),
         (Kind::Arena, "puyo") => state.puyo.open(false, hosts),

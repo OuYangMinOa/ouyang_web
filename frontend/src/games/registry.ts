@@ -124,6 +124,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./telephone/song'),
   },
   {
+    id: 'poker',
+    name: '德州撲克',
+    icon: '♠️',
+    blurb: '無限注德州撲克：兩張底牌配五張公牌，下注、加注、全下，打到有人贏走所有籌碼。2～9 人，可以加電腦，只用遊戲籌碼。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazyPage(() => import('./poker')),
+    lobby: { kind: 'party', players: '2～9 人，可以加電腦' },
+    music: () => import('./poker/song'),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',
