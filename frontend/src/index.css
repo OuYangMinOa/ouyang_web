@@ -129,6 +129,13 @@
   --card-back: #31577f;
   --felt: #2f6b4f;
   --on-felt: #f4ede2;
+  /* UNO 的四色牌、萬用牌的黑底和牌中間的白色橢圓 */
+  --uno-red: #d42a2a;
+  --uno-yellow: #d99a06;
+  --uno-green: #2b8a3e;
+  --uno-blue: #1e5fbf;
+  --uno-wild: #1c1a17;
+  --uno-oval: #fffdf8;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -256,6 +263,12 @@
     --card-back: #3b5f86;
     --felt: #1d4231;
     --on-felt: #f4ede2;
+    --uno-red: #e5484d;
+    --uno-yellow: #e9a817;
+    --uno-green: #38a556;
+    --uno-blue: #3b7ff0;
+    --uno-wild: #0c0a09;
+    --uno-oval: #f6efe3;
     color-scheme: dark;
   }
 }
@@ -373,6 +386,12 @@
   --card-back: #3b5f86;
   --felt: #1d4231;
   --on-felt: #f4ede2;
+  --uno-red: #e5484d;
+  --uno-yellow: #e9a817;
+  --uno-green: #38a556;
+  --uno-blue: #3b7ff0;
+  --uno-wild: #0c0a09;
+  --uno-oval: #f6efe3;
   color-scheme: dark;
 }
 
