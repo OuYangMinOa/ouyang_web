@@ -2,24 +2,26 @@
 //!
 //! 每一圈每個人輪流畫一次（圈數是房主的選項）。流程：
 //! 1. 選題：輪到的人從三個詞（簡單、普通、困難各一）挑一個，15 秒內沒挑就隨機。
-//! 2. 作畫：在時限內畫出來，其他人在聊天室猜。時間過一半和剩四分之一時各揭露一個字。
-//!    所有（連著線的）人都猜中或時間到就結束。
+//! 2. 作畫：在時限內畫出來，其他人在聊天室猜。不會自動揭露字，畫的人覺得大家猜不出來時可以按「給提示」揭露一個
+//!    （兩個字的詞最多一個、三個字以上最多兩個，至少留一個字）。所有（連著線的）人都猜中或時間到就結束。
 //! 3. 公布答案和這一棒的得分，幾秒後換下一個人。畫的人斷線就跳過他。
 //!
 //! 隱藏資訊：
 //! - 答案只在畫的人和已經猜中的人的 view 裡；還沒猜中的人和觀戰的人只拿到提示（字數、揭露的字、可選的分類）。
-//! - 猜題走聊天（`chat` hook）：猜中的那句只有自己看得到，其他人看到「某某猜對了！」；很接近只私下提示「差一點」；
+//! - 猜題走聊天（`chat` hook）：猜中的那句只有自己看得到，其他人看到「某某猜對了！」；
+//!   很接近只私下提示「差一點」（聊天室一則訊息，另外送一個 `close` 即時事件，畫面上會跳出提示）；
 //!   包含答案但多打了其他字的整句不送出（不然答案就公開了）。
 //!   已經猜中的人和畫的人之間的對話，還沒猜中的人看不到；畫的人不能在聊天室打出答案。
 //!
 //! 筆畫：
 //! - 畫布座標固定是 0～`W`、0～`H`（4:3）的整數，不同大小的螢幕才畫得一樣。
 //! - 畫的人按下時送 `begin`（開新的一筆），之後每 50ms 左右把累積的點用 `more` 接在最後一筆後面；
+//!   `fill` 是倒顏料：從一個點把相連的同色區域塗滿（範圍由各用戶端自己算，見 frontend/src/games/draw/paper.ts），也算一筆。
 //!   另外有 `undo`（拿掉最後一筆）和 `clear`。伺服器驗證後存進這一棒的畫布，用即時事件轉給其他人（`quiet`，不重送 view）。
 //! - 每個動作讓畫布的版本 `v` 加一，事件和 view 都帶著畫布 id 和版本：view 是「到這個版本為止的整張畫布」，
 //!   事件是「下一個版本」，用戶端靠版本把兩者接起來（見 frontend/src/games/draw/board.ts）。
 //!   重連、中途進來觀戰的人從 view 拿回整張畫布。
-//! - 筆畫數、點數有上限，避免被灌爆；畫布只在這一棒有效，換人就清空。
+//! - 筆畫數、點數、倒顏料的次數有上限，避免被灌爆；畫布只在這一棒有效，換人就清空。
 //!
 //! 計分：猜中的人越早分數越高（20～100 分），畫的人每有一個人猜中得 25 分，普通的詞乘 1.2、困難的乘 1.5。
 //! 分數在同一個房間跨局累計。
@@ -45,9 +47,10 @@ pub const H: u16 = 750;
 /// 顏色和粗細都是編號（前端的調色盤），伺服器只檢查範圍
 pub const COLORS: u8 = 12;
 pub const WIDTHS: u8 = 3;
-/// 一棒最多幾筆、總共幾個點
-pub const MAX_STROKES: usize = 600;
-pub const MAX_POINTS: usize = 20_000;
+/// 一棒最多幾筆、總共幾個點、倒幾次顏料（每次倒顏料用戶端都要算一次，重連時要從頭算）
+pub const MAX_STROKES: usize = 1000;
+pub const MAX_POINTS: usize = 30_000;
+pub const MAX_FILLS: usize = 60;
 /// 一則 `begin`／`more` 最多幾個點
 pub const MAX_BATCH: usize = 200;
 const CHOOSE: Duration = Duration::from_secs(15);
@@ -197,8 +200,15 @@ pub enum Action {
     More {
         p: Vec<u16>,
     },
+    /// 倒顏料：顏色的編號和一個點（x, y）
+    Fill {
+        c: u8,
+        p: Vec<u16>,
+    },
     Undo,
     Clear,
+    /// 畫的人揭露一個字
+    Hint,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -206,6 +216,9 @@ struct Stroke {
     c: u8,
     w: u8,
     p: Vec<u16>,
+    /// 倒顏料（`p` 只有一個點）
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    f: bool,
 }
 
 #[derive(Default)]
@@ -214,6 +227,7 @@ struct Canvas {
     v: u32,
     strokes: Vec<Stroke>,
     points: usize,
+    fills: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -271,8 +285,6 @@ pub struct Draw {
     word: Option<usize>,
     /// 揭露了第幾個字
     revealed: Vec<usize>,
-    /// 還沒到的揭露時間
-    reveal_at: Vec<Instant>,
     /// 這一棒每個人猜中的得分（None 是還沒猜中；畫的人永遠是 None）
     guessed: Vec<Option<u32>>,
     /// 這一棒每個人得的分（含畫的人），公布答案時顯示
@@ -327,7 +339,6 @@ impl Draw {
         }
         self.word = None;
         self.revealed.clear();
-        self.reveal_at.clear();
         self.guessed = vec![None; n];
         self.turn_points = vec![0; n];
         self.ending = None;
@@ -367,27 +378,26 @@ impl Draw {
         self.word = Some(word);
         self.used.insert(word);
         let length = Duration::from_secs(u64::from(self.options.draw_secs));
-        // 兩個字的詞只揭露一個（剩四分之一時），三個字以上的過一半和剩四分之一時各揭露一個
-        let chars = WORDS[word].word.chars().count();
-        let at: &[f64] = match chars.saturating_sub(1).min(2) {
-            2 => &[0.5, 0.75],
-            1 => &[0.75],
-            _ => &[],
-        };
-        self.reveal_at = at.iter().map(|f| ctx.now + length.mul_f64(*f)).collect();
         ctx.system(To::All, format!("{} 選好題目了，開始畫！", self.names[self.drawer]));
         self.set_stage(Stage::Draw, Some(length), ctx);
     }
 
-    /// 還沒揭露的字隨機挑一個
-    fn reveal(&mut self, ctx: &mut Ctx) {
-        let Some(word) = self.answer() else { return };
+    /// 還能給幾次提示：兩個字的詞一次、三個字以上兩次（至少留一個字不揭露）
+    fn hints_left(&self) -> usize {
+        let chars = self.answer().map_or(0, |w| w.chars().count());
+        chars.saturating_sub(1).min(2).saturating_sub(self.revealed.len())
+    }
+
+    /// 畫的人給提示：還沒揭露的字隨機挑一個
+    fn hint(&mut self, ctx: &mut Ctx) -> Result<(), String> {
+        let Some(word) = self.answer().filter(|_| self.hints_left() > 0) else {
+            return Err("不能再給提示了".into());
+        };
         let hidden: Vec<usize> = (0..word.chars().count()).filter(|i| !self.revealed.contains(i)).collect();
-        // 至少留一個字不揭露
-        if hidden.len() > 1 {
-            self.revealed.push(hidden[ctx.rng.below(hidden.len())]);
-            ctx.changed();
-        }
+        self.revealed.push(hidden[ctx.rng.below(hidden.len())]);
+        ctx.system(To::All, format!("{} 給了一個提示", self.names[self.drawer]));
+        ctx.changed();
+        Ok(())
     }
 
     fn correct(&mut self, seat: usize, ctx: &mut Ctx) {
@@ -484,7 +494,7 @@ impl Draw {
                 }
                 canvas.points += p.len() / 2;
                 let op = json!({ "kind": "begin", "c": c, "w": w, "p": p });
-                canvas.strokes.push(Stroke { c, w, p });
+                canvas.strokes.push(Stroke { c, w, p, f: false });
                 op
             }
             Action::More { p } => {
@@ -492,23 +502,47 @@ impl Draw {
                 if canvas.points + p.len() / 2 > MAX_POINTS {
                     return Err(FULL.into());
                 }
-                let Some(last) = canvas.strokes.last_mut() else { return Err("還沒開始畫".into()) };
+                let Some(last) = canvas.strokes.last_mut().filter(|s| !s.f) else {
+                    return Err("還沒開始畫".into());
+                };
                 canvas.points += p.len() / 2;
                 last.p.extend_from_slice(&p);
                 json!({ "kind": "more", "p": p })
             }
+            Action::Fill { c, p } => {
+                if c >= COLORS {
+                    return Err("沒有這個顏色".into());
+                }
+                check(&p)?;
+                if p.len() != 2 {
+                    return Err("筆畫的格式不對".into());
+                }
+                if canvas.strokes.len() >= MAX_STROKES || canvas.points + 1 > MAX_POINTS {
+                    return Err(FULL.into());
+                }
+                if canvas.fills >= MAX_FILLS {
+                    return Err("這張畫倒太多次顏料了，清除或復原一些再倒".into());
+                }
+                canvas.points += 1;
+                canvas.fills += 1;
+                let op = json!({ "kind": "fill", "c": c, "p": p });
+                canvas.strokes.push(Stroke { c, w: 0, p, f: true });
+                op
+            }
             Action::Undo => {
                 if let Some(stroke) = canvas.strokes.pop() {
                     canvas.points -= stroke.p.len() / 2;
+                    canvas.fills -= usize::from(stroke.f);
                 }
                 json!({ "kind": "undo" })
             }
             Action::Clear => {
                 canvas.strokes.clear();
                 canvas.points = 0;
+                canvas.fills = 0;
                 json!({ "kind": "clear" })
             }
-            Action::Choose { .. } => unreachable!("choose is not a paint action"),
+            Action::Choose { .. } | Action::Hint => unreachable!("not a paint action"),
         };
         canvas.v += 1;
         Ok(json!({ "type": "op", "id": canvas.id, "v": canvas.v, "op": op }))
@@ -559,7 +593,6 @@ impl PartyGame for Draw {
             choices: Vec::new(),
             word: None,
             revealed: Vec::new(),
-            reveal_at: Vec::new(),
             guessed: vec![None; n],
             turn_points: vec![0; n],
             ending: None,
@@ -584,6 +617,8 @@ impl PartyGame for Draw {
                 Ok(())
             }
             (Action::Choose { .. }, _) => Err("現在不是你選題".into()),
+            (Action::Hint, Stage::Draw) if seat == self.drawer => self.hint(ctx),
+            (Action::Hint, _) => Err("只有畫的人在作畫時能給提示".into()),
             (paint, Stage::Draw) if seat == self.drawer => {
                 ctx.quiet();
                 let event = self.paint(paint)?;
@@ -609,10 +644,6 @@ impl PartyGame for Draw {
                 self.choose(index, ctx);
             }
             Stage::Draw => {
-                while self.reveal_at.first().is_some_and(|&t| ctx.now >= t) {
-                    self.reveal_at.remove(0);
-                    self.reveal(ctx);
-                }
                 if drawer_gone {
                     self.end_turn(Ending::DrawerLeft, ctx);
                 } else if due {
@@ -662,12 +693,15 @@ impl PartyGame for Draw {
                             self.correct(s, ctx);
                             Chat::Only(To::Seat(s))
                         }
+                        // 只有自己看得到的系統訊息很容易漏看，另外送一個事件讓畫面上跳出提示（和音效）
                         Judge::Contains => {
-                            ctx.system(To::Seat(s), "很接近了！只要打答案本身就好（這句沒有送出）");
+                            ctx.announce(To::Seat(s), "很接近了！只要打答案本身就好（這句沒有送出）", "accent");
+                            ctx.emit(To::Seat(s), json!({ "type": "close", "guess": null }));
                             Chat::Drop
                         }
                         Judge::Close => {
-                            ctx.system(To::Seat(s), format!("「{text}」差一點！"));
+                            ctx.announce(To::Seat(s), format!("「{text}」差一點！"), "accent");
+                            ctx.emit(To::Seat(s), json!({ "type": "close", "guess": text }));
                             Chat::Show
                         }
                         Judge::Miss => Chat::Show,
@@ -721,6 +755,7 @@ impl PartyGame for Draw {
             "word": entry.filter(|_| insider || public).map(|e| e.word),
             "level": entry.map(|e| e.level),
             "hint": hint,
+            "hintsLeft": if self.stage == Stage::Draw { self.hints_left() } else { 0 },
             "ending": self.ending.map(|e| match e {
                 Ending::AllGuessed => "all",
                 Ending::Timeout => "timeout",
@@ -859,6 +894,54 @@ mod tests {
     }
 
     #[test]
+    fn filling_counts_as_a_stroke() {
+        let (mut g, seats, mut rng) = start(2, Options::default());
+        choose(&mut g, &seats, &mut rng);
+        let d = g.drawer;
+        assert!(act(&mut g, &seats, &mut rng, d, Action::Fill { c: COLORS, p: vec![1, 1] }).is_err());
+        assert!(act(&mut g, &seats, &mut rng, d, Action::Fill { c: 3, p: vec![1, 1, 2, 2] }).is_err());
+        assert!(act(&mut g, &seats, &mut rng, d, Action::Fill { c: 3, p: vec![W + 1, 1] }).is_err());
+        act(&mut g, &seats, &mut rng, d, Action::Fill { c: 3, p: vec![500, 300] }).unwrap();
+        assert_eq!(g.canvas.strokes.len(), 1);
+        assert_eq!((g.canvas.points, g.canvas.fills), (1, 1));
+        let view = g.view(Some(d), Instant::now());
+        assert_eq!(view["canvas"]["strokes"][0]["f"], true);
+        // 不能接在倒顏料後面畫
+        assert!(act(&mut g, &seats, &mut rng, d, Action::More { p: vec![1, 1] }).is_err());
+        act(&mut g, &seats, &mut rng, d, Action::Begin { c: 1, w: 0, p: vec![1, 1] }).unwrap();
+        assert!(g.view(Some(d), Instant::now())["canvas"]["strokes"][1].get("f").is_none());
+        act(&mut g, &seats, &mut rng, d, Action::Undo).unwrap();
+        act(&mut g, &seats, &mut rng, d, Action::Undo).unwrap();
+        assert_eq!((g.canvas.points, g.canvas.fills), (0, 0));
+        // 次數上限
+        for _ in 0..MAX_FILLS {
+            act(&mut g, &seats, &mut rng, d, Action::Fill { c: 3, p: vec![500, 300] }).unwrap();
+        }
+        assert!(act(&mut g, &seats, &mut rng, d, Action::Fill { c: 3, p: vec![500, 300] }).is_err());
+        act(&mut g, &seats, &mut rng, d, Action::Clear).unwrap();
+        act(&mut g, &seats, &mut rng, d, Action::Fill { c: 3, p: vec![500, 300] }).unwrap();
+    }
+
+    #[test]
+    fn close_guesses_get_a_private_event() {
+        let (mut g, seats, mut rng) = start(3, Options::default());
+        let three = WORDS.iter().position(|e| e.word == "長頸鹿").unwrap();
+        g.choices = vec![three, three, three];
+        with_ctx(&seats, &mut rng, Instant::now(), |ctx| g.choose(0, ctx));
+        let a = guesser(&g);
+        let mut out = Default::default();
+        let mut ctx = test_ctx(Instant::now(), &mut rng, &seats, &mut out);
+        assert!(matches!(g.chat(Some(a), "長勁鹿", &mut ctx), Chat::Show));
+        assert!(matches!(g.chat(Some(a), "是長頸鹿嗎", &mut ctx), Chat::Drop));
+        assert!(matches!(g.chat(Some(a), "斑馬", &mut ctx), Chat::Show));
+        let events = out.events();
+        assert_eq!(events.len(), 2);
+        assert!(events.iter().all(|(to, e)| matches!(to, To::Seat(s) if *s == a) && e["type"] == "close"));
+        assert_eq!(events[0].1["guess"], "長勁鹿");
+        assert!(events[1].1["guess"].is_null());
+    }
+
+    #[test]
     fn bad_strokes_are_rejected_without_bumping_the_version() {
         let (mut g, seats, mut rng) = start(2, Options::default());
         choose(&mut g, &seats, &mut rng);
@@ -952,13 +1035,14 @@ mod tests {
     }
 
     #[test]
-    fn hints_reveal_letters_over_time_but_never_all() {
+    fn hints_are_given_by_the_drawer_but_never_all() {
         let (mut g, seats, mut rng) = start(2, Options { draw_secs: 100, ..Options::default() });
         // 換成固定的三個字的詞
         let three = WORDS.iter().position(|e| e.word == "長頸鹿").unwrap();
         g.choices = vec![three, three, three];
         let start = Instant::now();
         with_ctx(&seats, &mut rng, start, |ctx| g.choose(0, ctx));
+        let d = g.drawer;
         let hidden = |g: &Draw| {
             g.view(Some(1 - g.drawer), Instant::now())["hint"]["chars"]
                 .as_array()
@@ -968,11 +1052,18 @@ mod tests {
                 .count()
         };
         assert_eq!(hidden(&g), 3);
-        tick_at(&mut g, &seats, &mut rng, start + Duration::from_secs(49));
+        assert_eq!(g.view(Some(d), start)["hintsLeft"], 2);
+        // 時間過了也不會自動揭露
+        tick_at(&mut g, &seats, &mut rng, start + Duration::from_secs(90));
         assert_eq!(hidden(&g), 3);
-        tick_at(&mut g, &seats, &mut rng, start + Duration::from_secs(51));
+        // 猜的人不能給提示
+        assert!(act(&mut g, &seats, &mut rng, 1 - d, Action::Hint).is_err());
+        act(&mut g, &seats, &mut rng, d, Action::Hint).unwrap();
         assert_eq!(hidden(&g), 2);
-        tick_at(&mut g, &seats, &mut rng, start + Duration::from_secs(76));
+        act(&mut g, &seats, &mut rng, d, Action::Hint).unwrap();
+        assert_eq!(hidden(&g), 1);
+        assert_eq!(g.view(Some(d), start)["hintsLeft"], 0);
+        assert!(act(&mut g, &seats, &mut rng, d, Action::Hint).is_err());
         assert_eq!(hidden(&g), 1);
         tick_at(&mut g, &seats, &mut rng, start + Duration::from_secs(101));
         assert_eq!(g.stage, Stage::Reveal);

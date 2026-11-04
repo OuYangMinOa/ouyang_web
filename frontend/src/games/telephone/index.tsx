@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Board } from '../draw/board'
-import { paint } from '../draw/paint'
+import { Paper } from '../draw/paper'
 import { Sketch } from '../draw/Sketch'
 import type { Stroke } from '../draw/types'
 import '../draw/draw.css'
@@ -390,12 +390,13 @@ function DrawTask({ party, view, task, done }: { party: TpParty; view: TpView; t
 }
 
 function strokesOf(board: Board): Stroke[] {
-  return board.strokes.map((s) => ({ c: s.c, w: s.w, p: [...s.p] }))
+  return board.strokes.map((s) => (s.f ? { c: s.c, w: s.w, p: [...s.p], f: true } : { c: s.c, w: s.w, p: [...s.p] }))
 }
 
 /** 唯讀的一張畫（4:3），跟著實際大小和螢幕密度重畫 */
 function Picture({ strokes }: { strokes: Stroke[] }) {
   const canvas = useRef<HTMLCanvasElement>(null)
+  const [paper] = useState(() => new Paper())
   useEffect(() => {
     const el = canvas.current
     if (!el) return
@@ -404,13 +405,13 @@ function Picture({ strokes }: { strokes: Stroke[] }) {
       const dpr = window.devicePixelRatio || 1
       el.width = Math.max(1, Math.round(rect.width * dpr))
       el.height = Math.max(1, Math.round(rect.height * dpr))
-      paint(el, strokes)
+      paper.paint(el, strokes)
     }
     const observer = new ResizeObserver(draw)
     observer.observe(el)
     draw()
     return () => observer.disconnect()
-  }, [strokes])
+  }, [paper, strokes])
   return (
     <div className="tp-picture">
       <canvas ref={canvas} role="img" aria-label="一張畫" />

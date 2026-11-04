@@ -30,7 +30,7 @@ use tokio::time::Instant;
 
 use crate::{
     AppState,
-    draw::{COLORS, H, W, WIDTHS},
+    draw::{COLORS, H, MAX_FILLS, W, WIDTHS},
     party::{self, Ctx, Parties, PartyGame, To, shuffle},
 };
 
@@ -77,12 +77,14 @@ impl Options {
     }
 }
 
-/// 一筆：顏色、粗細的編號和點（x, y, x, y…），和你畫我猜一樣
+/// 一筆：顏色、粗細的編號和點（x, y, x, y…），和你畫我猜一樣；`f` 是倒顏料（只有一個點）
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Stroke {
     c: u8,
     w: u8,
     p: Vec<u16>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    f: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -322,7 +324,7 @@ fn check_strokes(strokes: &[Stroke]) -> Result<(), String> {
         if s.c >= COLORS || s.w >= WIDTHS {
             return Err("沒有這個顏色或粗細".into());
         }
-        if s.p.len() < 2 || !s.p.len().is_multiple_of(2) {
+        if s.p.len() < 2 || !s.p.len().is_multiple_of(2) || (s.f && s.p.len() != 2) {
             return Err("筆畫的格式不對".into());
         }
         if s.p.chunks(2).any(|xy| xy[0] > W || xy[1] > H) {
@@ -332,6 +334,9 @@ fn check_strokes(strokes: &[Stroke]) -> Result<(), String> {
     }
     if points > MAX_POINTS {
         return Err("這張畫的筆畫太多了".into());
+    }
+    if strokes.iter().filter(|s| s.f).count() > MAX_FILLS {
+        return Err("這張畫倒太多次顏料了".into());
     }
     Ok(())
 }
@@ -609,7 +614,7 @@ mod tests {
     }
 
     fn dot() -> Stroke {
-        Stroke { c: 1, w: 1, p: vec![10, 20] }
+        Stroke { c: 1, w: 1, p: vec![10, 20], f: false }
     }
 
     #[test]
@@ -684,7 +689,7 @@ mod tests {
 
         // 第 2 步：看得到上一個人的畫，但看不到最早的題目
         for s in 0..n {
-            t.draw(s, vec![Stroke { c: 2, w: 0, p: vec![s as u16 * 100 + 7, 33] }], true).unwrap();
+            t.draw(s, vec![Stroke { c: 2, w: 0, p: vec![s as u16 * 100 + 7, 33], f: false }], true).unwrap();
         }
         assert_eq!(t.g.step, 2);
         for s in 0..n {
@@ -776,7 +781,8 @@ mod tests {
     fn bad_drawings_are_rejected() {
         let mut t = T::new(3, Options::default());
         t.finish_step();
-        let stroke = |c, w, p: Vec<u16>| Stroke { c, w, p };
+        let stroke = |c, w, p: Vec<u16>| Stroke { c, w, p, f: false };
+        let fill = |p: Vec<u16>| Stroke { c: 2, w: 0, p, f: true };
         let bad = [
             vec![stroke(COLORS, 0, vec![1, 1])],
             vec![stroke(0, WIDTHS, vec![1, 1])],
@@ -786,6 +792,8 @@ mod tests {
             vec![stroke(0, 0, vec![0, H + 1])],
             vec![dot(); MAX_STROKES + 1],
             vec![stroke(0, 0, vec![5; (MAX_POINTS + 1) * 2])],
+            vec![fill(vec![1, 1, 2, 2])],
+            vec![fill(vec![1, 1]); MAX_FILLS + 1],
         ];
         for strokes in bad {
             assert!(t.draw(0, strokes, false).is_err());
@@ -793,6 +801,10 @@ mod tests {
         assert!(t.g.drafts[0].is_none());
         t.draw(0, vec![stroke(0, 0, vec![5; MAX_POINTS * 2])], false).unwrap();
         assert!(t.g.drafts[0].is_some());
+        // 倒顏料也收，送出去時帶著 f
+        t.draw(0, vec![dot(), fill(vec![500, 300])], false).unwrap();
+        assert_eq!(serde_json::to_value(fill(vec![1, 1])).unwrap()["f"], true);
+        assert!(serde_json::to_value(dot()).unwrap().get("f").is_none());
     }
 
     #[test]

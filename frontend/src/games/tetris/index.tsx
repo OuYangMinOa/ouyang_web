@@ -9,7 +9,7 @@ import { useHandling, type HandlingSettings } from '../shared/handling'
 import { KeyEditor } from '../shared/KeyEditor'
 import { keyNames } from '../shared/keys'
 import { load, save } from '../shared/storage'
-import { GameLayout, MusicButton, Overlay, StatusLine, Toolbar } from '../shared/ui'
+import { GameLayout, MusicButton, Overlay, SfxButton, StatusLine, Toolbar } from '../shared/ui'
 import { useArena } from '../shared/useArena'
 import { useArenaMatch, type ArenaEngine } from '../shared/useArenaMatch'
 import { readPalette } from './draw'
@@ -18,7 +18,7 @@ import { useKeys, type Action, type KeySettings } from './keys'
 import { CHECKPOINT_MS, formatScore, Leaderboard, RunReporter, useLeaderboard, type RunState } from './Leaderboard'
 import { useMusic } from './music'
 import { Playfield, type PlayfieldHooks } from './Playfield'
-import { useSfx, type SfxControl } from './sfx'
+import { useSfx } from './sfx'
 import './tetris.css'
 
 /** 單人模式每消這麼多行、或每玩這麼久就升一級（後端檢查分數時用一樣的規則） */
@@ -327,14 +327,6 @@ function Practice({ onExit }: { onExit: () => void }) {
         </button>
       </Toolbar>
     </GameLayout>
-  )
-}
-
-function SfxButton({ sfx }: { sfx: SfxControl }) {
-  return (
-    <button type="button" className="secondary" onClick={sfx.toggle} aria-pressed={sfx.enabled}>
-      {sfx.enabled ? '🔊 音效：開' : '🔈 音效：關'}
-    </button>
   )
 }
 

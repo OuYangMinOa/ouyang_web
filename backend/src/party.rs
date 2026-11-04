@@ -218,6 +218,14 @@ pub fn test_ctx<'a>(now: Instant, rng: &'a mut Rng, seats: &'a [SeatInfo], out: 
     Ctx { now, rng, seats, out }
 }
 
+#[cfg(test)]
+impl Outbox {
+    /// 給單元測試看遊戲發了哪些即時事件
+    pub fn events(&self) -> &[(To, Value)] {
+        &self.events
+    }
+}
+
 /// 洗牌（Fisher–Yates）
 pub fn shuffle<T>(rng: &mut Rng, items: &mut [T]) {
     for i in (1..items.len()).rev() {

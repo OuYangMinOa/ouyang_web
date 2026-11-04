@@ -3,9 +3,10 @@
 /** 畫布座標：x 是 0～W、y 是 0～H（4:3），不同大小的螢幕畫出來才一樣 */
 export const W = 1000
 export const H = 750
-/** 一棒最多幾筆、幾個點；一則訊息最多幾個點（和後端一樣，超過伺服器會拒絕） */
-export const MAX_STROKES = 600
-export const MAX_POINTS = 20_000
+/** 一棒最多幾筆、幾個點、倒幾次顏料；一則訊息最多幾個點（和後端一樣，超過伺服器會拒絕） */
+export const MAX_STROKES = 1000
+export const MAX_POINTS = 30_000
+export const MAX_FILLS = 60
 export const MAX_BATCH = 200
 
 /**
@@ -33,17 +34,22 @@ export const WIDTHS = [6, 14, 30] as const
 export const WIDTH_NAMES = ['細', '中', '粗'] as const
 export const ERASER = 0
 
-export type Stroke = { c: number; w: number; p: number[] }
+/** `f` 是倒顏料：`p` 只有一個點，從那裡把相連的同色區域塗滿（見 paper.ts） */
+export type Stroke = { c: number; w: number; p: number[]; f?: boolean }
 export type CanvasSnapshot = { id: number; v: number; strokes: Stroke[] }
 
 export type DrawOp =
   | { kind: 'begin'; c: number; w: number; p: number[] }
   | { kind: 'more'; p: number[] }
+  | { kind: 'fill'; c: number; p: number[] }
   | { kind: 'undo' }
   | { kind: 'clear' }
 
 /** 伺服器轉來的筆畫：畫布 `id` 的第 `v` 個版本 */
 export type OpEvent = { type: 'op'; id: number; v: number; op: DrawOp }
+/** 只送給自己：猜的答案很接近了（`guess` 是那句話；整句裡有答案但多打了字時是 null） */
+export type CloseEvent = { type: 'close'; guess: string | null }
+export type DrawEvent = OpEvent | CloseEvent
 
 export type Stage = 'choose' | 'draw' | 'reveal' | 'end'
 export type Level = 'easy' | 'medium' | 'hard'
@@ -83,6 +89,8 @@ export type DrawView = {
   level: Level | null
   /** 作畫時的提示：每個字揭露了就是那個字，沒有就是 null */
   hint: { chars: (string | null)[]; category: string | null } | null
+  /** 畫的人還能給幾次提示（揭露一個字） */
+  hintsLeft: number
   ending: 'all' | 'timeout' | 'left' | null
   canvas: CanvasSnapshot
   seats: DrawSeat[]
@@ -94,7 +102,9 @@ export type DrawAction =
   | { type: 'choose'; index: number }
   | { type: 'begin'; c: number; w: number; p: number[] }
   | { type: 'more'; p: number[] }
+  | { type: 'fill'; c: number; p: number[] }
   | { type: 'undo' }
   | { type: 'clear' }
+  | { type: 'hint' }
 
-export type DrawParty = { view: DrawView; action: DrawAction; options: DrawOptions; event: OpEvent }
+export type DrawParty = { view: DrawView; action: DrawAction; options: DrawOptions; event: DrawEvent }
