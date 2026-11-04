@@ -588,9 +588,12 @@ GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可
 誰拿假密碼來登入；哪些 IP 現在被擋。程式在 `backend/src/honeypot.rs`。
 
 ```
-GET    /api/admin/honeypot              統計、最近的 300 個 IP、被找最多次的 30 個路徑、最近 100 次用假密碼登入（uses）、現在被擋的 IP（blocks）
+GET    /api/admin/honeypot              統計、最近的 300 個 IP、被找最多次的 30 個路徑、最近 100 次用假密碼登入（uses）、
+                                        現在被擋的 IP（blocks，手動的在前面）、自動封鎖有沒有開（auto_block）
 GET    /api/admin/honeypot/hits?ip=     最近 500 次（可以只看某個 IP）
-DELETE /api/admin/honeypot/blocks/{ip}  解除封鎖  →  204
+PUT    /api/admin/honeypot/auto-block   {"enabled":false}  →  {"enabled":false}
+POST   /api/admin/honeypot/blocks       {"ip":"203.0.113.5","days":7,"note":"…"}  →  201   days 不給或 null 是永久
+DELETE /api/admin/honeypot/blocks/{ip}  解除封鎖（手動和自動都解）  →  204
 ```
 
 - 路徑最後一段是 `.env` 或 `.env.<任何字>` 都算，在哪一層底下都一樣（`/laravel/.env`、`/.env.production`…），任何 method 都回同一份。
@@ -615,10 +618,16 @@ DELETE /api/admin/honeypot/blocks/{ip}  解除封鎖  →  204
 
 ### 封鎖
 
-- 最近 24 小時拿過假檔案（有登入的那幾次不算）或用過假密碼的 IP，不能登入也不能註冊。錯誤訊息跟失敗太多次、申請太多次一樣，不讓對方知道原因。
-  第一次用假密碼還是回 401，之後才開始擋。
-- 30 天內有帳號在那個 IP 登入過的不擋（看 IP 訪問紀錄裡有沒有帶帳號的請求），所以管理員登出後點開 `/.env` 來看，不會把自己鎖在外面。
-- 管理頁上被擋的 IP 旁邊有「封鎖中」和「解除封鎖」。解除時間記在 `honeypot_pardons`：那之前的紀錄不再算，之後再來拿還是會被擋。
+被擋的 IP 不能登入也不能註冊，錯誤訊息跟失敗太多次、申請太多次一樣，不讓對方知道原因。其他頁面照常能看。
+
+- **自動封鎖**（預設開著，管理頁可以關，存在 `site_settings` 的 `honeypot_auto_block`）：最近 24 小時拿過假檔案（有登入的那幾次不算）
+  或用過假密碼的 IP。第一次用假密碼還是回 401，之後才開始擋。
+  30 天內有帳號在那個 IP 登入過的不擋（看 IP 訪問紀錄裡有沒有帶帳號的請求），所以管理員登出後點開 `/.env` 來看，不會把自己鎖在外面。
+  關掉時照樣記錄誰來拿、誰用假密碼，只是不擋。
+- **手動封鎖**（`honeypot_blocks`）：管理頁輸入 IP、期限（1 / 7 / 30 天或永久）和備註；表格裡沒被擋的 IP 旁邊的「封鎖」會把 IP 填進表單。
+  不管自動封鎖有沒有開、那個 IP 有沒有帳號登入過都擋。IP 存成標準寫法（IPv6 小寫、縮寫），不能封鎖自己目前的 IP。
+- 被擋的 IP 旁邊有「封鎖中」或「手動封鎖」和「解除封鎖」。手動的直接刪掉；自動的把解除時間記在 `honeypot_pardons`，
+  那之前的紀錄不再算，之後再來拿還是會被擋。
 - 封鎖是每次登入、註冊時從資料庫算出來的，換版、重啟都照樣有效，換版期間的新舊容器結果也一樣。
 
 ## 主機監控

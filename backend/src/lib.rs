@@ -175,6 +175,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/access/requests", get(access_log::requests))
         .route("/admin/honeypot", get(honeypot::report))
         .route("/admin/honeypot/hits", get(honeypot::hits))
+        .route("/admin/honeypot/auto-block", put(honeypot::set_auto_block))
+        .route("/admin/honeypot/blocks", post(honeypot::create_block))
         .route("/admin/honeypot/blocks/{ip}", delete(honeypot::unblock))
         .route("/admin/feedback", get(feedback::admin_list))
         .route("/admin/feedback/{id}", get(feedback::admin_get).delete(feedback::admin_delete))

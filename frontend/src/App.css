@@ -656,6 +656,22 @@ td .edit {
   font-size: 12px;
   padding: 0 8px;
 }
+/* 手動封鎖的表單：IP、期限、備註、按鈕排一列，窄的時候換行 */
+.honeypot-block-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 0;
+}
+.honeypot-block-form p {
+  margin: 0;
+}
+.honeypot-block-form .row {
+  align-items: flex-end;
+}
+.honeypot-block-form .honeypot-days {
+  flex: 0 1 120px;
+}
 .access-paths summary {
   padding: 10px 0;
   color: var(--text-h);

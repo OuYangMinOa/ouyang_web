@@ -103,7 +103,14 @@ export type HoneypotUse = {
 }
 
 /** 現在不能登入和註冊的 IP */
-export type HoneypotBlock = { ip: string; until: string }
+export type HoneypotBlock = {
+  ip: string
+  /** 擋到什麼時候；手動封鎖選「永久」的是 null */
+  until: string | null
+  /** 管理員手動封鎖的；false 是拿過假檔案或用過假密碼被自動封鎖 */
+  manual: boolean
+  note: string
+}
 
 export type HoneypotReport = {
   summary: { hits: number; ips: number; last_day: number; last_day_ips: number; uses: number; blocked: number }
@@ -111,6 +118,7 @@ export type HoneypotReport = {
   paths: { path: string; hits: number; ips: number }[]
   uses: HoneypotUse[]
   blocks: HoneypotBlock[]
+  auto_block: boolean
 }
 
 export type HoneypotHit = {

@@ -241,6 +241,76 @@ async fn using_a_fake_password_is_recorded_and_blocked() {
 }
 
 #[tokio::test]
+async fn auto_block_can_be_turned_off() {
+    let app = app().await;
+    let admin = login(&app, "alice").await;
+    fetch(&app, "GET", "203.0.113.5", "/.env", None).await;
+    assert_eq!(login_from(&app, "203.0.113.5", "alice", "password123").await, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(app.get("/api/admin/honeypot", Some(&admin)).await.body["auto_block"], true);
+
+    let off = app.call("PUT", "/api/admin/honeypot/auto-block", Some(&admin), Some(json!({ "enabled": false }))).await;
+    assert_eq!((off.status, off.body), (StatusCode::OK, json!({ "enabled": false })));
+    // 關掉之後不擋，但照樣記錄
+    assert_eq!(login_from(&app, "203.0.113.5", "alice", "password123").await, StatusCode::OK);
+    fetch(&app, "GET", "198.51.100.7", "/.env", None).await;
+    let report = app.get("/api/admin/honeypot", Some(&admin)).await.body;
+    assert_eq!(report["auto_block"], false);
+    assert_eq!((report["summary"]["hits"].clone(), report["summary"]["blocked"].clone()), (json!(2), json!(0)));
+
+    // 再打開，之前的紀錄又算數
+    let on = app.call("PUT", "/api/admin/honeypot/auto-block", Some(&admin), Some(json!({ "enabled": true }))).await;
+    assert_eq!(on.status, StatusCode::OK);
+    assert_eq!(login_from(&app, "198.51.100.7", "alice", "password123").await, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn admins_can_block_ips_by_hand() {
+    let app = app().await;
+    let admin = login(&app, "alice").await;
+    let block = |body: Value| app.call("POST", "/api/admin/honeypot/blocks", Some(&admin), Some(body));
+
+    // 有帳號登入過的 IP、自動封鎖關掉，手動封鎖照樣擋
+    let body = json!({ "username": "alice", "password": "password123" });
+    let (_, _, cookie) = send(&app, "POST", "198.51.100.7", "/api/auth/login", None, Some(body)).await;
+    send(&app, "GET", "198.51.100.7", "/api/auth/me", cookie.as_deref(), None).await;
+    app.state.access_log.flush(&app.state.pool).await.unwrap();
+    app.call("PUT", "/api/admin/honeypot/auto-block", Some(&admin), Some(json!({ "enabled": false }))).await;
+    assert_eq!(block(json!({ "ip": " 198.51.100.7 ", "note": "一直猜密碼" })).await.status, StatusCode::CREATED);
+    assert_eq!(login_from(&app, "198.51.100.7", "alice", "password123").await, StatusCode::TOO_MANY_REQUESTS);
+
+    // 有期限的；IPv6 存成標準寫法
+    assert_eq!(block(json!({ "ip": "2001:DB8:0::1", "days": 7 })).await.status, StatusCode::CREATED);
+    assert_eq!(login_from(&app, "2001:db8::1", "alice", "password123").await, StatusCode::TOO_MANY_REQUESTS);
+
+    let report = app.get("/api/admin/honeypot", Some(&admin)).await.body;
+    assert_eq!(report["summary"]["blocked"], 2);
+    let find = |ip: &str| report["blocks"].as_array().unwrap().iter().find(|b| b["ip"] == ip).unwrap().clone();
+    let forever = find("198.51.100.7");
+    assert_eq!((forever["manual"].clone(), forever["until"].clone()), (json!(true), Value::Null));
+    assert_eq!(forever["note"], "一直猜密碼");
+    assert!(find("2001:db8::1")["until"].as_str().unwrap().ends_with('Z'));
+
+    // 格式不對、天數不對、自己目前的 IP 都不行
+    assert_eq!(block(json!({ "ip": "not-an-ip" })).await.status, StatusCode::BAD_REQUEST);
+    assert_eq!(block(json!({ "ip": "192.0.2.1", "days": 0 })).await.status, StatusCode::BAD_REQUEST);
+    let mine = json!({ "ip": "192.0.2.50" });
+    let (status, _, _) = send(&app, "POST", "192.0.2.50", "/api/admin/honeypot/blocks", Some(&admin), Some(mine)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // 過期就不擋
+    sqlx::query("UPDATE honeypot_blocks SET until = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 minute') WHERE ip = ?")
+        .bind("2001:db8::1")
+        .execute(&app.state.pool)
+        .await
+        .unwrap();
+    assert_eq!(login_from(&app, "2001:db8::1", "alice", "password123").await, StatusCode::OK);
+    // 解除
+    let unblock = app.call("DELETE", "/api/admin/honeypot/blocks/198.51.100.7", Some(&admin), None).await;
+    assert_eq!(unblock.status, StatusCode::NO_CONTENT);
+    assert_eq!(login_from(&app, "198.51.100.7", "alice", "password123").await, StatusCode::OK);
+}
+
+#[tokio::test]
 async fn limits_records_per_ip() {
     let app = app().await;
     let admin = login(&app, "alice").await;
@@ -258,4 +328,8 @@ async fn requires_admin() {
     assert_eq!(app.get("/api/admin/honeypot/hits", None).await.status, StatusCode::UNAUTHORIZED);
     let unblock = app.call("DELETE", "/api/admin/honeypot/blocks/203.0.113.5", None, None).await;
     assert_eq!(unblock.status, StatusCode::UNAUTHORIZED);
+    let block = app.call("POST", "/api/admin/honeypot/blocks", None, Some(json!({ "ip": "203.0.113.5" }))).await;
+    assert_eq!(block.status, StatusCode::UNAUTHORIZED);
+    let toggle = app.call("PUT", "/api/admin/honeypot/auto-block", None, Some(json!({ "enabled": false }))).await;
+    assert_eq!(toggle.status, StatusCode::UNAUTHORIZED);
 }

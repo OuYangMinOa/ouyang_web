@@ -8,8 +8,11 @@
 //!
 //! 正常使用者不會打開這些網址，所以拿過假檔案或用過假密碼的 IP 24 小時內不能登入和註冊（[`is_blocked`]），
 //! 除非 30 天內有帳號在那個 IP 登入過（例如管理員自己點開來看），或管理員在頁面上解除封鎖。
+//! 自動封鎖可以在頁面上關掉；管理員也可以手動封鎖任何 IP（`honeypot_blocks`），手動的不管開關和有沒有登入過都擋。
 //!
 //! 同一個 IP 10 分鐘超過 200 筆的部分不記（照樣回假檔案），紀錄保留 180 天。
+
+use std::{collections::HashSet, net::IpAddr};
 
 use axum::{
     Json,
@@ -33,6 +36,11 @@ const KEEP_DAYS: u32 = 180;
 const BLOCK_HOURS: u32 = 24;
 /// 這麼多天內有帳號在這個 IP 登入過的話不擋（自己人）
 const TRUST_DAYS: u32 = 30;
+/// `site_settings` 裡自動封鎖的開關，'1' 開、'0' 關
+const AUTO_BLOCK_KEY: &str = "honeypot_auto_block";
+/// 手動封鎖最多幾天（不選就是永久）、備註最長幾個字
+const MAX_BLOCK_DAYS: u32 = 3650;
+const MAX_NOTE_LEN: usize = 200;
 const MAX_PATH_LEN: usize = 300;
 const MAX_QUERY_LEN: usize = 300;
 const MAX_USER_AGENT_LEN: usize = 300;
@@ -287,17 +295,64 @@ pub async fn check_login(state: &AppState, headers: &HeaderMap, username: &str, 
     }
 }
 
-/// 現在被擋的 IP 和擋到什麼時候
-#[derive(Serialize, sqlx::FromRow)]
+/// 現在被擋的 IP
+#[derive(Serialize)]
 pub struct Block {
     pub ip: String,
-    pub until: String,
+    /// 擋到什麼時候；手動封鎖選「永久」的是 None
+    pub until: Option<String>,
+    /// 管理員手動封鎖的；false 是拿過假檔案或用過假密碼被自動封鎖
+    pub manual: bool,
+    /// 手動封鎖時填的備註
+    pub note: String,
 }
 
-/// `ip` 是空字串就列出全部。最近 24 小時拿過假檔案（不算有登入的時候）或用過假密碼、
-/// 而且那之後沒有被管理員解除、30 天內沒有帳號在這個 IP 登入過的，就是被擋
+#[derive(sqlx::FromRow)]
+struct AutoBlock {
+    ip: String,
+    until: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct ManualBlock {
+    ip: String,
+    until: Option<String>,
+    note: String,
+}
+
+/// 沒有設定就當作開著
+async fn auto_block_enabled(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM site_settings WHERE key = ?")
+        .bind(AUTO_BLOCK_KEY)
+        .fetch_optional(pool)
+        .await?;
+    Ok(value.as_deref() != Some("0"))
+}
+
+/// `ip` 是空字串就列出全部。手動封鎖的在前面；同一個 IP 兩種都有的話算手動
 async fn blocks(pool: &SqlitePool, ip: &str) -> Result<Vec<Block>, sqlx::Error> {
-    sqlx::query_as::<_, Block>(
+    let manual = sqlx::query_as::<_, ManualBlock>(
+        "SELECT ip, until, note FROM honeypot_blocks
+         WHERE (until IS NULL OR until > strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) AND (?1 = '' OR ip = ?1)
+         ORDER BY created_at DESC, ip",
+    )
+    .bind(ip)
+    .fetch_all(pool)
+    .await?;
+    let mut blocks: Vec<Block> =
+        manual.into_iter().map(|b| Block { ip: b.ip, until: b.until, manual: true, note: b.note }).collect();
+    if auto_block_enabled(pool).await? {
+        let manual_ips: HashSet<String> = blocks.iter().map(|b| b.ip.clone()).collect();
+        let auto = auto_blocks(pool, ip).await?.into_iter().filter(|b| !manual_ips.contains(&b.ip));
+        blocks.extend(auto.map(|b| Block { ip: b.ip, until: Some(b.until), manual: false, note: String::new() }));
+    }
+    Ok(blocks)
+}
+
+/// 最近 24 小時拿過假檔案（不算有登入的時候）或用過假密碼、
+/// 而且那之後沒有被管理員解除、30 天內沒有帳號在這個 IP 登入過的
+async fn auto_blocks(pool: &SqlitePool, ip: &str) -> Result<Vec<AutoBlock>, sqlx::Error> {
+    sqlx::query_as::<_, AutoBlock>(
         "WITH recent AS (
             SELECT ip, created_at FROM honeypot_hits
             WHERE user_id IS NULL AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?1) AND (?2 = '' OR ip = ?2)
@@ -330,7 +385,81 @@ pub async fn is_blocked(pool: &SqlitePool, ip: &str) -> Result<bool, sqlx::Error
     Ok(!blocks(pool, ip).await?.is_empty())
 }
 
-/// 管理員解除封鎖：這之前的紀錄不再算，之後再來拿還是會被擋
+#[derive(Deserialize, Serialize)]
+pub struct AutoBlockSetting {
+    pub enabled: bool,
+}
+
+/// 自動封鎖的開關。關掉時照樣記錄誰來拿、誰用假密碼，只是不擋；手動封鎖不受影響
+pub async fn set_auto_block(
+    State(state): State<AppState>,
+    _: Require<AdminUsers>,
+    Json(input): Json<AutoBlockSetting>,
+) -> Result<Json<AutoBlockSetting>, AppError> {
+    sqlx::query(
+        "INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(AUTO_BLOCK_KEY)
+    .bind(if input.enabled { "1" } else { "0" })
+    .execute(&state.pool)
+    .await?;
+    Ok(Json(input))
+}
+
+#[derive(Deserialize)]
+pub struct NewBlock {
+    pub ip: String,
+    /// 擋幾天；不給或 null 是永久
+    #[serde(default)]
+    pub days: Option<u32>,
+    #[serde(default)]
+    pub note: String,
+}
+
+/// 手動封鎖：不管自動封鎖有沒有開、那個 IP 有沒有帳號登入過都擋。同一個 IP 再封鎖一次會蓋掉期限和備註
+pub async fn create_block(
+    State(state): State<AppState>,
+    Require(user, _): Require<AdminUsers>,
+    headers: HeaderMap,
+    Json(input): Json<NewBlock>,
+) -> Result<StatusCode, AppError> {
+    // 存成標準寫法，才對得上 Traefik 給的 X-Forwarded-For
+    let ip = input.ip.trim().parse::<IpAddr>().map_err(|_| AppError::BadRequest("IP 格式不正確".into()))?.to_string();
+    if ip == client_key(&headers) {
+        return Err(AppError::BadRequest("不能封鎖自己目前的 IP".into()));
+    }
+    if let Some(days) = input.days
+        && !(1..=MAX_BLOCK_DAYS).contains(&days)
+    {
+        return Err(AppError::BadRequest(format!("天數要在 1～{MAX_BLOCK_DAYS} 之間")));
+    }
+    let note = input.note.trim();
+    if note.chars().count() > MAX_NOTE_LEN {
+        return Err(AppError::BadRequest(format!("備註不可超過 {MAX_NOTE_LEN} 字")));
+    }
+
+    // 順便清掉過期的
+    sqlx::query(
+        "DELETE FROM honeypot_blocks WHERE until IS NOT NULL AND until <= strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+    )
+    .execute(&state.pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO honeypot_blocks (ip, until, note, user_id)
+         VALUES (?1, CASE WHEN ?2 IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?2) END, ?3, ?4)
+         ON CONFLICT (ip) DO UPDATE SET until = excluded.until, note = excluded.note,
+             user_id = excluded.user_id, created_at = excluded.created_at",
+    )
+    .bind(&ip)
+    .bind(input.days.map(|days| format!("+{days} days")))
+    .bind(note)
+    .bind(user.id)
+    .execute(&state.pool)
+    .await?;
+    Ok(StatusCode::CREATED)
+}
+
+/// 解除封鎖：手動封鎖直接刪掉；自動封鎖是這之前的紀錄不再算，之後再來拿還是會被擋
 pub async fn unblock(
     State(state): State<AppState>,
     Require(user, _): Require<AdminUsers>,
@@ -339,6 +468,7 @@ pub async fn unblock(
     if ip.is_empty() || ip.len() > 100 {
         return Err(AppError::BadRequest("IP 格式不正確".into()));
     }
+    sqlx::query("DELETE FROM honeypot_blocks WHERE ip = ?").bind(&ip).execute(&state.pool).await?;
     sqlx::query(
         "INSERT INTO honeypot_pardons (ip, user_id) VALUES (?, ?)
          ON CONFLICT (ip) DO UPDATE SET user_id = excluded.user_id, created_at = excluded.created_at",
@@ -434,8 +564,10 @@ pub struct HoneypotReport {
     pub paths: Vec<HoneypotPath>,
     /// 最近 100 次用假密碼登入，新的在前面
     pub uses: Vec<HoneypotUse>,
-    /// 現在被擋的 IP（包含只用過假密碼、沒拿過假檔案的）
+    /// 現在被擋的 IP：手動封鎖的在前面，自動封鎖的包含只用過假密碼、沒拿過假檔案的
     pub blocks: Vec<Block>,
+    /// 自動封鎖有沒有開
+    pub auto_block: bool,
 }
 
 pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Result<Json<HoneypotReport>, AppError> {
@@ -449,6 +581,7 @@ pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Re
     .fetch_one(&state.pool)
     .await?;
     let blocks = blocks(&state.pool, "").await?;
+    let auto_block = auto_block_enabled(&state.pool).await?;
     let summary = HoneypotSummary { hits, ips, last_day, last_day_ips, uses, blocked: blocks.len() };
 
     // 帳號名稱只有英數字和 _ . -，所以可以用 group_concat 的預設逗號分隔
@@ -483,7 +616,8 @@ pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Re
     .fetch_all(&state.pool)
     .await?;
 
-    Ok(Json(HoneypotReport { summary, ips: ips.into_iter().map(Into::into).collect(), paths, uses, blocks }))
+    let ips = ips.into_iter().map(Into::into).collect();
+    Ok(Json(HoneypotReport { summary, ips, paths, uses, blocks, auto_block }))
 }
 
 #[derive(Deserialize)]

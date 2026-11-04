@@ -1,8 +1,8 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { api, errorMessage } from '../../api'
 import { describeAgent } from './agent'
 import { IpLink } from './IpLink'
-import type { HoneypotHit, HoneypotIp, HoneypotReport, HoneypotUse } from './types'
+import type { HoneypotBlock, HoneypotHit, HoneypotIp, HoneypotReport, HoneypotUse } from './types'
 
 /** 表格裡每個 IP 最多列出幾個路徑，其他的看明細 */
 const MAX_SHOWN_PATHS = 5
@@ -37,28 +37,195 @@ function Hits({ ip }: { ip: string }) {
   )
 }
 
-/** IP 和封鎖中的標記；封鎖是因為拿過假檔案或用過假密碼，到期前不能登入和註冊 */
-function BlockedIp({ ip, until }: { ip: string; until: string | undefined }) {
+/** 手動封鎖可以選的期限；null 是永久 */
+const BLOCK_DAYS: { label: string; days: number | null }[] = [
+  { label: '1 天', days: 1 },
+  { label: '7 天', days: 7 },
+  { label: '30 天', days: 30 },
+  { label: '永久', days: null },
+]
+
+function describeUntil(until: string | null) {
+  return until ? `到 ${formatTime(until)}` : '永久，直到解除'
+}
+
+/** IP 和封鎖的標記：被擋的到期前不能登入和註冊 */
+function BlockedIp({ ip, block }: { ip: string; block: HoneypotBlock | undefined }) {
   return (
     <span className="honeypot-ip">
       <IpLink ip={ip} />
-      {until && (
-        <span className="badge bad" title={`到 ${formatTime(until)} 前不能登入和註冊`}>
-          封鎖中
+      {block && (
+        <span className="badge bad" title={`${describeUntil(block.until)}不能登入和註冊`}>
+          {block.manual ? '手動封鎖' : '封鎖中'}
         </span>
       )}
     </span>
   )
 }
 
-type Blocks = { until: Map<string, string>; unblock: (ip: string) => void }
+type Blocks = {
+  byIp: Map<string, HoneypotBlock>
+  unblock: (ip: string) => void
+  /** 把 IP 填進手動封鎖的表單 */
+  prefill: (ip: string) => void
+}
 
-function UnblockButton({ ip, blocks }: { ip: string; blocks: Blocks }) {
-  if (!blocks.until.has(ip)) return null
+/** 被擋的是「解除封鎖」，沒被擋的是「封鎖」（填進上面的表單，選好期限再送出） */
+function BlockButton({ ip, blocks }: { ip: string; blocks: Blocks }) {
+  if (blocks.byIp.has(ip)) {
+    return (
+      <button type="button" className="secondary" onClick={() => blocks.unblock(ip)}>
+        解除封鎖
+      </button>
+    )
+  }
+  // 本機開發沒有 X-Forwarded-For，IP 是 local，不能封鎖
+  if (ip === 'local') return null
   return (
-    <button type="button" className="secondary" onClick={() => blocks.unblock(ip)}>
-      解除封鎖
+    <button type="button" className="secondary" onClick={() => blocks.prefill(ip)}>
+      封鎖
     </button>
+  )
+}
+
+function AutoBlockSwitch({ enabled, onChange }: { enabled: boolean; onChange: (enabled: boolean) => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="card registration-switch">
+      <div className="stack">
+        <h3>自動封鎖</h3>
+        <p className="muted">
+          {enabled
+            ? '拿過假檔案或用假密碼登入過的 IP，24 小時內不能登入和註冊，看到的是「嘗試次數過多」。30 天內有帳號在那個 IP 登入過的不擋，所以自己點開來看不會把自己鎖在外面。'
+            : '已關閉：照樣記錄誰來拿、誰用假密碼，但不擋。手動封鎖的照樣擋。'}
+        </p>
+      </div>
+      <label className="switch">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={enabled}
+          disabled={busy}
+          onChange={(e) => {
+            setBusy(true)
+            onChange(e.target.checked).finally(() => setBusy(false))
+          }}
+        />
+        <span>{enabled ? '開著' : '關著'}</span>
+      </label>
+    </div>
+  )
+}
+
+function BlockForm({
+  ip,
+  setIp,
+  inputRef,
+  onBlocked,
+}: {
+  ip: string
+  setIp: (ip: string) => void
+  inputRef: RefObject<HTMLInputElement | null>
+  onBlocked: () => void
+}) {
+  const [days, setDays] = useState('7')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const chosen = BLOCK_DAYS.find((d) => String(d.days) === days)?.days ?? null
+      await api('/admin/honeypot/blocks', {
+        method: 'POST',
+        body: JSON.stringify({ ip: ip.trim(), days: chosen, note }),
+      })
+      setIp('')
+      setNote('')
+      setError(null)
+      onBlocked()
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="card honeypot-block-form" onSubmit={submit}>
+      <h3>手動封鎖</h3>
+      <p className="muted">不管自動封鎖有沒有開、那個 IP 有沒有帳號登入過都擋。同一個 IP 再封鎖一次會換成新的期限。</p>
+      <div className="row">
+        <label>
+          IP
+          <input
+            ref={inputRef}
+            value={ip}
+            onChange={(e) => setIp(e.target.value)}
+            placeholder="IPv4 或 IPv6"
+            inputMode="text"
+            autoComplete="off"
+            spellCheck={false}
+            required
+          />
+        </label>
+        <label className="honeypot-days">
+          期限
+          <select value={days} onChange={(e) => setDays(e.target.value)}>
+            {BLOCK_DAYS.map((d) => (
+              <option key={d.label} value={String(d.days)}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          備註（選填）
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="為什麼封鎖" />
+        </label>
+        <button type="submit" disabled={busy || !ip.trim()}>
+          封鎖
+        </button>
+      </div>
+      {error && <p className="error">{error}</p>}
+    </form>
+  )
+}
+
+function ManualBlockTable({ blocks, unblock }: { blocks: HoneypotBlock[]; unblock: (ip: string) => void }) {
+  return (
+    <div className="table-wrap">
+      <table className="responsive">
+        <thead>
+          <tr>
+            <th>IP</th>
+            <th>期限</th>
+            <th>備註</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {blocks.map((b) => (
+            <tr key={b.ip}>
+              <td data-label="IP" className="primary">
+                <IpLink ip={b.ip} />
+              </td>
+              <td data-label="期限">{b.until ? formatTime(b.until) : '永久'}</td>
+              <td data-label="備註" className="registration-note">
+                {b.note || <span className="muted">—</span>}
+              </td>
+              <td className="actions">
+                <button type="button" className="secondary" onClick={() => unblock(b.ip)}>
+                  解除封鎖
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -84,7 +251,7 @@ function UseTable({ uses, blocks }: { uses: HoneypotUse[]; blocks: Blocks }) {
                 <time>{formatTime(u.created_at)}</time>
               </td>
               <td data-label="IP">
-                <BlockedIp ip={u.ip} until={blocks.until.get(u.ip)} />
+                <BlockedIp ip={u.ip} block={blocks.byIp.get(u.ip)} />
               </td>
               <td data-label="密碼">
                 <code>{u.field}</code>
@@ -100,7 +267,7 @@ function UseTable({ uses, blocks }: { uses: HoneypotUse[]; blocks: Blocks }) {
                 {describeAgent(u.user_agent)}
               </td>
               <td className="actions">
-                <UnblockButton ip={u.ip} blocks={blocks} />
+                <BlockButton ip={u.ip} blocks={blocks} />
               </td>
             </tr>
           ))}
@@ -143,7 +310,7 @@ function IpTable({ ips, blocks }: { ips: HoneypotIp[]; blocks: Blocks }) {
             <Fragment key={row.ip}>
               <tr>
                 <td data-label="IP" className="primary">
-                  <BlockedIp ip={row.ip} until={blocks.until.get(row.ip)} />
+                  <BlockedIp ip={row.ip} block={blocks.byIp.get(row.ip)} />
                 </td>
                 <td data-label="次數">{row.hits}</td>
                 <td data-label="最後一次">
@@ -167,7 +334,7 @@ function IpTable({ ips, blocks }: { ips: HoneypotIp[]; blocks: Blocks }) {
                   {describeAgent(row.user_agent)}
                 </td>
                 <td className="actions">
-                  <UnblockButton ip={row.ip} blocks={blocks} />
+                  <BlockButton ip={row.ip} blocks={blocks} />
                   <button
                     type="button"
                     className="secondary"
@@ -197,6 +364,8 @@ export default function AdminHoneypot() {
   const [report, setReport] = useState<HoneypotReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
+  const [draftIp, setDraftIp] = useState('')
+  const draftRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(() => {
     api<HoneypotReport>('/admin/honeypot')
@@ -210,12 +379,31 @@ export default function AdminHoneypot() {
   useEffect(load, [load])
 
   const blocks: Blocks = {
-    until: new Map((report?.blocks ?? []).map((b) => [b.ip, b.until])),
+    byIp: new Map((report?.blocks ?? []).map((b) => [b.ip, b])),
     unblock: (ip) => {
       api(`/admin/honeypot/blocks/${encodeURIComponent(ip)}`, { method: 'DELETE' })
         .then(load)
         .catch((e) => setError(errorMessage(e)))
     },
+    prefill: (ip) => {
+      setDraftIp(ip)
+      draftRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      draftRef.current?.focus({ preventScroll: true })
+    },
+  }
+
+  async function setAutoBlock(enabled: boolean) {
+    try {
+      const result = await api<{ enabled: boolean }>('/admin/honeypot/auto-block', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      })
+      // 開關先換過來，被擋的清單再重新抓
+      setReport((prev) => prev && { ...prev, auto_block: result.enabled })
+      load()
+    } catch (e) {
+      setError(errorMessage(e))
+    }
   }
 
   const keyword = filter.trim().toLowerCase()
@@ -248,10 +436,6 @@ export default function AdminHoneypot() {
         IP，密碼每個 IP 都不一樣），並記下是誰拿走的，保留 180 天。正常使用者不會打開這些網址，來過的幾乎都是掃描器；
         自己點開來看也會記一筆，帳號會是你。
       </p>
-      <p className="muted">
-        拿過假檔案或用假密碼登入過的 IP，24 小時內不能登入和註冊，看到的是「嘗試次數過多」。30 天內有帳號在那個 IP
-        登入過的不會被擋，所以自己點開來看不會把自己鎖在外面；擋錯了可以按「解除封鎖」。
-      </p>
 
       {stats && (
         <div className="visit-stats">
@@ -268,6 +452,15 @@ export default function AdminHoneypot() {
 
       {report && (
         <>
+          <h2>封鎖</h2>
+          <div className="stack">
+            <AutoBlockSwitch enabled={report.auto_block} onChange={setAutoBlock} />
+            <BlockForm ip={draftIp} setIp={setDraftIp} inputRef={draftRef} onBlocked={load} />
+            {report.blocks.some((b) => b.manual) && (
+              <ManualBlockTable blocks={report.blocks.filter((b) => b.manual)} unblock={blocks.unblock} />
+            )}
+          </div>
+
           <h2>假密碼被拿去登入</h2>
           <p className="muted">
             每個 IP 拿到的密碼都不一樣，所以看得出是誰拿去用、當初是發給哪個 IP 的。兩個 IP
