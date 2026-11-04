@@ -643,6 +643,19 @@ td .edit {
   margin-top: 0;
   padding: 4px 16px;
 }
+/* .env 蜜罐：IP 旁邊的「封鎖中」、當初拿走的 IP 和時間，窄的時候換行 */
+.honeypot-ip,
+.honeypot-issued {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.honeypot-ip .badge {
+  font-size: 12px;
+  padding: 0 8px;
+}
 .access-paths summary {
   padding: 10px 0;
   color: var(--text-h);
@@ -1282,6 +1295,10 @@ time {
   }
   table.responsive td.actions {
     justify-content: flex-start;
+  }
+  /* 沒有按鈕的列不要多一行空白 */
+  table.responsive td.actions:empty {
+    display: none;
   }
   td.actions button {
     flex: 1;

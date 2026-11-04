@@ -14,6 +14,7 @@ use backend::{
     AppState, access_log,
     auth::upsert_admin,
     healthcheck,
+    honeypot::Honeypot,
     monitor::{self, Monitor},
     router,
     weather::{self, Weather},
@@ -58,6 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut state = AppState::new(pool.clone(), app_env.clone(), commit.clone());
     state.cookie_secure = env::var("COOKIE_SECURE").is_ok_and(|v| v == "true");
+    state.honeypot = Arc::new(Honeypot::from_env());
     if let Ok(dir) = env::var("MUSIC_DIR") {
         state.music_dir = dir.into();
     }

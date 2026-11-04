@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api, errorMessage } from '../../api'
 import { describeAgent } from './agent'
 import { IpLink } from './IpLink'
-import type { HoneypotHit, HoneypotIp, HoneypotReport } from './types'
+import type { HoneypotHit, HoneypotIp, HoneypotReport, HoneypotUse } from './types'
 
 /** 表格裡每個 IP 最多列出幾個路徑，其他的看明細 */
 const MAX_SHOWN_PATHS = 5
@@ -37,6 +37,79 @@ function Hits({ ip }: { ip: string }) {
   )
 }
 
+/** IP 和封鎖中的標記；封鎖是因為拿過假檔案或用過假密碼，到期前不能登入和註冊 */
+function BlockedIp({ ip, until }: { ip: string; until: string | undefined }) {
+  return (
+    <span className="honeypot-ip">
+      <IpLink ip={ip} />
+      {until && (
+        <span className="badge bad" title={`到 ${formatTime(until)} 前不能登入和註冊`}>
+          封鎖中
+        </span>
+      )}
+    </span>
+  )
+}
+
+type Blocks = { until: Map<string, string>; unblock: (ip: string) => void }
+
+function UnblockButton({ ip, blocks }: { ip: string; blocks: Blocks }) {
+  if (!blocks.until.has(ip)) return null
+  return (
+    <button type="button" className="secondary" onClick={() => blocks.unblock(ip)}>
+      解除封鎖
+    </button>
+  )
+}
+
+function UseTable({ uses, blocks }: { uses: HoneypotUse[]; blocks: Blocks }) {
+  return (
+    <div className="table-wrap">
+      <table className="responsive">
+        <thead>
+          <tr>
+            <th>時間</th>
+            <th>IP</th>
+            <th>用了哪個密碼</th>
+            <th>填的帳號</th>
+            <th>當初拿走的</th>
+            <th>裝置</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {uses.map((u) => (
+            <tr key={u.id}>
+              <td data-label="時間" className="primary">
+                <time>{formatTime(u.created_at)}</time>
+              </td>
+              <td data-label="IP">
+                <BlockedIp ip={u.ip} until={blocks.until.get(u.ip)} />
+              </td>
+              <td data-label="密碼">
+                <code>{u.field}</code>
+              </td>
+              <td data-label="帳號">{u.username || <span className="muted">（空白）</span>}</td>
+              <td data-label="當初拿走">
+                <span className="honeypot-issued">
+                  <IpLink ip={u.issued_ip} />
+                  <time className="muted">{formatTime(u.issued_at)}</time>
+                </span>
+              </td>
+              <td data-label="裝置" title={u.user_agent}>
+                {describeAgent(u.user_agent)}
+              </td>
+              <td className="actions">
+                <UnblockButton ip={u.ip} blocks={blocks} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function Paths({ paths }: { paths: string[] }) {
   const shown = paths.slice(0, MAX_SHOWN_PATHS)
   const more = paths.length - shown.length
@@ -48,7 +121,7 @@ function Paths({ paths }: { paths: string[] }) {
   )
 }
 
-function IpTable({ ips }: { ips: HoneypotIp[] }) {
+function IpTable({ ips, blocks }: { ips: HoneypotIp[]; blocks: Blocks }) {
   const [open, setOpen] = useState<string | null>(null)
 
   return (
@@ -70,7 +143,7 @@ function IpTable({ ips }: { ips: HoneypotIp[] }) {
             <Fragment key={row.ip}>
               <tr>
                 <td data-label="IP" className="primary">
-                  <IpLink ip={row.ip} />
+                  <BlockedIp ip={row.ip} until={blocks.until.get(row.ip)} />
                 </td>
                 <td data-label="次數">{row.hits}</td>
                 <td data-label="最後一次">
@@ -94,6 +167,7 @@ function IpTable({ ips }: { ips: HoneypotIp[] }) {
                   {describeAgent(row.user_agent)}
                 </td>
                 <td className="actions">
+                  <UnblockButton ip={row.ip} blocks={blocks} />
                   <button
                     type="button"
                     className="secondary"
@@ -135,6 +209,15 @@ export default function AdminHoneypot() {
 
   useEffect(load, [load])
 
+  const blocks: Blocks = {
+    until: new Map((report?.blocks ?? []).map((b) => [b.ip, b.until])),
+    unblock: (ip) => {
+      api(`/admin/honeypot/blocks/${encodeURIComponent(ip)}`, { method: 'DELETE' })
+        .then(load)
+        .catch((e) => setError(errorMessage(e)))
+    },
+  }
+
   const keyword = filter.trim().toLowerCase()
   const ips = (report?.ips ?? []).filter(
     (row) =>
@@ -149,6 +232,8 @@ export default function AdminHoneypot() {
     ['不同 IP', report.summary.ips],
     ['最近 24 小時', report.summary.last_day],
     ['最近 24 小時的 IP', report.summary.last_day_ips],
+    ['封鎖中的 IP', report.summary.blocked],
+    ['假密碼被拿去登入', report.summary.uses],
   ]
 
   return (
@@ -160,8 +245,12 @@ export default function AdminHoneypot() {
           /.env
         </a>
         、<code>/.env.local</code>、<code>/api/.env</code> 這類設定檔想偷密碼。這些網址會回一份假的設定檔（主機是連不到的內網
-        IP，密碼是隨機產生的），並記下是誰拿走的，保留 180 天。正常使用者不會打開這些網址，來過的幾乎都是掃描器；
+        IP，密碼每個 IP 都不一樣），並記下是誰拿走的，保留 180 天。正常使用者不會打開這些網址，來過的幾乎都是掃描器；
         自己點開來看也會記一筆，帳號會是你。
+      </p>
+      <p className="muted">
+        拿過假檔案或用假密碼登入過的 IP，24 小時內不能登入和註冊，看到的是「嘗試次數過多」。30 天內有帳號在那個 IP
+        登入過的不會被擋，所以自己點開來看不會把自己鎖在外面；擋錯了可以按「解除封鎖」。
       </p>
 
       {stats && (
@@ -173,6 +262,24 @@ export default function AdminHoneypot() {
             </div>
           ))}
         </div>
+      )}
+
+      {error && <p className="error">{error}</p>}
+
+      {report && (
+        <>
+          <h2>假密碼被拿去登入</h2>
+          <p className="muted">
+            每個 IP 拿到的密碼都不一樣，所以看得出是誰拿去用、當初是發給哪個 IP 的。兩個 IP
+            不一樣很常見：掃描和實際動手的常常是不同台機器。
+          </p>
+          {report.uses.length ? (
+            <UseTable uses={report.uses} blocks={blocks} />
+          ) : (
+            <p className="muted">還沒有人拿假密碼來登入。</p>
+          )}
+          <h2>拿走假檔案的 IP</h2>
+        </>
       )}
 
       {report && report.paths.length > 0 && (
@@ -206,11 +313,10 @@ export default function AdminHoneypot() {
         </button>
       </div>
 
-      {error && <p className="error">{error}</p>}
       {report &&
         (ips.length ? (
           <>
-            <IpTable ips={ips} />
+            <IpTable ips={ips} blocks={blocks} />
             {report.ips.length < report.summary.ips && (
               <p className="muted">只列出最近的 {report.ips.length} 個 IP。</p>
             )}
