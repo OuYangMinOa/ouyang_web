@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { Board } from './board'
+import { paint } from './paint'
 import {
   COLOR_NAMES,
   ERASER,
@@ -8,12 +9,10 @@ import {
   MAX_POINTS,
   MAX_STROKES,
   PALETTE,
-  PAPER,
   W,
   WIDTH_NAMES,
   WIDTHS,
   type DrawAction,
-  type Stroke,
 } from './types'
 
 /** 每隔多久把累積的點送出去（太頻繁會碰到伺服器的限速，太久別人看起來會一頓一頓的） */
@@ -23,37 +22,6 @@ const MIN_STEP = 3
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n))
-}
-
-/** 整張重畫（點最多兩萬個，一次不到幾毫秒），用 requestAnimationFrame 合併 */
-function paint(el: HTMLCanvasElement, strokes: Stroke[]) {
-  const ctx = el.getContext('2d')
-  if (!ctx) return
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.fillStyle = PAPER
-  ctx.fillRect(0, 0, el.width, el.height)
-  ctx.setTransform(el.width / W, 0, 0, el.height / H, 0, 0)
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  for (const s of strokes) {
-    const color = PALETTE[s.c] ?? PALETTE[1]
-    const width = WIDTHS[s.w] ?? WIDTHS[1]
-    const p = s.p
-    if (p.length < 2) continue
-    if (p.length === 2) {
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.arc(p[0], p[1], width / 2, 0, Math.PI * 2)
-      ctx.fill()
-      continue
-    }
-    ctx.strokeStyle = color
-    ctx.lineWidth = width
-    ctx.beginPath()
-    ctx.moveTo(p[0], p[1])
-    for (let i = 2; i + 1 < p.length; i += 2) ctx.lineTo(p[i], p[i + 1])
-    ctx.stroke()
-  }
 }
 
 type Active = { pointer: number; last: [number, number]; queue: number[] }
@@ -68,6 +36,8 @@ export function Sketch({
   canDraw,
   send,
   overlay,
+  maxStrokes = MAX_STROKES,
+  maxPoints = MAX_POINTS,
 }: {
   board: Board
   /** 目前這一棒的畫布 id：本地的畫布還沒換成這一張（剛換人、view 還沒套用）時先不能畫 */
@@ -75,6 +45,9 @@ export function Sketch({
   canDraw: boolean
   send: (action: DrawAction) => void
   overlay?: ReactNode
+  /** 一張畫最多幾筆、幾個點（傳話畫畫整張一次送，上限比較低） */
+  maxStrokes?: number
+  maxPoints?: number
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const active = useRef<Active | null>(null)
@@ -155,7 +128,7 @@ export function Sketch({
   function down(e: ReactPointerEvent<HTMLCanvasElement>) {
     if (!canDraw || board.id !== canvasId || active.current) return
     if (e.pointerType === 'mouse' && e.button !== 0) return
-    if (board.strokes.length >= MAX_STROKES || board.points >= MAX_POINTS) {
+    if (board.strokes.length >= maxStrokes || board.points >= maxPoints) {
       setFull(true)
       return
     }
@@ -181,7 +154,7 @@ export function Sketch({
       const dx = x - s.last[0]
       const dy = y - s.last[1]
       if (dx * dx + dy * dy < MIN_STEP * MIN_STEP) continue
-      if (board.points + added.length / 2 >= MAX_POINTS) {
+      if (board.points + added.length / 2 >= maxPoints) {
         setFull(true)
         break
       }

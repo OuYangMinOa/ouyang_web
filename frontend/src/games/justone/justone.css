@@ -1,0 +1,338 @@
+/* ---- 只有一個詞 ---- */
+
+.jo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.jo-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.jo-board .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.jo-deck {
+  margin: 0;
+  text-align: center;
+}
+.jo-deck strong {
+  color: var(--ok);
+}
+
+/* 題目：出題的人點一下遮住；猜的人是問號 */
+.jo-word {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 16px;
+  border: 2px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: center;
+  box-sizing: border-box;
+}
+.jo-word strong {
+  font: 700 clamp(28px, 8vw, 40px) var(--serif);
+  letter-spacing: 0.06em;
+  overflow-wrap: anywhere;
+}
+.jo-word.hidden {
+  border-style: dashed;
+  border-color: var(--border);
+}
+.jo-word.hidden strong {
+  color: var(--text);
+}
+.jo-word.guesser {
+  border-style: dashed;
+}
+.jo-word.guesser strong {
+  color: var(--accent);
+}
+.jo-word-label,
+.jo-word-hint {
+  font-size: 13px;
+  color: var(--text);
+}
+.jo-word.spectator {
+  margin: 0;
+  border: 1px dashed var(--border);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.jo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  min-width: 0;
+}
+.jo-actions p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.jo-actions label > span {
+  color: var(--text-h);
+}
+.jo-actions > button,
+.jo-judge button {
+  min-height: 44px;
+}
+.jo-actions > button.secondary {
+  align-self: flex-start;
+  min-height: 40px;
+}
+
+/* 寫提示：兩個提示時桌機並排、窄螢幕直排 */
+.jo-clue-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.jo-clue-inputs input {
+  flex: 1 1 140px;
+}
+
+.jo-guess {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.jo-guess .inline-form {
+  flex-wrap: wrap;
+}
+.jo-guess .inline-form input {
+  flex: 1 1 160px;
+}
+.jo-guess > button.secondary {
+  align-self: flex-start;
+}
+
+.jo-judge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.jo-judge button {
+  flex: 1 1 120px;
+}
+
+.jo-accept {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.jo-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 提示卡：留下的有外框，被刪掉的淡掉加刪除線 */
+.jo-clues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+.jo-clues.big {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.jo-clue-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  min-height: 56px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text-h);
+  text-align: left;
+}
+.jo-clue.ok .jo-clue-body {
+  border: 2px solid var(--accent);
+}
+button.jo-clue-body {
+  cursor: pointer;
+}
+button.jo-clue-body:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+}
+.jo-clue-text {
+  font: 700 20px var(--serif);
+  overflow-wrap: anywhere;
+}
+.jo-clues.big .jo-clue-text {
+  font-size: clamp(22px, 6vw, 28px);
+}
+.jo-clue-meta {
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.jo-clue.duplicate .jo-clue-body,
+.jo-clue.invalid .jo-clue-body,
+.jo-clue.similar .jo-clue-body {
+  border-style: dashed;
+}
+.jo-clue.duplicate .jo-clue-text,
+.jo-clue.invalid .jo-clue-text,
+.jo-clue.similar .jo-clue-text {
+  color: var(--text);
+  text-decoration: line-through;
+}
+.jo-clue.similar .jo-clue-body {
+  border-color: var(--danger);
+}
+.jo-clue.similar .jo-clue-status,
+.jo-clue.duplicate .jo-clue-status,
+.jo-clue.invalid .jo-clue-status {
+  color: var(--danger);
+}
+.jo-no-clues {
+  margin: 0;
+}
+
+.jo-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.jo-seat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-sizing: border-box;
+}
+.jo-seat.guesser {
+  border: 2px solid var(--accent);
+}
+.jo-seat-name {
+  font-weight: 600;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.jo-seat.me .jo-seat-name {
+  color: var(--accent);
+}
+.jo-seat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.jo-seat-chips .chip {
+  margin: 0;
+}
+
+.jo-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px;
+  border: 2px solid var(--ok);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+}
+.jo-result h3 {
+  margin: 0;
+  font: 700 clamp(32px, 10vw, 48px) var(--serif);
+  color: var(--ok);
+}
+.jo-result p {
+  margin: 0;
+}
+.jo-rating {
+  font-size: 18px;
+  color: var(--text-h);
+}
+
+.jo-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.jo-log h3 {
+  margin: 0;
+}
+.jo-log ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.jo-log li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 10px;
+}
+.jo-log li.ok {
+  border-left-color: var(--ok);
+}
+.jo-log li.wrong {
+  border-left-color: var(--danger);
+}
+.jo-log-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.jo-log-clues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 14px;
+}
+.jo-log-clue {
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.jo-log-clue:not(.ok) {
+  color: var(--text);
+  text-decoration: line-through;
+}
