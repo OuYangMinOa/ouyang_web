@@ -1,0 +1,278 @@
+/* ---- 傳話畫畫（畫布、工具列沿用你畫我猜的 draw.css） ---- */
+
+.tp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tp-play {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.tp-play .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+}
+.tp-step,
+.tp-center {
+  margin: 0;
+  text-align: center;
+}
+
+.tp-task {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+/* 畫圖時題目、畫布、完成鈕要一起放得進一個畫面 */
+.tp-draw .dg-sketch {
+  width: min(100%, 960px, calc((var(--game-vh) - 190px) * 4 / 3));
+}
+
+/* 要畫的句子 */
+.tp-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+}
+.tp-prompt span {
+  font-size: 13px;
+}
+.tp-prompt strong {
+  font: 700 clamp(20px, 5.5vw, 26px) var(--serif);
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+/* 看圖寫字：上一個人的畫 */
+.tp-given {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(100%, 720px, calc((var(--game-vh) - 230px) * 4 / 3));
+  min-width: min(100%, 260px);
+  margin: 0 auto;
+}
+.tp-given figcaption {
+  font-size: 13px;
+  text-align: center;
+}
+
+.tp-write {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(100%, 720px);
+  margin: 0 auto;
+}
+.tp-write label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tp-write label > span {
+  color: var(--text-h);
+  font-weight: 600;
+}
+.tp-write input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 18px;
+  min-height: 44px;
+}
+
+.tp-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.tp-buttons button {
+  min-height: 44px;
+  min-width: 120px;
+}
+.tp-buttons p {
+  margin: 0;
+}
+
+/* 唯讀的畫：和畫布一樣是白紙，不跟主題 */
+.tp-picture {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  line-height: 0;
+  background: #fff;
+}
+.tp-picture canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+/* 揭曉、結算：一串由上往下 */
+.tp-chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(100%, 640px);
+  margin-inline: auto;
+}
+.tp-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  animation: tp-pop 0.25s ease-out;
+}
+@keyframes tp-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tp-entry {
+    animation: none;
+  }
+}
+.tp-entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.tp-entry-head strong {
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.tp-entry-head .chip {
+  margin: 0;
+}
+.tp-text {
+  margin: 0;
+  font: 700 clamp(18px, 5vw, 24px) var(--serif);
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.tp-text.empty,
+.tp-blank {
+  color: var(--text);
+  font-weight: 400;
+}
+.tp-blank {
+  margin: 0;
+  padding: 24px 12px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  text-align: center;
+}
+.tp-entry-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+.tp-like {
+  min-height: 40px;
+  min-width: 64px;
+  padding-inline: 12px;
+}
+.tp-likes {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tp-chain-end {
+  height: 0;
+}
+.tp-next {
+  position: sticky;
+  bottom: 8px;
+}
+.tp-next button {
+  box-shadow: var(--shadow);
+}
+
+/* 側邊欄的進度 */
+.tp-progress h3,
+.tp-awards h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-h);
+}
+.tp-progress ol,
+.tp-awards ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tp-progress li,
+.tp-awards li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.tp-progress li.me,
+.tp-awards li.me {
+  border-color: var(--accent);
+}
+.tp-progress li.offline {
+  opacity: 0.6;
+}
+.tp-progress .chip {
+  margin: 0;
+}
+.tp-progress-name {
+  flex: 1 1 auto;
+  color: var(--text-h);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tp-done {
+  background: var(--ok);
+}
+.tp-awards {
+  width: min(100%, 640px);
+  margin-inline: auto;
+}
+.tp-awards li span {
+  flex: 1 1 auto;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.tp-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tp-options p {
+  margin: 0;
+}
