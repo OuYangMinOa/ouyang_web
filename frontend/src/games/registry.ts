@@ -91,6 +91,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./antique/song'),
   },
   {
+    id: 'telephone',
+    name: '傳話畫畫',
+    icon: '📞',
+    blurb: '每個人寫一句話傳給下一個人畫，再傳給下一個人看圖猜，傳一圈之後一串一串揭曉，看看題目歪成什麼樣子。3～10 人，手機也能畫。',
+    tags: ['多人', '線上'],
+    category: '派對',
+    component: lazyPage(() => import('./telephone')),
+    lobby: { kind: 'party', players: '3～10 人' },
+    music: () => import('./telephone/song'),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',
