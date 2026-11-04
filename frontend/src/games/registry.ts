@@ -91,6 +91,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./antique/song'),
   },
   {
+    id: 'uno',
+    name: 'UNO',
+    icon: '🎴',
+    blurb: '經典的 UNO：出同顏色或同數字的牌，跳過、迴轉、+2、萬用+4 一起來，剩一張記得喊 UNO，沒喊會被抓！2～10 人，可以加電腦。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazyPage(() => import('./uno')),
+    lobby: { kind: 'party', players: '2～10 人，可以加電腦' },
+    music: () => import('./uno/song'),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',
