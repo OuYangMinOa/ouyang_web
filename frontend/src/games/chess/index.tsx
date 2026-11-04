@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { OnlinePanel } from '../shared/OnlinePanel'
 import { load, save } from '../shared/storage'
 import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
+import { TakebackButton, TakebackNotice } from '../shared/TakebackControls'
 import { useRoom } from '../shared/useRoom'
 import { chooseMove, type Level } from './ai'
 import type { AiRequest, AiResponse } from './ai.worker'
@@ -85,7 +86,11 @@ export default function Chess() {
 
   const ready = mode !== 'online' || (room.connected && room.peerOnline)
   const aiTurn = mode === 'ai' && !game.result && game.turn !== human
-  const canMove = !game.result && ready && (me === null || game.turn === me) && (mode !== 'online' || me !== null)
+  const canMove =
+    !game.result &&
+    ready &&
+    (me === null || game.turn === me) &&
+    (mode !== 'online' || (me !== null && !online.takeback.pending))
   const pendingPromo = promo && promo.game === game ? promo : null
   const selected = canMove && selection && selection.game === game ? selection.sq : null
 
@@ -225,6 +230,7 @@ export default function Chess() {
   else if (mode === 'online' && !room.peerOnline) status = '等待對手…'
   else {
     if (aiTurn) status = '電腦思考中…'
+    else if (mode === 'online' && online.takeback.pending) status = '悔棋請求中，暫停走棋'
     else if (me === null) status = `輪到${colorName(game.turn)}`
     else if (game.turn === me) status = `輪到你（${colorName(me)}）`
     else status = '等待對手走棋…'
@@ -237,6 +243,12 @@ export default function Chess() {
   const last = game.lastMove
   const flipped = (me === BLACK) !== flip
   const canRestart = mode !== 'online' || room.connected
+  const takebackProps = {
+    takeback: online.takeback,
+    seat: room.seat,
+    active: !game.result && room.connected && room.peerOnline,
+    send: room.send,
+  }
 
   return (
     <GameLayout
@@ -290,6 +302,7 @@ export default function Chess() {
       }
     >
       <StatusLine tone={tone}>{status}</StatusLine>
+      {mode === 'online' && <TakebackNotice {...takebackProps} />}
       <div className="board-box">
         <ChessBoard
           board={game.pos.board}
@@ -349,9 +362,12 @@ export default function Chess() {
           </>
         )}
         {mode === 'online' && room.code && !game.result && (
-          <button type="button" className="danger" onClick={resign} disabled={me === null || !room.connected}>
-            認輸
-          </button>
+          <>
+            <TakebackButton {...takebackProps} />
+            <button type="button" className="danger" onClick={resign} disabled={me === null || !room.connected}>
+              認輸
+            </button>
+          </>
         )}
         {mode === 'online' && game.result && (
           <button type="button" onClick={restart} disabled={!canRestart}>

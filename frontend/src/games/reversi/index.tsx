@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { OnlinePanel } from '../shared/OnlinePanel'
 import { load, save } from '../shared/storage'
+import { TakebackButton, TakebackNotice } from '../shared/TakebackControls'
 import { GameLayout, Segmented, StatusLine, Toolbar, type Option } from '../shared/ui'
 import { useRoom } from '../shared/useRoom'
 import type { Level } from './ai'
@@ -66,7 +67,7 @@ export default function Reversi() {
   let canPlay = false
   if (mode === 'ai') canPlay = !result && toMove === human
   else if (mode === 'local') canPlay = !result
-  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === toMove
+  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === toMove && !online.takeback.pending
 
   const hints = useMemo(() => legalMoves(game.board, game.toMove), [game.board, game.toMove])
 
@@ -144,12 +145,21 @@ export default function Reversi() {
       tone = 'accent'
     } else if (mode === 'local') {
       status = passed ? `${prefix}換${discName(toMove)}` : `輪到${discName(toMove)}`
+    } else if (mode === 'online' && online.takeback.pending) {
+      status = '悔棋請求中，暫停落子'
     } else if (mine(toMove)) {
       status = `${prefix}輪到你（${discName(toMove)}）`
       tone = 'accent'
     } else {
       status = `${prefix}等待對手（${discName(toMove)}）`
     }
+  }
+
+  const takebackProps = {
+    takeback: online.takeback,
+    seat: room.seat,
+    active: !result && room.connected && room.peerOnline,
+    send: room.send,
   }
 
   const blackIsSeat0 = blackSeat(online.round) === 0
@@ -195,6 +205,7 @@ export default function Reversi() {
   return (
     <GameLayout side={side}>
       <StatusLine tone={tone}>{status}</StatusLine>
+      {mode === 'online' && <TakebackNotice {...takebackProps} />}
       <div className="reversi-score" aria-label={`黑 ${blackCount}，白 ${whiteCount}`}>
         <span className={turnClass(BLACK)}>
           <span className="reversi-chip black" aria-hidden="true" />
@@ -226,14 +237,17 @@ export default function Reversi() {
               再來一局
             </button>
           ) : (
-            <button
-              type="button"
-              className="danger"
-              onClick={resign}
-              disabled={!room.connected || myOnlineColor === null}
-            >
-              認輸
-            </button>
+            <>
+              <TakebackButton {...takebackProps} />
+              <button
+                type="button"
+                className="danger"
+                onClick={resign}
+                disabled={!room.connected || myOnlineColor === null}
+              >
+                認輸
+              </button>
+            </>
           ))
         ) : (
           <>
