@@ -87,10 +87,38 @@ export type HoneypotIp = {
   user_agent: string
 }
 
+/** 有人拿假 .env 裡的密碼來登入 */
+export type HoneypotUse = {
+  id: number
+  /** 拿來登入的 IP */
+  ip: string
+  /** 用的是哪一行的密碼（DB_PASSWORD、ADMIN_PASSWORD…） */
+  field: string
+  /** 當初拿走假檔案的 IP 和時間 */
+  issued_ip: string
+  issued_at: string
+  username: string
+  user_agent: string
+  created_at: string
+}
+
+/** 現在不能登入和註冊的 IP */
+export type HoneypotBlock = {
+  ip: string
+  /** 擋到什麼時候；手動封鎖選「永久」的是 null */
+  until: string | null
+  /** 管理員手動封鎖的；false 是拿過假檔案或用過假密碼被自動封鎖 */
+  manual: boolean
+  note: string
+}
+
 export type HoneypotReport = {
-  summary: { hits: number; ips: number; last_day: number; last_day_ips: number }
+  summary: { hits: number; ips: number; last_day: number; last_day_ips: number; uses: number; blocked: number }
   ips: HoneypotIp[]
   paths: { path: string; hits: number; ips: number }[]
+  uses: HoneypotUse[]
+  blocks: HoneypotBlock[]
+  auto_block: boolean
 }
 
 export type HoneypotHit = {

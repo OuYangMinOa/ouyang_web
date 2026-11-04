@@ -14,6 +14,7 @@ use sqlx::SqlitePool;
 use crate::{
     AppError, AppState,
     auth::{AdminUsers, Require, client_key, hash_password, validate_password, validate_username},
+    honeypot,
 };
 
 const OPEN_KEY: &str = "registration_open";
@@ -71,7 +72,8 @@ pub async fn register(
     .bind(&ip)
     .fetch_one(&state.pool)
     .await?;
-    if recent >= MAX_PER_IP_PER_DAY {
+    // 拿過假 .env 的 IP 回一樣的錯誤，不讓對方知道為什麼（見 honeypot.rs）
+    if recent >= MAX_PER_IP_PER_DAY || honeypot::is_blocked(&state.pool, &ip).await? {
         return Err(AppError::TooManyRequests("申請次數過多，請明天再試"));
     }
     let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM registrations WHERE status = 'pending'")

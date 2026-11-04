@@ -26,7 +26,7 @@ use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use tokio::sync::Semaphore;
 
-use crate::{AppError, AppState};
+use crate::{AppError, AppState, honeypot};
 
 const SESSION_DAYS: i64 = 7;
 const MIN_PASSWORD_LEN: usize = 8;
@@ -301,6 +301,13 @@ pub async fn login(
     Json(input): Json<Credentials>,
 ) -> Result<Response, AppError> {
     let key = client_key(&headers);
+    // 拿過假 .env 的 IP：跟失敗太多次回一樣的錯誤，不讓對方知道為什麼。
+    // 先看擋不擋再記假密碼：第一次用假密碼要跟一般的密碼錯誤一樣回 401，之後才擋；被擋的時候拿假密碼來試也要記到
+    let blocked = honeypot::is_blocked(&state.pool, &key).await?;
+    honeypot::check_login(&state, &headers, &input.username, &input.password).await;
+    if blocked {
+        return Err(AppError::TooManyRequests("嘗試次數過多，請稍後再試"));
+    }
     if state.login_limiter.blocked(&key) {
         return Err(AppError::TooManyRequests("嘗試次數過多，請 15 分鐘後再試"));
     }
