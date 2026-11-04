@@ -91,6 +91,8 @@ export function Sketch({
   send,
   overlay,
   toast,
+  maxStrokes = MAX_STROKES,
+  maxPoints = MAX_POINTS,
 }: {
   board: Board
   /** 目前這一棒的畫布 id：本地的畫布還沒換成這一張（剛換人、view 還沒套用）時先不能畫 */
@@ -100,6 +102,9 @@ export function Sketch({
   overlay?: ReactNode
   /** 浮在畫布上方、不擋住畫面的短暫提示（例如「差一點！」） */
   toast?: ReactNode
+  /** 一張畫最多幾筆、幾個點（傳話畫畫整張一次送，上限比較低） */
+  maxStrokes?: number
+  maxPoints?: number
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const active = useRef<Active | null>(null)
@@ -193,7 +198,7 @@ export function Sketch({
   function down(e: ReactPointerEvent<HTMLCanvasElement>) {
     if (!canDraw || board.id !== canvasId || active.current) return
     if (e.pointerType === 'mouse' && e.button !== 0) return
-    if (board.strokes.length >= MAX_STROKES || board.points >= MAX_POINTS) {
+    if (board.strokes.length >= maxStrokes || board.points >= maxPoints) {
       setFull({ canvas: canvasId, message: FULL })
       return
     }
@@ -235,7 +240,7 @@ export function Sketch({
       const dx = x - s.last[0]
       const dy = y - s.last[1]
       if (dx * dx + dy * dy < s.step * s.step) continue
-      if (board.points + added.length / 2 >= MAX_POINTS) {
+      if (board.points + added.length / 2 >= maxPoints) {
         setFull({ canvas: canvasId, message: FULL })
         break
       }
