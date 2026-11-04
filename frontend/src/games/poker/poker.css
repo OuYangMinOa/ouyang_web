@@ -1,0 +1,478 @@
+/* ---- 德州撲克 ---- */
+
+.pk {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pk-board {
+  /* 牌桌照這一欄的寬度決定要畫成橢圓桌還是清單 */
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.pk-board .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+  text-align: center;
+}
+.pk-info {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 14px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+.pk-game-no,
+.pk-note {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+}
+
+.pk-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---- 牌面：左上點數、右下花色 ---- */
+
+.pk-card {
+  --w: 46px;
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: var(--w);
+  height: calc(var(--w) * 1.4);
+  box-sizing: border-box;
+  border: 1px solid var(--card-edge);
+  border-radius: calc(var(--w) * 0.12);
+  background: var(--card-face);
+  color: var(--card-ink);
+  font: 700 calc(var(--w) * 0.36) / 1 var(--sans);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  user-select: none;
+}
+.pk-card.red {
+  color: var(--card-red);
+}
+.pk-card.sm {
+  --w: 26px;
+}
+.pk-card.lg {
+  --w: 64px;
+}
+.pk-card-rank {
+  position: absolute;
+  top: calc(var(--w) * 0.08);
+  left: calc(var(--w) * 0.1);
+  letter-spacing: -0.06em;
+}
+.pk-card-suit {
+  position: absolute;
+  right: calc(var(--w) * 0.1);
+  bottom: calc(var(--w) * 0.06);
+  font-size: calc(var(--w) * 0.5);
+  line-height: 1;
+}
+.pk-card.sm .pk-card-suit {
+  display: none;
+}
+/* 蓋著的牌：斜線花紋 */
+.pk-card.back {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--card-back) 0 4px,
+    color-mix(in srgb, var(--card-back) 70%, var(--card-face)) 4px 7px
+  );
+}
+/* 還沒發的公牌位置 */
+.pk-card.slot {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--on-felt) 35%, transparent);
+  box-shadow: none;
+}
+/* 組成目前最好牌型的牌 */
+.pk-card.best {
+  outline: 3px solid var(--chip);
+  outline-offset: 1px;
+}
+
+/* ---- 牌桌：寬的時候是橢圓形桌子、座位繞一圈；窄的時候公牌在上、座位排成清單 ---- */
+
+.pk-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.pk-felt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 120px;
+  padding: 14px 10px;
+  border-radius: 16px;
+  background: var(--felt);
+  color: var(--on-felt);
+  box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--on-felt) 12%, transparent);
+  text-align: center;
+}
+.pk-board-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.pk-pot,
+.pk-street {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.pk-pot strong {
+  font-size: 18px;
+}
+.pk-street {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.pk-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.pk-seat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-h);
+  font-size: 14px;
+}
+.pk-seat.me {
+  border-color: var(--text);
+}
+.pk-seat.turn {
+  border: 2px solid var(--accent);
+  padding: 5px 7px;
+}
+.pk-seat.won {
+  border: 2px solid var(--ok);
+  padding: 5px 7px;
+}
+.pk-seat.dim {
+  opacity: 0.6;
+}
+.pk-seat-head,
+.pk-seat-body,
+.pk-seat-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.pk-seat-head .chip {
+  margin: 0;
+  font-size: 11px;
+}
+.pk-seat-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.pk-button {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--card-face);
+  color: var(--card-ink);
+  border: 1px solid var(--card-edge);
+  font-size: 11px;
+  font-weight: 700;
+}
+.pk-seat-cards {
+  display: inline-flex;
+  gap: 2px;
+}
+.pk-stack {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pk-seat-foot {
+  min-height: 22px;
+  font-size: 13px;
+}
+/* 推出去的籌碼：一顆小籌碼加數字 */
+.pk-bet {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pk-bet::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--chip);
+  border: 2px dashed var(--chip-edge);
+  box-sizing: border-box;
+}
+.pk-last {
+  color: var(--text);
+}
+.pk-allin {
+  color: var(--danger);
+  font-weight: 700;
+}
+.pk-won {
+  color: var(--ok);
+  font-weight: 700;
+}
+.pk-rank {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text-h);
+  font-size: 12px;
+}
+.pk-wins {
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* 夠寬：橢圓形的桌子，座位照角度擺在桌邊（--x、--y 是 index.tsx 算的百分比） */
+@container (min-width: 640px) {
+  .pk-table {
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 11;
+    width: 100%;
+    max-width: 900px;
+    /* 最上面、最下面的座位會超出桌子一點 */
+    margin: 36px auto;
+  }
+  .pk-table.seats-7,
+  .pk-table.seats-8,
+  .pk-table.seats-9 {
+    aspect-ratio: 4 / 3;
+  }
+  .pk-felt {
+    position: absolute;
+    inset: 13% 11%;
+    min-height: 0;
+    border-radius: 50%;
+    border: 10px solid var(--felt-rim);
+    padding: 8% 12%;
+  }
+  .pk-seats {
+    display: block;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .pk-seat {
+    position: absolute;
+    /* 夾在桌子範圍內，左右兩邊的座位不會超出去造成橫向捲動 */
+    left: clamp(70px, var(--x), calc(100% - 70px));
+    top: clamp(40px, var(--y), calc(100% - 40px));
+    width: 136px;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+  }
+  .pk-table.seats-7 .pk-seat,
+  .pk-table.seats-8 .pk-seat,
+  .pk-table.seats-9 .pk-seat {
+    width: 118px;
+    font-size: 13px;
+  }
+}
+
+/* ---- 自己的手牌和操作 ---- */
+
+.pk-me {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  min-width: 0;
+}
+.pk-me.my-turn {
+  border: 2px solid var(--accent);
+  padding: 11px;
+}
+.pk-me-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.pk-hole {
+  display: flex;
+  gap: 6px;
+}
+.pk-me-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-h);
+}
+.pk-me-info p {
+  margin: 0;
+}
+.pk-hint strong {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.pk-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pk-action-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 8px;
+}
+.pk-action-buttons button {
+  min-height: 48px;
+  padding-inline: 8px;
+  font-weight: 600;
+}
+.pk-raise {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pk-presets {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.pk-presets button {
+  min-height: 40px;
+  padding-inline: 4px;
+}
+.pk-presets button.active {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+@media (max-width: 420px) {
+  .pk-presets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.pk-amount {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.pk-amount input[type='range'] {
+  flex: 1 1 180px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  accent-color: var(--accent);
+}
+.pk-amount input[type='number'] {
+  flex: 0 1 130px;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.pk-range {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* ---- 行動紀錄 ---- */
+
+.pk-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.pk-log h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-h);
+}
+.pk-log ol {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.pk-log-hand {
+  margin-top: 6px;
+  color: var(--text-h);
+  font-weight: 600;
+}
+.pk-log-hand:first-child {
+  margin-top: 0;
+}
+
+/* ---- 結算 ---- */
+
+.pk-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--ok);
+  border-radius: 12px;
+  background: var(--surface);
+  min-width: 0;
+}
+.pk-result h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-h);
+}
+.pk-result table {
+  width: 100%;
+}
+.pk-result .chip {
+  margin: 0 0 0 6px;
+}
+.pk-result-me td.primary {
+  color: var(--accent);
+}
