@@ -27,6 +27,7 @@ pub mod tetris;
 pub mod tetris_scores;
 pub mod threads;
 pub mod undercover;
+pub mod uno;
 pub mod visits;
 pub mod weather;
 
@@ -81,6 +82,7 @@ pub struct AppState {
     pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
     pub draw: Arc<party::Parties<draw::Draw>>,
     pub antique: Arc<party::Parties<antique::Antique>>,
+    pub uno: Arc<party::Parties<uno::Uno>>,
     pub justone: Arc<party::Parties<justone::JustOne>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
@@ -124,6 +126,7 @@ impl AppState {
             minesrace: Arc::default(),
             draw: Arc::default(),
             antique: Arc::default(),
+            uno: Arc::default(),
             justone: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
@@ -212,6 +215,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
         .route("/games/antique/party", post(party::create::<antique::Antique>))
         .route("/games/antique/party/{code}/ws", get(party::connect::<antique::Antique>))
+        .route("/games/uno/party", post(party::create::<uno::Uno>))
+        .route("/games/uno/party/{code}/ws", get(party::connect::<uno::Uno>))
         .route("/games/justone/party", post(party::create::<justone::JustOne>))
         .route("/games/justone/party/{code}/ws", get(party::connect::<justone::JustOne>))
         .route("/games/lobby", post(lobby::create))
