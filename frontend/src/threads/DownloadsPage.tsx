@@ -30,7 +30,7 @@ export default function DownloadsPage() {
   return (
     <div className="threads">
       <h1>下載紀錄</h1>
-      <p className="muted">用捷徑或網頁下載過的貼文，新的在前面，最多保留 500 筆。</p>
+      <p className="muted">用捷徑或網頁下載過的 Threads 貼文和 YouTube 影片，新的在前面，最多保留 500 筆。</p>
       {error && <p className="error">{error}</p>}
       {downloads.length === 0 ? (
         <p className="muted">
@@ -55,7 +55,9 @@ export default function DownloadsPage() {
                   <td data-label="時間">
                     <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time>
                   </td>
-                  <td data-label="作者">{item.author ? `@${item.author}` : '—'}</td>
+                  <td data-label="作者">
+                    {!item.author ? '—' : item.url.includes('youtube.com') ? item.author : `@${item.author}`}
+                  </td>
                   <td data-label="貼文" className="primary">
                     <a className="threads-post" href={item.url} target="_blank" rel="noreferrer">
                       {item.caption || item.url}

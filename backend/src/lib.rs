@@ -32,6 +32,7 @@ pub mod undercover;
 pub mod uno;
 pub mod visits;
 pub mod weather;
+pub mod youtube;
 
 use std::{
     io::{Read, Write},
@@ -109,6 +110,8 @@ pub struct AppState {
     pub monitor: Arc<monitor::Monitor>,
     /// Threads 影片下載的 HTTP client 和每個 IP 的查詢間隔（見 threads.rs）
     pub threads: Arc<threads::Threads>,
+    /// YouTube 影片下載：yt-dlp 下載好的暫存檔（見 youtube.rs）
+    pub youtube: Arc<youtube::YouTube>,
     /// 短網址每個 IP 最多記幾次點擊（見 short_links.rs）
     pub short_link_limiter: Arc<visits::VisitLimiter>,
 }
@@ -145,6 +148,7 @@ impl AppState {
             access_log: Arc::default(),
             monitor: Arc::default(),
             threads: Arc::default(),
+            youtube: Arc::default(),
             short_link_limiter: Arc::default(),
         }
     }
@@ -246,6 +250,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/threads/setup/shortcut", put(threads::set_shortcut))
         .route("/threads/downloads", get(threads::downloads))
         .route("/threads/downloads/{id}", delete(threads::delete_download))
+        .route("/threads/files/{token}", get(youtube::file))
         .route("/links", get(short_links::list).post(short_links::create))
         .route("/links/{id}", get(short_links::get).put(short_links::update).delete(short_links::delete))
         .route("/links/{id}/stats", get(short_links::stats))
