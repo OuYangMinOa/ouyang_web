@@ -80,6 +80,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./draw/song'),
   },
   {
+    id: 'antique',
+    name: '古董局中局',
+    icon: '🏺',
+    blurb: '十二生肖獸首有真有假，許愿陣營要找出真品，老朝奉陣營混在裡面搗亂。三回合鑑寶、投票，最後互相指認。6～8 人，可以加電腦，也能當面玩。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazyPage(() => import('./antique')),
+    lobby: { kind: 'party', players: '6～8 人，可以加電腦' },
+    music: () => import('./antique/song'),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',

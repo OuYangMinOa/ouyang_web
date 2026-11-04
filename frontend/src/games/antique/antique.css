@@ -1,0 +1,438 @@
+/* ---- 古董局中局 ---- */
+
+.aq {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.aq-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.aq-board .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.aq-lineup {
+  margin: 0;
+  text-align: center;
+}
+
+.aq-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.aq-options p {
+  margin: 0;
+}
+
+/* 自己的身分：許愿陣營綠框、老朝奉陣營紅框，點一下遮住 */
+.aq-role {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 16px;
+  border: 2px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: center;
+  box-sizing: border-box;
+}
+.aq-role.good {
+  border-color: var(--ok);
+}
+.aq-role.bad {
+  border-color: var(--danger);
+}
+.aq-role strong {
+  font: 700 clamp(28px, 8vw, 40px) var(--serif);
+  letter-spacing: 0.06em;
+}
+.aq-role.hidden {
+  border-style: dashed;
+  border-color: var(--border);
+}
+.aq-role.hidden strong {
+  color: var(--text);
+}
+.aq-role-label,
+.aq-role-hint {
+  font-size: 13px;
+  color: var(--text);
+}
+.aq-role-info {
+  max-width: 36em;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.aq-role-mates {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--danger);
+}
+.aq-role.spectator {
+  margin: 0;
+  border: 1px dashed var(--border);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.aq-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.aq-actions p {
+  margin: 0;
+  color: var(--text-h);
+}
+.aq-actions > button {
+  min-height: 44px;
+}
+.aq-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.aq-buttons button {
+  min-height: 44px;
+  flex: 1 1 120px;
+}
+.aq-hint {
+  margin: 0;
+  color: var(--text-h);
+  text-align: center;
+}
+.aq-warn {
+  color: var(--danger) !important;
+  font-weight: 600;
+}
+
+/* 獸首：桌機四欄、手機兩欄 */
+.aq-heads-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.aq-heads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (max-width: 560px) {
+  .aq-heads {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.aq-head-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+  box-sizing: border-box;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: center;
+}
+.aq-head-body strong {
+  font: 700 18px var(--serif);
+}
+button.aq-head-body {
+  border: 2px solid var(--accent);
+  cursor: pointer;
+}
+button.aq-head-body:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.aq-head-emoji {
+  font-size: 32px;
+  line-height: 1.1;
+}
+.aq-head-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+.aq-head-chips .chip {
+  margin: 0;
+}
+.aq-head-cta {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.aq-head.pick-first .aq-head-body,
+.aq-head.pick-second .aq-head-body {
+  border-width: 2px;
+  border-color: var(--text-h);
+}
+
+/* 看到的、公開的真假 */
+.chip.aq-seen.genuine,
+.chip.aq-seen.good,
+.chip.aq-truth.genuine {
+  background: var(--ok);
+  color: var(--on-accent);
+}
+.chip.aq-seen.fake,
+.chip.aq-seen.bad,
+.chip.aq-truth.fake {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+.chip.aq-seen.sealed,
+.chip.aq-seen.blocked,
+.chip.aq-seen.ambushed,
+.chip.aq-seen.crippled {
+  background: var(--text);
+  color: var(--bg);
+}
+
+/* 投籌碼的加減器 */
+.aq-vote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+}
+.aq-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.aq-stepper button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+.aq-stepper-count {
+  min-width: 1.5em;
+  font: 700 20px var(--serif);
+  color: var(--accent);
+}
+
+/* 玩家：點來查驗、偷襲、交棒、鑑人時整張卡片就是按鈕 */
+.aq-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.aq-seat-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: left;
+}
+button.aq-seat-body {
+  border: 2px solid var(--accent);
+  cursor: pointer;
+}
+button.aq-seat-body:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.aq-seat.acting .aq-seat-body {
+  border: 2px solid var(--text-h);
+}
+.aq-seat.chosen .aq-seat-body {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.aq-seat.chosen .chip.subtle {
+  color: var(--on-accent);
+  border-color: color-mix(in srgb, var(--on-accent) 50%, transparent);
+}
+.aq-seat.me .aq-seat-name {
+  color: var(--accent);
+}
+.aq-seat.chosen.me .aq-seat-name {
+  color: var(--on-accent);
+}
+.aq-seat-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.aq-seat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.aq-seat-chips .chip {
+  margin: 0;
+}
+.aq-seat-points {
+  font-size: 12px;
+  color: var(--text);
+}
+.aq-seat.chosen .aq-seat-points {
+  color: var(--on-accent);
+}
+
+.chip.aq-role-chip.good {
+  background: var(--ok);
+  color: var(--on-accent);
+}
+.chip.aq-role-chip.bad {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+
+/* 紀錄 */
+.aq-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.aq-log h3 {
+  margin: 0;
+}
+.aq-log-round {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.aq-log-round h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  color: var(--text);
+}
+.aq-log-round p {
+  margin: 0;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.aq-log-round p.muted {
+  color: var(--text);
+}
+.aq-log-round ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-h);
+}
+.aq-allocs {
+  font-size: 14px;
+}
+.aq-allocs li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+/* 結算 */
+.aq-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 2px solid var(--ok);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-h);
+}
+.aq-result.bad {
+  border-color: var(--danger);
+}
+.aq-result h3,
+.aq-result h4,
+.aq-result p {
+  margin: 0;
+}
+.aq-result h4 {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+.aq-score {
+  width: 100%;
+  border-collapse: collapse;
+}
+.aq-score td {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.aq-score-points {
+  width: 3em;
+  text-align: right;
+  font-weight: 600;
+}
+.aq-score-total td {
+  border-bottom: 0;
+  font-weight: 700;
+}
+.aq-roles,
+.aq-skills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.aq-roles li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.aq-roles .chip,
+.aq-truths .chip {
+  margin: 0;
+}
+.aq-truths {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
