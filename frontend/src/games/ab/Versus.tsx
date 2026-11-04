@@ -294,6 +294,18 @@ function OnlineVersus({ modeSwitch, opponentSwitch }: { modeSwitch: ReactNode; o
     </>
   )
 
+  if (room.spectator) {
+    return (
+      <SpectateView
+        state={state}
+        sha256={sha256}
+        notice={room.error ?? (!connected ? '連線中…' : !room.peerOnline ? '等待對局的人連線…' : null)}
+        modeSwitch={modeSwitch}
+        side={side}
+      />
+    )
+  }
+
   if (me === null) {
     let text = '建立或加入房間開始對戰'
     let tone: Tone
@@ -608,14 +620,85 @@ function useVersusAnalysis(state: VersusState, me: Seat, enabled: boolean): Step
   return analysis?.key === key ? analysis.steps : null
 }
 
-function VerifyLine({ check }: { check: Check }) {
-  if (check === 'ok') return <p className="ab-in">✓ 已驗證：對手公開的數字和每一次回報都對得上</p>
-  if (check === 'pending') return <p className="muted">等待對手公開數字，驗證回報…</p>
+function VerifyLine({ check, who = '對手' }: { check: Check; who?: string }) {
+  if (check === 'ok') return <p className="ab-in">✓ 已驗證：{who}公開的數字和每一次回報都對得上</p>
+  if (check === 'pending') return <p className="muted">等待{who}公開數字，驗證回報…</p>
   return (
     <p className="ab-out">
-      ✗ {check === 'bad-commit' ? '對手公開的數字和開局時鎖定的不一樣' : '對手有回報和公開的數字對不上'}
-      ，對手回報不實
+      ✗ {check === 'bad-commit' ? `${who}公開的數字和開局時鎖定的不一樣` : `${who}有回報和公開的數字對不上`}
+      ，{who}回報不實
     </p>
+  )
+}
+
+/** 觀戰：看得到兩邊的猜測和回報，結束後兩邊公開的數字和驗證；藏的數字在對局中誰也看不到 */
+function SpectateView({
+  state,
+  sha256,
+  notice,
+  modeSwitch,
+  side,
+}: {
+  state: VersusState
+  sha256: ((s: string) => string) | null
+  notice: string | null
+  modeSwitch: ReactNode
+  side: ReactNode
+}) {
+  const name = (seat: Seat) => (state.first === seat ? '先手' : '後手')
+  const result = state.result
+  const checks: [Check, Check] | null = result ? [verifySide(state, 0, sha256), verifySide(state, 1, sha256)] : null
+  const final = result && checks ? finalResult(result, checks) : null
+  const turn = turnOf(state)
+
+  let status: string
+  let tone: Tone
+  if (final) {
+    const { winner, reason, turns, cheater } = final
+    if (cheater === 'both') status = '雙方的回報都和公開的數字對不上，算平手'
+    else if (winner === null) status = `平手！雙方都在第 ${turns} 次猜中`
+    else if (cheater !== null) status = `${name(other(winner))}的回報和公開的數字對不上，判${name(winner)}獲勝`
+    else if (reason === 'resign') status = `${name(other(winner))}認輸，${name(winner)}獲勝`
+    else status = `${name(winner)}在第 ${turns} 次猜中，獲勝！`
+    tone = winner === null ? undefined : 'ok'
+  } else if (notice) {
+    status = notice
+  } else if (!state.started) {
+    status = '等雙方藏好數字…'
+  } else if (turn !== null) {
+    status = canGuess(state, turn) ? `輪到${name(turn)}猜` : `等${name(other(turn))}回報…`
+    tone = 'accent'
+  } else {
+    status = '觀戰中'
+  }
+
+  return (
+    <GameLayout side={side}>
+      {modeSwitch}
+      <StatusLine tone={tone}>{status}</StatusLine>
+      {final && checks && (
+        <div className="card ab-vs-reveal">
+          {([state.first, other(state.first)] as const).map((seat) => (
+            <div key={seat}>
+              <span className="muted">{name(seat)}的數字</span>
+              <strong className="ab-code">{state.sides[seat].reveal?.secret ?? '？'}</strong>
+              <VerifyLine check={checks[seat]} who={name(seat)} />
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="ab-vs-logs">
+        {([state.first, other(state.first)] as const).map((seat) => (
+          <GuessLog
+            key={seat}
+            title={`${name(seat)}猜${name(other(seat))}`}
+            guesses={state.sides[seat].guesses}
+            first={state.first === seat}
+            active={!result && turn === seat}
+          />
+        ))}
+      </div>
+    </GameLayout>
   )
 }
 

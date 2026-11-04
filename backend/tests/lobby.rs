@@ -89,7 +89,7 @@ async fn host_moves_everyone_between_games() {
     let state = b_party.until(|m| m["type"] == "room" && m["players"].as_array().unwrap().len() == 2).await;
     assert_eq!(state["host"], a_party_pid);
 
-    // 棋類：房主挑 B 先手、自己後手，C 進不去
+    // 棋類：房主挑 B 先手、自己後手，C 只能觀戰
     a.send(json!({ "type": "play", "game": "chess" })).await;
     let notice = a.until(|m| m["type"] == "notice").await;
     assert_eq!(notice["message"], "這是兩個人的遊戲，請挑兩個人上場");
@@ -100,7 +100,9 @@ async fn host_moves_everyone_between_games() {
     let room = playing["room"].as_str().unwrap();
     let duel = format!("rooms/{room}");
     let mut c_duel = Client::connect(&addr, &duel, "c").await;
-    assert_eq!(c_duel.next().await["code"], "full");
+    let watching = c_duel.next().await;
+    assert_eq!(watching["type"], "welcome");
+    assert_eq!(watching["seat"], Value::Null);
     let mut a_duel = Client::connect(&addr, &duel, "a").await;
     assert_eq!(a_duel.next().await["seat"], 1);
     let mut b_duel = Client::connect(&addr, &duel, "b").await;

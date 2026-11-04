@@ -202,6 +202,8 @@ export default function Xiangqi() {
   }
 
   // ---- 狀態列 ----
+  /** 觀戰：沒有自己的一方（mySide 是 null），只能看 */
+  const watching = mode === 'online' && room.spectator
   let status: string
   let tone: Tone
   const check = checkSq !== null ? '將軍！' : ''
@@ -223,7 +225,7 @@ export default function Xiangqi() {
     status = room.error
     tone = 'danger'
   } else if (mode === 'online' && !onlineReady) {
-    status = room.connected ? '等待對手連線…' : '連線中…'
+    status = !room.connected ? '連線中…' : watching ? '等待對局的人連線…' : '等待對手連線…'
   } else {
     tone = check ? 'danger' : undefined
     if (thinking) status = `${check}電腦思考中…`
@@ -319,9 +321,11 @@ export default function Xiangqi() {
           <Overlay>
             <strong className="xiangqi-overlay-title">{status}</strong>
             <div className="game-toolbar">
-              <button type="button" onClick={playAgain} disabled={!canPlayAgain}>
-                再來一局
-              </button>
+              {!watching && (
+                <button type="button" onClick={playAgain} disabled={!canPlayAgain}>
+                  再來一局
+                </button>
+              )}
               <button type="button" className="secondary" onClick={() => setDismissed(game)}>
                 看棋盤
               </button>
@@ -331,7 +335,7 @@ export default function Xiangqi() {
       </div>
       <Toolbar>
         {mode === 'online' ? (
-          result ? (
+          watching ? null : result ? (
             <button type="button" onClick={playAgain} disabled={!canPlayAgain}>
               再來一局
             </button>

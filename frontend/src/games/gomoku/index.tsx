@@ -125,7 +125,9 @@ export default function Gomoku() {
     if (window.confirm('確定要認輸嗎？')) room.send({ type: 'resign' })
   }
 
-  // 狀態列
+  // 狀態列：觀戰的人和同一台輪流下一樣，只說哪一色
+  const watching = mode === 'online' && room.spectator
+  const neutral = mode === 'local' || watching
   let status: string
   let tone: 'ok' | 'danger' | 'accent' | undefined
   const mine = (stone: Stone | null) =>
@@ -133,25 +135,25 @@ export default function Gomoku() {
   if (result) {
     const who = result.winner
     if (who === null) status = '棋盤下滿了，和局'
-    else if (mode === 'local') status = `${stoneName(who)}獲勝！`
+    else if (neutral) status = `${stoneName(who)}獲勝！`
     else if (mine(who)) status = result.reason === 'resign' ? '對手認輸，你贏了！' : '你贏了！'
     else if (mode === 'ai') status = '電腦獲勝'
     else status = result.reason === 'resign' ? '你認輸了' : '對手獲勝'
-    tone = who === null ? undefined : mode === 'local' || mine(who) ? 'ok' : 'danger'
+    tone = who === null ? undefined : neutral || mine(who) ? 'ok' : 'danger'
   } else if (mode === 'online' && !room.code) {
     status = '建立或加入房間開始對戰'
   } else if (mode === 'online' && room.error) {
     status = room.error
     tone = 'danger'
   } else if (mode === 'online' && (!room.connected || !room.peerOnline)) {
-    status = room.connected ? '等待對手…' : '連線中…'
+    status = !room.connected ? '連線中…' : watching ? '等待對局的人連線…' : '等待對手…'
   } else if (thinking) {
     status = '電腦思考中…'
     tone = 'accent'
   } else if (pendingPos !== null) {
     status = '再點一次同一點確認落子'
     tone = 'accent'
-  } else if (mode === 'local') {
+  } else if (neutral) {
     status = `輪到${stoneName(game.toMove)}`
   } else if (mode === 'online' && online.takeback.pending) {
     status = '悔棋請求中，暫停落子'
@@ -238,6 +240,7 @@ export default function Gomoku() {
       <Toolbar>
         {mode === 'online' ? (
           room.code &&
+          !room.spectator &&
           (result ? (
             <button type="button" onClick={() => room.send({ type: 'restart' })} disabled={!room.connected}>
               再來一局

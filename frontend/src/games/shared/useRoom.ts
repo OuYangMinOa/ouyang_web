@@ -6,7 +6,8 @@ import { useAuth } from '../../auth'
 /**
  * 線上對戰：後端只負責「轉送」，不懂遊戲規則。
  *
- * - 每個房間最多兩個座位：先進房間的人是 seat 0，第二個是 seat 1。
+ * - 每個房間最多兩個座位：先進房間的人是 seat 0，第二個是 seat 1。座位都有人之後，其他人連進來是觀戰（seat 是 null）：
+ *   收得到完整歷史和之後的每一則訊息，但送出的訊息伺服器不理。
  * - 任何一方送出的訊息，伺服器加上 seat 後依序廣播給「兩邊」（包含送出者），
  *   並存進房間的歷史。所以兩邊看到的事件順序完全一樣，送出者也要等伺服器回傳才套用。
  * - 斷線重連（手機切到背景、伺服器換版都很常見）時，伺服器會把完整歷史重送一次，
@@ -18,7 +19,10 @@ import { useAuth } from '../../auth'
  * 協定（JSON over WebSocket，`/api/games/rooms/{code}/ws?game=<id>&player=<id>`，登入時 player 會被忽略）：
  *   client → server  { type: 'msg', data }
  *   server → client  { type: 'welcome', seat, peer, history: [{ seat, data }] }
- *                    { type: 'peer', online }
+ *                    { type: 'welcome', seat: null, online: [bool, bool], history }   觀戰
+ *                    { type: 'peer', online }              對手上線／離線（給坐著的人）
+ *                    { type: 'online', online: [bool, bool] }   兩個座位的連線狀態（給觀戰的人）
+ *                    { type: 'watchers', count }            觀戰人數變了（人數是 0 時連上不會收到）
  *                    { type: 'msg', seat, data }
  *                    { type: 'error', code, message }   之後伺服器會關閉連線，不要再重連
  */
@@ -28,18 +32,28 @@ export type RoomEvent<T> = { seat: Seat; data: T }
 
 type ServerMessage<T> =
   | { type: 'welcome'; seat: Seat; peer: boolean; history: RoomEvent<T>[] }
+  | { type: 'welcome'; seat: null; online: [boolean, boolean]; history: RoomEvent<T>[] }
   | { type: 'peer'; online: boolean }
+  | { type: 'online'; online: [boolean, boolean] }
+  | { type: 'watchers'; count: number }
   | { type: 'msg'; seat: Seat; data: T }
   | { type: 'error'; code: string; message: string }
 
 export type Room<T> = {
   /** 房間代碼；null 表示還沒建立或加入 */
   code: string | null
-  /** 我的座位；連上之前是 null */
+  /** 我的座位；連上之前、觀戰時是 null */
   seat: Seat | null
+  /** 座位都有人了，我在觀戰：看得到每一步，但不能下 */
+  spectator: boolean
   /** WebSocket 目前是否連著 */
   connected: boolean
+  /** 對手在線；觀戰時是兩個人都在線 */
   peerOnline: boolean
+  /** 兩個座位各自在不在線 */
+  online: [boolean, boolean]
+  /** 有幾個人在觀戰 */
+  watchers: number
   /** 房間裡所有遊戲事件（依伺服器順序） */
   events: RoomEvent<T>[]
   error: string | null
@@ -58,11 +72,14 @@ export type Room<T> = {
 
 type Live<T> = {
   key: string
-  seat: Seat
+  seat: Seat | null
   connected: boolean
-  peerOnline: boolean
+  online: [boolean, boolean]
+  watchers: number
   events: RoomEvent<T>[]
 }
+
+const OFFLINE: [boolean, boolean] = [false, false]
 
 // 固定的空陣列，讓沒連線時 events 的參照保持不變，useMemo 才不會每次重算
 const NO_EVENTS: never[] = []
@@ -153,14 +170,29 @@ export function useRoom<T>(game: string, enabled = true): Room<T> {
           return
         }
         switch (msg.type) {
-          case 'welcome':
+          case 'welcome': {
             retries = 0
             welcomed = true
-            setLive({ key: roomKey, seat: msg.seat, connected: true, peerOnline: msg.peer, events: msg.history })
+            let online: [boolean, boolean]
+            if (msg.seat === null) online = msg.online
+            else online = msg.seat === 0 ? [true, msg.peer] : [msg.peer, true]
+            setLive({ key: roomKey, seat: msg.seat, connected: true, online, watchers: 0, events: msg.history })
             setError(null)
             break
+          }
           case 'peer':
-            update((prev) => ({ ...prev, peerOnline: msg.online }))
+            update((prev) => {
+              if (prev.seat === null) return prev
+              const online: [boolean, boolean] = [true, true]
+              online[1 - prev.seat] = msg.online
+              return { ...prev, online }
+            })
+            break
+          case 'online':
+            update((prev) => ({ ...prev, online: msg.online }))
+            break
+          case 'watchers':
+            update((prev) => ({ ...prev, watchers: msg.count }))
             break
           case 'msg':
             update((prev) => ({ ...prev, events: [...prev.events, { seat: msg.seat, data: msg.data }] }))
@@ -240,11 +272,16 @@ export function useRoom<T>(game: string, enabled = true): Room<T> {
     inviteUrl = url.toString()
   }
 
+  const seat = current?.seat ?? null
+  const online = current?.online ?? OFFLINE
   return {
     code,
-    seat: current?.seat ?? null,
+    seat,
+    spectator: current !== null && seat === null,
     connected: current?.connected ?? false,
-    peerOnline: current?.peerOnline ?? false,
+    peerOnline: seat === null ? online[0] && online[1] : online[1 - seat],
+    online,
+    watchers: current?.watchers ?? 0,
     events: current?.events ?? NO_EVENTS,
     error: error?.message ?? null,
     errorCode: error?.code ?? null,

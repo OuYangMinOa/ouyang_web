@@ -147,14 +147,12 @@ function NowPlaying({ lobby }: { lobby: Lobby }) {
           {playing.players
             ? playing.players.map((pid) => nameOf(state.players, pid)).join(' 對 ')
             : '大家一起'}
-          {!mine && '，你這局沒有上場，可以在這裡聊天等下一局'}
+          {!mine && '，你這局沒有上場，可以進去觀戰，或在這裡聊天等下一局'}
         </span>
       </span>
-      {mine && (
-        <button type="button" onClick={() => navigate(playingPath(playing))}>
-          進去玩
-        </button>
-      )}
+      <button type="button" className={mine ? undefined : 'secondary'} onClick={() => navigate(playingPath(playing))}>
+        {mine ? '進去玩' : '進去觀戰'}
+      </button>
     </section>
   )
 }

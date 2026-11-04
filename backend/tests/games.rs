@@ -217,15 +217,65 @@ async fn messages_are_broadcast_to_both_in_the_same_order() {
 }
 
 #[tokio::test]
-async fn third_player_is_rejected() {
+async fn third_player_watches() {
     let (app, addr) = serve().await;
     let code = create_room(&app, "chess").await;
     let mut a = Client::connect(&addr, &code, "chess", "alice").await;
     a.next().await;
     let mut b = Client::connect(&addr, &code, "chess", "bob").await;
     b.next().await;
+    a.next().await; // peer online
+    a.send_msg(json!("e4")).await;
+    a.next().await;
+    b.next().await;
 
-    Client::connect(&addr, &code, "chess", "carol").await.expect_error("full").await;
+    // 座位都有人：第三個人觀戰，拿到完整歷史和兩邊的連線狀態
+    let mut carol = Client::connect(&addr, &code, "chess", "carol").await;
+    let history = json!([{ "seat": 0, "data": "e4" }]);
+    assert_eq!(
+        carol.next().await,
+        json!({ "type": "welcome", "seat": null, "online": [true, true], "history": history })
+    );
+    let watchers = json!({ "type": "watchers", "count": 1 });
+    assert_eq!(carol.next().await, watchers);
+    assert_eq!(a.next().await, watchers);
+    assert_eq!(b.next().await, watchers);
+
+    // 之後的每一步觀戰的人也收得到；觀戰的人送的訊息不會被轉送
+    carol.send_msg(json!("cheat")).await;
+    b.send_msg(json!("e5")).await;
+    let e5 = json!({ "type": "msg", "seat": 1, "data": "e5" });
+    assert_eq!(carol.next().await, e5);
+    assert_eq!(a.next().await, e5);
+
+    // 對手斷線時觀戰的人看得到
+    drop(b);
+    assert_eq!(a.next().await, json!({ "type": "peer", "online": false }));
+    assert_eq!(carol.next().await, json!({ "type": "online", "online": [true, false] }));
+
+    // 重連的玩家拿回座位，也知道有人在看
+    let mut b = Client::connect(&addr, &code, "chess", "bob").await;
+    assert_eq!(b.next().await["seat"], 1);
+    assert_eq!(b.next().await, watchers);
+    assert_eq!(carol.next().await, json!({ "type": "online", "online": [true, true] }));
+
+    // 觀戰的人離開，玩家看到人數變回 0；兩個玩家都走了只剩觀戰的人，房間還在
+    drop(carol);
+    let none = json!({ "type": "watchers", "count": 0 });
+    assert_eq!(a.next().await, json!({ "type": "peer", "online": true }));
+    assert_eq!(a.next().await, none);
+    assert_eq!(b.next().await, none);
+    let mut dave = Client::connect(&addr, &code, "chess", "dave").await;
+    assert_eq!(dave.next().await["seat"], json!(null));
+    drop(a);
+    drop(b);
+    dave.next().await; // watchers 1
+    assert_eq!(dave.next().await, json!({ "type": "online", "online": [false, true] }));
+    assert_eq!(dave.next().await, json!({ "type": "online", "online": [false, false] }));
+    let mut a = Client::connect(&addr, &code, "chess", "alice").await;
+    let welcome = a.next().await;
+    assert_eq!(welcome["seat"], 0);
+    assert_eq!(welcome["history"].as_array().unwrap().len(), 2);
 }
 
 #[tokio::test]
@@ -352,8 +402,10 @@ async fn two_containers_on_the_same_room_resync_through_the_database() {
     let mut b = Client::connect(&addr2, &code, "chess", "bob").await;
     assert_eq!(b.next().await["seat"], 1);
 
-    // 容器一的記憶體以為 seat 1 還空著，但資料庫裡已經有人：第三個人還是進不來
-    Client::connect(&addr1, &code, "chess", "carol").await.expect_error("full").await;
+    // 容器一的記憶體以為 seat 1 還空著，但資料庫裡已經有人：第三個人只能觀戰
+    let mut carol = Client::connect(&addr1, &code, "chess", "carol").await;
+    assert_eq!(carol.next().await["seat"], json!(null));
+    assert_eq!(a.next().await, json!({ "type": "watchers", "count": 1 }));
 
     // a 先寫入第 0 號；b 那邊也想寫第 0 號，撞到後容器二關掉連線讓它重連
     a.send_msg(json!("a1")).await;

@@ -117,7 +117,10 @@ GET  /api/games/rooms/{code}/ws?game=<id>&player=<id>                  升級成
 
 client → server  {type:"msg", data}
 server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
-                 {type:"peer", online}
+                 {type:"welcome", seat:null, online:[bool,bool], history}   觀戰
+                 {type:"peer", online}                  對手上線／離線（給坐著的人）
+                 {type:"online", online:[bool,bool]}    兩個座位的連線狀態（給觀戰的人）
+                 {type:"watchers", count}               觀戰人數變了
                  {type:"msg", seat, data}
                  {type:"error", code, message}   之後伺服器關閉連線
 ```
@@ -126,10 +129,15 @@ server → client  {type:"welcome", seat, peer, history:[{seat, data}]}
   訪客才用 query 的 `player`（前端每個分頁產生一個，存在 sessionStorage），伺服器存成 `guest:<player>`，所以冒用不到帳號的座位。
   之後新增的多人遊戲也要沿用這個規則。
 - 同一個 player 從別處連進來時，舊連線會收到 `replaced` 錯誤後被關掉，前端不再自動重連（避免兩個分頁互踢），改顯示「在這裡繼續」。
-- 任何一方送出的訊息，伺服器加上 seat 後依序存進歷史並廣播給兩邊（包含送出者），所以兩邊看到的順序完全一樣。
+- 任何一方送出的訊息，伺服器加上 seat 後依序存進歷史並廣播給兩邊（包含送出者）和觀戰的人，所以大家看到的順序完全一樣。
+- **觀戰**：兩個座位都有人之後，其他人連進來就是觀戰（`seat` 是 null），先收到完整歷史，之後每一步都收得到，但送出的訊息伺服器不理。
+  不需要另外的網址，打開同一個房間連結就行；一間最多 50 人觀戰，超過才回 `full`。觀戰的人不佔座位、不用 player 認人，
+  所以同一個人開兩個分頁也沒關係。只有觀戰的人連著時房間也不會被收掉。
+  前端的 `room.spectator` 為 true 時各遊戲只顯示局面、不顯示認輸／悔棋／再來一局；海戰棋和 1A2B 的祕密照樣只在兩位玩家的瀏覽器裡，
+  觀戰的人和對手看到的一樣多，結束公開後才看得到全部，並一樣驗證雜湊。
 - 五子棋、四子棋、黑白棋、象棋、西洋棋的線上悔棋要對方同意（`frontend/src/games/shared/takeback.ts`）：事件是 `takeback`、`takeback-accept`、`takeback-decline`、`takeback-cancel`，
   一樣只在兩端的 reducer 裡處理，後端不用改。退回到提出的人上一次輪到自己的局面（1 或 2 手）；請求中雙方都不能下，被拒絕後要等下一手才能再提，對局結束就不能悔棋。
-- 連線一律先升級，有問題再送 `error` 後關閉（瀏覽器讀不到升級失敗的 HTTP 狀態）：`not_found`、`game_mismatch`、`full`、`bad_request`、`replaced`、`internal`，
+- 連線一律先升級，有問題再送 `error` 後關閉（瀏覽器讀不到升級失敗的 HTTP 狀態）：`not_found`、`game_mismatch`、`full`（觀戰的人太多）、`bad_request`、`replaced`、`internal`，
   以及送太快（每秒超過 20 則）的 `rate_limited`、太大（data 超過 4KB）的 `too_large`、歷史超過 2000 筆的 `history_full`。
 - 伺服器每 25 秒送一次 ping；60 秒沒收到任何東西就當作斷線。
 - 沒有人連線超過 30 分鐘、或建立超過 24 小時的房間就失效，並在下次有人建立房間時從資料庫刪掉。房間最多 1000 個，超過回 503。
@@ -276,7 +284,8 @@ GET  /api/games/lobby/{code}/ws?player=<id>&name=<暱稱>
 
 - 遊戲室不懂遊戲規則，只記名單、聊天和「現在在玩哪一間」（`playing`）。能開的遊戲登記在 `lobby.rs` 的 `GAMES` 和前端 `registry.ts` 的 `lobby`。
 - 派對遊戲和大逃殺所有人一起去。開房時把遊戲室的順序交給那間房間（`hosts`），遊戲室的房主到了那邊也是房主，不管誰先連上。
-- 兩人的棋類由房主挑誰先手、誰後手，開房時就把兩個座位排好（`game_rooms.seat0/seat1`），其他人連進去會是 `full`，留在遊戲室聊天。
+- 兩人的棋類由房主挑誰先手、誰後手，開房時就把兩個座位排好（`game_rooms.seat0/seat1`），其他人（包括沒上場的房主）不會自動跳過去，
+  可以按遊戲室的「進去觀戰」、或標題列上的「觀戰…」連進去看，也可以留在遊戲室聊天。
 - 整個小遊戲區（`GamesLayout`）共用一條遊戲室的連線，玩遊戲的時候也連著，房主換遊戲時才跟得過去；連上時已經在玩的那一間不會自動跳，
   遊戲頁標題列上的遊戲室（`LobbyChip`）和大廳最上面的卡片有「回到…」。
 - 遊戲室開的房間不顯示自己的房間代碼、邀請和離開（`useInLobbyRoom`），大家只看得到遊戲室的代碼，邀請的也是遊戲室，下一款遊戲才跟得到。遊戲室代碼存在 sessionStorage，只認這個分頁。名字和派對房間共用，大逃殺沒取過名字的也用這個。
