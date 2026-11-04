@@ -129,6 +129,8 @@ pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Re
     rooms.extend(state.minesrace.snapshot(now));
     rooms.extend(state.draw.snapshot(now));
     rooms.extend(state.antique.snapshot(now));
+    rooms.extend(state.uno.snapshot(now));
+    rooms.extend(state.justone.snapshot(now));
     rooms.extend(state.telephone.snapshot(now));
     rooms.extend(state.lobbies.snapshot(now));
     // 有人連著的在前面，再來是新開的
