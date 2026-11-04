@@ -138,3 +138,8 @@
     animation: none;
   }
 }
+
+/* 棋盤上面多一行黑白的子數，棋盤和按鈕再扣掉這一行的高度 */
+.game-main:has(> .reversi-score) {
+  --board-w: min(100%, 800px, calc(var(--board-vh) - 44px));
+}

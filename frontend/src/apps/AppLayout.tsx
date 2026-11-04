@@ -60,7 +60,10 @@ export function AppMenu({ app }: { app: AppInfo }) {
   )
 }
 
-/** APP 的共用版面：左邊可收合的側邊欄，右邊是各頁內容 */
+/**
+ * APP 的共用版面：側邊欄固定在畫面最左邊（可收合成只剩圖示），右邊是各頁內容，
+ * 內容區在剩下的寬度裡置中，寬螢幕的空間都留給內容（小遊戲的盤面、大逃殺的小盤面）。
+ */
 export default function AppLayout() {
   const { pathname } = useLocation()
   const app = findAppByPath(pathname)
@@ -74,7 +77,7 @@ export default function AppLayout() {
   }
 
   return (
-    <div className={`app-layout ${collapsed ? 'collapsed' : ''}`}>
+    <div className={['app-layout', collapsed && 'collapsed', app.wide && 'wide'].filter(Boolean).join(' ')}>
       <aside className="app-sidebar">
         <div className="app-sidebar-head">
           <Link to={appPath(app)} className="app-sidebar-title" title={collapsed ? app.name : undefined}>

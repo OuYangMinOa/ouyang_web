@@ -63,9 +63,12 @@
   flex: none;
   width: 100%;
   background: var(--bg);
+  /* 側邊欄上面有留白，黏住時把留白也蓋掉，捲上去的項目才不會從縫裡露出來 */
+  box-shadow: 0 -16px 0 var(--bg);
 }
 .menu-panel .side-nav .side-nav-search {
   background: var(--surface);
+  box-shadow: 0 -8px 0 var(--surface);
 }
 .side-nav-empty,
 .side-nav-error {

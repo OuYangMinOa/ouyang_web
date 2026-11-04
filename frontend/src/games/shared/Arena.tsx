@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useAuth } from '../../auth'
+import { useInLobbyRoom } from '../lobby/useLobby'
 import { badgeCount, stars } from './badges'
 import { MiniBoards } from './MiniBoards'
 import type { MiniInfo } from './minis'
+import { useInvite } from './share'
 import { Overlay, Segmented, StatusLine } from './ui'
 import { MAX_NAME, loadName, saveName, type Arena, type ArenaPlayer, type ArenaState, type Strategy } from './useArena'
 import { STRATEGIES, type ArenaMatch } from './useArenaMatch'
@@ -261,37 +263,21 @@ export function JoinForm({ arena }: { arena: Arena }) {
   )
 }
 
-/** 房間代碼、邀請與離開，以及連線錯誤 */
+/** 房間代碼、邀請、離開，以及連線錯誤；遊戲室開的房間只留音樂這些遊戲自己的按鈕（遊戲室在標題列） */
 function RoomHeader({ arena, shareTitle, extra }: { arena: Arena; shareTitle: string; extra?: ReactNode }) {
-  const [copied, setCopied] = useState(false)
-
-  async function share() {
-    if (!arena.inviteUrl) return
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: shareTitle, url: arena.inviteUrl })
-        return
-      } catch {
-        // 使用者取消分享，改成複製
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(arena.inviteUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      window.prompt('複製這個連結給朋友：', arena.inviteUrl)
-    }
-  }
+  const invite = useInvite(arena.inviteUrl, shareTitle)
+  const inLobby = useInLobbyRoom(arena.code)
 
   return (
-    <div className="arena-room">
-      <div className="room-code">
-        <span className="muted">房間</span>
-        <strong>{arena.code}</strong>
-        {arena.state?.public && <span className="chip subtle">公開配對</span>}
-        {arena.code && !arena.connected && !arena.error && <span className="muted">連線中…</span>}
-      </div>
+    <div className={`arena-room${inLobby ? ' in-lobby' : ''}`}>
+      {!inLobby && (
+        <div className="room-code">
+          <span className="muted">房間</span>
+          <strong>{arena.code}</strong>
+          {arena.state?.public && <span className="chip subtle">公開配對</span>}
+          {arena.code && !arena.connected && !arena.error && <span className="muted">連線中…</span>}
+        </div>
+      )}
       <div className="game-toolbar">
         {arena.errorCode === 'replaced' && (
           <button type="button" onClick={arena.reconnect}>
@@ -299,12 +285,16 @@ function RoomHeader({ arena, shareTitle, extra }: { arena: Arena; shareTitle: st
           </button>
         )}
         {extra}
-        <button type="button" className="secondary" onClick={share}>
-          {copied ? '已複製連結' : '邀請朋友'}
-        </button>
-        <button type="button" className="secondary" onClick={arena.leave}>
-          離開房間
-        </button>
+        {!inLobby && (
+          <>
+            <button type="button" className="secondary" onClick={invite.share}>
+              {invite.copied ? '已複製連結' : '邀請朋友'}
+            </button>
+            <button type="button" className="secondary" onClick={arena.leave}>
+              離開房間
+            </button>
+          </>
+        )}
       </div>
       {arena.error && <p className="error">{arena.error}</p>}
     </div>

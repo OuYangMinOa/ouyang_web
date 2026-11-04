@@ -91,23 +91,23 @@
 /* 盤面大小：不超過視窗高度（扣掉頁首、狀態列和按鈕），也不超過寬度（扣掉 NEXT 欄；對戰時兩個盤面平分） */
 .puyo-board-box {
   position: relative;
-  width: min(300px, calc((100dvh - 250px) * 6 / 12.9), calc(100vw - 32px - 64px - 8px));
+  width: min(300px, calc((var(--game-vh) - 104px) * 6 / 12.9), calc(100vw - 32px - 64px - 8px));
   min-width: 150px;
 }
 .puyo-field.versus .puyo-board-box {
-  width: min(260px, calc((100dvh - 270px) * 6 / 12.9), calc((100vw - 32px - 40px - 16px) / 2));
+  width: min(260px, calc((var(--game-vh) - 124px) * 6 / 12.9), calc((100vw - 32px - 40px - 16px) / 2));
   min-width: 120px;
 }
 /* 觸控裝置下面還有一排按鈕，盤面要再矮一點，按鈕才不會被擠到畫面外 */
 @media not ((hover: hover) and (pointer: fine)) {
   .puyo-board-box {
-    width: min(300px, calc((100dvh - 380px) * 6 / 12.9), calc(100vw - 32px - 64px - 8px));
+    width: min(300px, calc((var(--game-vh) - 255px) * 6 / 12.9), calc(100vw - 32px - 64px - 8px));
   }
   .puyo-field.versus .puyo-board-box {
-    width: min(260px, calc((100dvh - 400px) * 6 / 12.9), calc((100vw - 32px - 40px - 16px) / 2));
+    width: min(260px, calc((var(--game-vh) - 275px) * 6 / 12.9), calc((100vw - 32px - 40px - 16px) / 2));
   }  /* 大逃殺上面還有房間列 */
   .arena-field .puyo-board-box {
-    width: min(300px, calc((100dvh - 395px) * 6 / 12.9), calc(100vw - 32px - 64px - 8px));
+    width: min(300px, calc((var(--game-vh) - 270px) * 6 / 12.9), calc(100vw - 32px - 64px - 8px));
     min-width: 120px;
   }
 }

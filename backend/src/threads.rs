@@ -11,6 +11,8 @@
 //! 捷徑第一次執行時要求貼上金鑰，之後放在 `X-Threads-Key` 標頭送來（不放網址，才不會進到 IP 訪問紀錄）。
 //! 網頁版（`/threads/paste`）不用金鑰，直接用登入的帳號。
 //! 查到影片就記一筆在那個帳號的下載紀錄。每個 IP 10 秒只能查一次。
+//!
+//! 貼的是 YouTube 網址時改由伺服器下載（見 youtube.rs），金鑰、冷卻時間和下載紀錄都共用。
 
 use std::{
     collections::HashMap,
@@ -32,6 +34,7 @@ use sqlx::SqlitePool;
 use crate::{
     AppError, AppState,
     auth::{AdminUsers, CurrentUser, Require, client_key, random_token},
+    youtube,
 };
 
 const USER_AGENT: &str = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
@@ -105,6 +108,9 @@ pub struct VideoQuery {
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Post {
+    /// `threads` 或 `youtube`
+    pub source: &'static str,
+    /// Threads 貼文的代碼，或 YouTube 影片的 id
     pub code: String,
     pub author: String,
     pub caption: String,
@@ -134,7 +140,13 @@ pub async fn video(
             (StatusCode::TOO_MANY_REQUESTS, [(header::RETRY_AFTER, wait.to_string())], Json(body)).into_response()
         );
     }
-    let url = page_url(&query.url).ok_or_else(|| AppError::BadRequest("請貼上 Threads 貼文的網址".into()))?;
+    if let Some(id) = youtube::video_id(&query.url) {
+        let post = state.youtube.fetch(&id, &youtube::origin(&headers)).await?;
+        record_download(&state.pool, user_id, &post).await?;
+        return Ok(Json(post).into_response());
+    }
+    let url =
+        page_url(&query.url).ok_or_else(|| AppError::BadRequest("請貼上 Threads 貼文或 YouTube 影片的網址".into()))?;
     let (final_url, html) = fetch_page(&state.threads.http, url).await.map_err(|error| {
         tracing::warn!(%error, "threads fetch failed");
         AppError::ServiceUnavailable("Threads 暫時連不上，請稍後再試")
@@ -167,7 +179,9 @@ async fn video_user(pool: &SqlitePool, headers: &HeaderMap, user: Option<Current
 }
 
 async fn record_download(pool: &SqlitePool, user_id: i64, post: &Post) -> Result<(), AppError> {
-    let url = if post.author.is_empty() {
+    let url = if post.source == "youtube" {
+        format!("https://www.youtube.com/watch?v={}", post.code)
+    } else if post.author.is_empty() {
         format!("https://www.threads.com/t/{}", post.code)
     } else {
         format!("https://www.threads.com/@{}/post/{}", post.author, post.code)
@@ -392,6 +406,7 @@ fn json_scripts(html: &str) -> impl Iterator<Item = &str> {
 
 fn to_post(media: &Value, code: &str) -> Post {
     Post {
+        source: "threads",
         code: code.to_owned(),
         author: media["user"]["username"].as_str().unwrap_or_default().to_owned(),
         caption: media["caption"]["text"].as_str().unwrap_or_default().to_owned(),
@@ -495,6 +510,7 @@ mod tests {
         assert_eq!(
             post,
             Post {
+                source: "threads",
                 code: "ABC".into(),
                 author: "someone".into(),
                 caption: "影片".into(),

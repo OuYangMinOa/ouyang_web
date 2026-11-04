@@ -2,7 +2,7 @@
 
 /* 棋盤是 9×10 的直式長方形：寬度依可用高度換算，確保整張棋盤都在視窗裡 */
 .board-box.xiangqi-box {
-  width: min(100%, 560px, calc((100dvh - 190px) * 364 / 404));
+  width: min(100%, 720px, calc(var(--board-vh) * 364 / 404));
 }
 
 .xiangqi-board {

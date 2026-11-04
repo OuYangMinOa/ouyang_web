@@ -1,5 +1,6 @@
 pub mod access_log;
 pub mod admin;
+pub mod antique;
 pub mod arena;
 pub mod auth;
 pub mod bigtwo;
@@ -11,22 +12,27 @@ pub mod game_settings;
 pub mod games;
 pub mod honeypot;
 pub mod invoice;
+pub mod justone;
 pub mod lobby;
 pub mod minesrace;
 pub mod monitor;
 pub mod music;
 pub mod nav_pins;
 pub mod party;
+pub mod poker;
 pub mod puyo;
 pub mod puyo_scores;
 pub mod registration;
 pub mod short_links;
+pub mod telephone;
 pub mod tetris;
 pub mod tetris_scores;
 pub mod threads;
 pub mod undercover;
+pub mod uno;
 pub mod visits;
 pub mod weather;
+pub mod youtube;
 
 use std::{
     io::{Read, Write},
@@ -78,6 +84,11 @@ pub struct AppState {
     pub bigtwo: Arc<party::Parties<bigtwo::BigTwo>>,
     pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
     pub draw: Arc<party::Parties<draw::Draw>>,
+    pub antique: Arc<party::Parties<antique::Antique>>,
+    pub uno: Arc<party::Parties<uno::Uno>>,
+    pub justone: Arc<party::Parties<justone::JustOne>>,
+    pub telephone: Arc<party::Parties<telephone::Telephone>>,
+    pub poker: Arc<party::Parties<poker::Poker>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
@@ -99,6 +110,8 @@ pub struct AppState {
     pub monitor: Arc<monitor::Monitor>,
     /// Threads 影片下載的 HTTP client 和每個 IP 的查詢間隔（見 threads.rs）
     pub threads: Arc<threads::Threads>,
+    /// YouTube 影片下載：yt-dlp 下載好的暫存檔（見 youtube.rs）
+    pub youtube: Arc<youtube::YouTube>,
     /// 短網址每個 IP 最多記幾次點擊（見 short_links.rs）
     pub short_link_limiter: Arc<visits::VisitLimiter>,
 }
@@ -119,6 +132,11 @@ impl AppState {
             bigtwo: Arc::default(),
             minesrace: Arc::default(),
             draw: Arc::default(),
+            antique: Arc::default(),
+            uno: Arc::default(),
+            justone: Arc::default(),
+            telephone: Arc::default(),
+            poker: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
@@ -130,6 +148,7 @@ impl AppState {
             access_log: Arc::default(),
             monitor: Arc::default(),
             threads: Arc::default(),
+            youtube: Arc::default(),
             short_link_limiter: Arc::default(),
         }
     }
@@ -204,6 +223,16 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
         .route("/games/draw/party", post(party::create::<draw::Draw>))
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
+        .route("/games/antique/party", post(party::create::<antique::Antique>))
+        .route("/games/antique/party/{code}/ws", get(party::connect::<antique::Antique>))
+        .route("/games/uno/party", post(party::create::<uno::Uno>))
+        .route("/games/uno/party/{code}/ws", get(party::connect::<uno::Uno>))
+        .route("/games/justone/party", post(party::create::<justone::JustOne>))
+        .route("/games/justone/party/{code}/ws", get(party::connect::<justone::JustOne>))
+        .route("/games/telephone/party", post(party::create::<telephone::Telephone>))
+        .route("/games/telephone/party/{code}/ws", get(party::connect::<telephone::Telephone>))
+        .route("/games/poker/party", post(party::create::<poker::Poker>))
+        .route("/games/poker/party/{code}/ws", get(party::connect::<poker::Poker>))
         .route("/games/lobby", post(lobby::create))
         .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))
@@ -221,6 +250,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/threads/setup/shortcut", put(threads::set_shortcut))
         .route("/threads/downloads", get(threads::downloads))
         .route("/threads/downloads/{id}", delete(threads::delete_download))
+        .route("/threads/files/{token}", get(youtube::file))
         .route("/links", get(short_links::list).post(short_links::create))
         .route("/links/{id}", get(short_links::get).put(short_links::update).delete(short_links::delete))
         .route("/links/{id}/stats", get(short_links::stats))

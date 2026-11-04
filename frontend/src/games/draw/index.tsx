@@ -1,8 +1,9 @@
-import { useLayoutEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { ChatBox, Countdown, PartyEntry, PartyHeader, PartyLobby, PartyNotice } from '../shared/Party'
-import { GameLayout, Segmented, StatusLine } from '../shared/ui'
+import { GameLayout, Segmented, SfxButton, StatusLine } from '../shared/ui'
 import { MAX_CHAT, useParty, type Party } from '../shared/useParty'
 import { Board } from './board'
+import { useDrawSfx, useDrawSounds, type DrawSound } from './sfx'
 import { Sketch } from './Sketch'
 import { LEVEL_NAMES, type DrawOptions, type DrawParty, type DrawView } from './types'
 import './draw.css'
@@ -31,9 +32,13 @@ function Rules() {
       <strong>怎麼玩</strong>
       <ul>
         <li>每個人輪流畫。輪到你時從三個詞（簡單、普通、困難）挑一個，在時間內畫出來；不能寫字。</li>
+        <li>畫筆之外還有「倒顏料」：點一下，把那一塊相連的同色區域塗滿目前的顏色。</li>
         <li>其他人在聊天室打字猜，猜中的那句只有自己看得到，大家只會看到「某某猜對了」。</li>
-        <li>很接近時會私下提示「差一點」；整句裡有答案但多打了其他字，那句不會送出，只打答案就好。</li>
-        <li>時間過一半和剩四分之一時各揭露一個字。所有人都猜中或時間到就公布答案。</li>
+        <li>很接近時畫布上會跳出「差一點！」（只有自己看得到）；整句裡有答案但多打了其他字，那句不會送出，只打答案就好。</li>
+        <li>
+          不會自動給提示：畫的人覺得大家猜不出來時，可以按「給提示」揭露一個字（兩個字的詞最多一個、三個字以上最多兩個）。
+          所有人都猜中或時間到就公布答案。
+        </li>
         <li>猜中的人和畫的人可以互相聊天，還沒猜中的人看不到。</li>
         <li>計分：越早猜中分數越高（20～100 分）；畫的人每有一個人猜中得 25 分。普通的詞乘 1.2、困難的乘 1.5。分數在同一個房間累計。</li>
       </ul>
@@ -44,6 +49,8 @@ function Rules() {
 function InRoom({ party, board }: { party: DgParty; board: Board }) {
   const { room, view } = party
   const playing = room?.phase === 'playing'
+  const sfx = useDrawSfx()
+  useDrawSounds(view, sfx.play)
 
   // 換下一棒、重連時用 view 裡的整張畫布；版本沒有比較新就不用（事件已經先套上去了）
   useLayoutEffect(() => {
@@ -55,16 +62,18 @@ function InRoom({ party, board }: { party: DgParty; board: Board }) {
       party={party}
       shareTitle="一起來玩你畫我猜"
       extra={
-        party.isHost &&
-        playing && (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => window.confirm('中止這一局，回到大廳？') && party.abort()}
-          >
-            中止這局
-          </button>
-        )
+        <>
+          <SfxButton sfx={sfx} />
+          {party.isHost && playing && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => window.confirm('中止這一局，回到大廳？') && party.abort()}
+            >
+              中止這局
+            </button>
+          )}
+        </>
       }
     />
   )
@@ -108,7 +117,7 @@ function InRoom({ party, board }: { party: DgParty; board: Board }) {
           </>
         }
       >
-        <Play party={party} view={view} board={board} />
+        <Play party={party} view={view} board={board} play={sfx.play} />
         <PartyNotice party={party} />
         {room.phase === 'results' && (
           <>
@@ -177,11 +186,50 @@ function OptionsForm({ party }: { party: DgParty }) {
   )
 }
 
-function Play({ party, view, board }: { party: DgParty; view: DrawView; board: Board }) {
+/** 猜得很接近時，伺服器只送給自己的提示：在畫布上方跳出來幾秒，再響一聲，不會漏看 */
+function useCloseToast(party: DgParty, play: (sound: DrawSound) => void): ReactNode {
+  const [close, setClose] = useState<{ id: number; text: string } | null>(null)
+  const { subscribe } = party
+  useEffect(
+    () =>
+      subscribe((event) => {
+        if (event?.type !== 'close') return
+        play('close')
+        const text = event.guess ? `「${event.guess}」差一點！` : '很接近了！只要打答案本身就好'
+        setClose((prev) => ({ id: (prev?.id ?? 0) + 1, text }))
+      }),
+    [subscribe, play],
+  )
+  useEffect(() => {
+    if (!close) return
+    const timer = setTimeout(() => setClose(null), 3000)
+    return () => clearTimeout(timer)
+  }, [close])
+  return (
+    close && (
+      <p key={close.id} className="dg-toast" role="status">
+        {close.text}
+      </p>
+    )
+  )
+}
+
+function Play({
+  party,
+  view,
+  board,
+  play,
+}: {
+  party: DgParty
+  view: DrawView
+  board: Board
+  play: (sound: DrawSound) => void
+}) {
   const name = (seat: number) => party.playerAt(seat)?.name ?? `座位 ${seat + 1}`
   const me = view.you
   const drawing = me !== null && me === view.drawer
   const drawerName = name(view.drawer)
+  const toast = useCloseToast(party, play)
 
   let status: ReactNode
   let tone: 'ok' | 'danger' | 'accent' | undefined
@@ -239,13 +287,14 @@ function Play({ party, view, board }: { party: DgParty; view: DrawView; board: B
           ))}
         </div>
       )}
-      <WordBar view={view} drawing={drawing} />
+      <WordBar view={view} drawing={drawing} onHint={party.connected ? () => party.act({ type: 'hint' }) : null} />
       <Sketch
         board={board}
         canvasId={view.canvas.id}
         canDraw={drawing && view.stage === 'draw' && party.connected}
         send={party.act}
         overlay={overlay}
+        toast={guessing(view) ? toast : null}
       />
       {guessing(view) && <GuessBar party={party} />}
     </div>
@@ -297,14 +346,36 @@ function GuessBar({ party }: { party: DgParty }) {
   )
 }
 
-/** 題目列：畫的人和猜中的人看到答案，其他人看到提示（每個字一格，揭露了就填上） */
-function WordBar({ view, drawing }: { view: DrawView; drawing: boolean }) {
+/**
+ * 題目列：畫的人和猜中的人看到答案，其他人看到提示（每個字一格，揭露了就填上）。
+ * 畫的人多一個「給提示」按鈕，已經揭露的字標出來。
+ */
+function WordBar({ view, drawing, onHint }: { view: DrawView; drawing: boolean; onHint: (() => void) | null }) {
   if (view.stage === 'draw' && view.word) {
+    const chars = view.hint?.chars
     return (
       <div className="dg-word known">
         <span className="muted">{drawing ? '你要畫' : '答案'}</span>
-        <strong>{view.word}</strong>
+        <strong aria-label={view.word}>
+          {drawing && chars
+            ? [...view.word].map((c, i) => (
+                <span key={i} className={chars[i] ? 'dg-opened' : undefined}>
+                  {c}
+                </span>
+              ))
+            : view.word}
+        </strong>
         {view.level && <span className={`chip dg-level ${view.level}`}>{LEVEL_NAMES[view.level]}</span>}
+        {drawing && (
+          <button
+            type="button"
+            className="secondary dg-hint"
+            onClick={onHint ?? undefined}
+            disabled={!onHint || view.hintsLeft === 0}
+          >
+            {view.hintsLeft > 0 ? `💡 給提示（還能給 ${view.hintsLeft} 個字）` : '提示給完了'}
+          </button>
+        )}
       </div>
     )
   }

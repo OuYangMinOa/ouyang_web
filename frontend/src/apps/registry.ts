@@ -18,6 +18,8 @@ export type AppInfo = {
   permission?: string
   /** 只有登入的人看得到（不需要特別的權限） */
   loginOnly?: boolean
+  /** 內容區放寬到 1440px（一般是 1000px），給需要大畫面的 APP（小遊戲） */
+  wide?: boolean
   /** 側邊欄（手機是頂部選單）的內容 */
   nav: NavGroup[]
 }
@@ -32,6 +34,7 @@ export const APPS: AppInfo[] = [
     blurb: `${GAMES.map((g) => g.name).join('、')}。雙人遊戲可以跟電腦下或開房間線上對戰，派對遊戲開個房間就能和朋友一起玩。`,
     tag: `${GAMES.length} 款`,
     live: true,
+    wide: true,
     nav: [
       { items: [{ to: '/games', label: '大廳', icon: '▦' }] },
       ...GAME_CATEGORIES.map((category) => ({
@@ -142,7 +145,7 @@ export const APPS: AppInfo[] = [
     name: 'Threads 下載',
     icon: '🧵',
     glyph: '串',
-    blurb: '在 Threads 按分享就能把影片存進 iPhone 相簿，也可以直接在網頁貼網址下載。這裡拿你的下載金鑰、安裝捷徑，還有下載過的貼文紀錄。',
+    blurb: '在 Threads 按分享就能把影片存進 iPhone 相簿，也可以直接在網頁貼網址下載，YouTube 影片也行。這裡拿你的下載金鑰、安裝捷徑，還有下載過的紀錄。',
     tag: 'iPhone 捷徑',
     live: true,
     loginOnly: true,

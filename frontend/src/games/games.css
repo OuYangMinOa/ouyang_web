@@ -1,11 +1,29 @@
 /* ---- 小遊戲：大廳 ---- */
 
+.games-hub h1 {
+  margin-bottom: 20px;
+}
+.games-section {
+  margin-top: 28px;
+}
+.games-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+}
+.games-section-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
 .games-grid {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 12px;
 }
 
@@ -22,15 +40,30 @@
   text-decoration: none;
   transition:
     border-color 0.15s,
-    transform 0.15s;
+    transform 0.15s,
+    box-shadow 0.15s;
 }
 .game-card:hover,
 .game-card:focus-visible {
   border-color: var(--accent);
   transform: translateY(-2px);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-card:hover,
+  .game-card:focus-visible {
+    transform: none;
+  }
 }
 .game-card-icon {
-  font-size: 32px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--bg);
+  font-size: 30px;
   line-height: 1;
 }
 .game-card-body {
@@ -49,19 +82,53 @@
 
 /* ---- 小遊戲：共用版面 ---- */
 
-.game-title {
+/*
+ * 遊戲畫面可以用的高度：視窗扣掉頁首（--site-top-h）、內容區的上邊距和標題列（--game-head-h，GamePage 量的）。
+ * 各遊戲的盤面再扣掉自己的狀態列和按鈕，整個遊戲不用捲動就看得完。
+ */
+.game-page {
+  --game-pad-top: 16px;
+  --game-vh: calc(100dvh - var(--site-top-h, 65px) - var(--game-pad-top) - var(--game-head-h, 52px));
+  /* 方形盤面（上面一行狀態、下面一排按鈕）最高多少 */
+  --board-vh: calc(var(--game-vh) - 108px);
+}
+/* 遊戲頁的內容區上邊距縮小，空間留給盤面 */
+.app-content:has(> .game-page) {
+  padding-top: 16px;
+}
+
+/* 標題列：返回、遊戲名稱、遊戲室、音樂；放不下時遊戲室換到第二行 */
+.game-head {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 12px;
+}
+.game-head h1 {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
-}
-.game-title h1 {
+  min-width: 0;
   margin: 0;
+  font-size: 24px;
+  line-height: 1.3;
+}
+.game-head .lobby-chip,
+.game-head-actions {
+  margin-left: auto;
+}
+.game-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .game-title-music {
-  margin-left: auto;
   flex-shrink: 0;
+}
+/* 有遊戲室時音樂跟在遊戲室後面，沒有時自己靠右 */
+.game-head > h1 + .game-title-music {
+  margin-left: auto;
 }
 .game-back {
   display: inline-flex;
@@ -69,6 +136,7 @@
   justify-content: center;
   min-width: 40px;
   min-height: 40px;
+  margin-left: -8px;
   border-radius: 8px;
   color: var(--text-h);
   text-decoration: none;
@@ -80,8 +148,9 @@
 
 .game-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 24px;
+  /* 側欄（模式、難度、說明）在寬螢幕放寬一點，平板上讓給盤面 */
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 26cqi, 320px);
+  gap: 24px clamp(24px, 2.5cqi, 40px);
   align-items: start;
 }
 .game-layout.single {
@@ -100,12 +169,20 @@
   min-width: 0;
 }
 
-/* 方形棋盤：不超過可用寬度，也不超過視窗高度（扣掉頁首與狀態列） */
+/* 方形棋盤：不超過可用寬度，也不超過標題列底下剩的高度（扣掉狀態列和按鈕）；底下的按鈕跟棋盤一樣寬 */
+.game-main {
+  --board-w: min(100%, 800px, var(--board-vh));
+}
 .board-box {
   position: relative;
-  width: min(100%, 640px, calc(100dvh - 180px));
+  width: var(--board-w);
   min-width: min(100%, 300px);
   margin: 0 auto;
+}
+.game-main > .game-toolbar {
+  width: var(--board-w);
+  min-width: min(100%, 300px);
+  margin-inline: auto;
 }
 
 .segmented-field {
@@ -204,9 +281,31 @@
   }
 }
 
+@container (max-width: 560px) {
+  /* 窄的時候遊戲室換到第二行、按鈕撐滿；音樂開關留在第一行標題的右邊 */
+  .game-head .lobby-chip,
+  .game-head-actions {
+    order: 1;
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+  .game-head .game-title-music {
+    margin-left: auto;
+  }
+}
+
 @media (max-width: 640px) {
-  .game-title {
-    margin-bottom: 8px;
+  .game-page {
+    --game-pad-top: 12px;
+  }
+  .app-content:has(> .game-page) {
+    padding-top: 12px;
+  }
+  .game-head {
+    padding-bottom: 8px;
+  }
+  .game-head h1 {
+    font-size: 20px;
   }
   .board-box {
     width: 100%;
@@ -477,6 +576,10 @@
 .arena-room .error {
   flex-basis: 100%;
   margin: 0;
+}
+/* 遊戲室開的房間：代碼和邀請在標題列，這裡只剩音樂、音效，靠右 */
+.arena-room.in-lobby {
+  justify-content: flex-end;
 }
 /* 窄螢幕：按鈕擠在同一行（太擠才換行），手機上盤面和下面的操作按鈕才放得進一個畫面 */
 @media (max-width: 480px) {

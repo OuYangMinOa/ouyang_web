@@ -5,19 +5,21 @@ import './threads.css'
 
 // 不用捷徑、直接在網頁貼網址下載（電腦、Android 也能用）。網址可以帶 ?url= 直接查。
 // 後端是捷徑用的同一支 GET /api/threads/video，網頁沒帶金鑰，用登入的帳號，查到的一樣記在下載紀錄。
+// YouTube 的網址也吃：伺服器先下載好，影片網址指向我們自己的 /api/threads/files/…（見 youtube.rs）。
 
 type Video = { url: string; thumbnail: string; width: number; height: number }
-type Post = { code: string; author: string; caption: string; videos: Video[] }
+type Post = { source: 'threads' | 'youtube'; code: string; author: string; caption: string; videos: Video[] }
 
 /** 跟 threads.rs 的 COOLDOWN 一樣：同一個 IP 不管成功與否，10 秒只能查一次 */
 const COOLDOWN_MS = 10_000
 
-/** 從貼上的文字裡找出 Threads 的網址（分享時常常會連同其他字一起複製） */
-const THREADS_URL = /(?:https?:\/\/)?(?:www\.)?threads\.(?:com|net)\/[^\s<>"'，。]+/i
+/** 從貼上的文字裡找出 Threads 或 YouTube 的網址（分享時常常會連同其他字一起複製） */
+const VIDEO_URL =
+  /(?:https?:\/\/)?(?:(?:www\.)?threads\.(?:com|net)|(?:www\.|m\.|music\.)?youtube\.com|youtu\.be)\/[^\s<>"'，。]+/i
 
 function extractUrl(text: string) {
   // 句尾的標點不是網址的一部分
-  return text.match(THREADS_URL)?.[0].replace(/[.,!?;:)\]]+$/, '') ?? null
+  return text.match(VIDEO_URL)?.[0].replace(/[.,!?;:)\]]+$/, '') ?? null
 }
 
 /** 手機上用分享選單存影片（iPhone 選「儲存影片」就會進相簿）；電腦直接下載檔案 */
@@ -25,7 +27,7 @@ function shareable(file: File) {
   return matchMedia('(pointer: coarse)').matches && !!navigator.canShare?.({ files: [file] })
 }
 
-/** CDN 有開 CORS，可以直接在瀏覽器下載，影片不經過我們的伺服器 */
+/** Threads 的 CDN 有開 CORS，可以直接在瀏覽器下載，影片不經過我們的伺服器；YouTube 的是我們自己的網址 */
 async function fetchVideo(url: string, signal: AbortSignal, onProgress: (ratio: number | null) => void) {
   const res = await fetch(url, { signal, referrerPolicy: 'no-referrer' })
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
@@ -76,7 +78,10 @@ function VideoCard({ post, video, index }: { post: Post; video: Video; index: nu
   )
 
   const many = post.videos.length > 1
-  const name = `threads_${post.author || 'video'}_${post.code}${many ? `_${index + 1}` : ''}.mp4`
+  const name =
+    post.source === 'youtube'
+      ? `youtube_${post.code}.mp4`
+      : `threads_${post.author || 'video'}_${post.code}${many ? `_${index + 1}` : ''}.mp4`
 
   async function share(file: File) {
     try {
@@ -187,7 +192,7 @@ export default function PastePage() {
   async function lookup(text: string) {
     const url = extractUrl(text)
     if (!url) {
-      setError('請貼上 Threads 貼文的網址（threads.com 或 threads.net）')
+      setError('請貼上 Threads 貼文或 YouTube 影片的網址')
       return
     }
     // 先填進輸入框，冷卻中貼上的網址才不會不見
@@ -249,24 +254,30 @@ export default function PastePage() {
       if (extractUrl(text)) lookup(text)
       else {
         setInput(text.trim())
-        setError('剪貼簿裡沒有 Threads 的網址')
+        setError('剪貼簿裡沒有 Threads 或 YouTube 的網址')
       }
     } catch {
       setError('沒辦法讀取剪貼簿，請直接貼到輸入框')
     }
   }
 
-  const postUrl = post?.author ? `https://www.threads.com/@${post.author}/post/${post.code}` : null
+  const postUrl =
+    post?.source === 'youtube'
+      ? `https://www.youtube.com/watch?v=${post.code}`
+      : post?.author
+        ? `https://www.threads.com/@${post.author}/post/${post.code}`
+        : null
+  const youtube = post?.source === 'youtube'
 
   return (
     <div className="threads">
       <h1>貼網址下載</h1>
       <p className="muted">
-        不用裝捷徑：在 Threads 按「分享 → 複製連結」，貼到下面就能抓出貼文裡的影片。電腦和 Android 也能用。
+        不用裝捷徑：在 Threads 或 YouTube 按「分享 → 複製連結」，貼到下面就能抓出影片。電腦和 Android 也能用。
       </p>
 
       <form className="card th-form" onSubmit={submit}>
-        <label htmlFor="threads-url">貼文網址</label>
+        <label htmlFor="threads-url">貼文或影片網址</label>
         <div className="th-input-row">
           <input
             id="threads-url"
@@ -277,7 +288,7 @@ export default function PastePage() {
             autoCorrect="off"
             spellCheck={false}
             enterKeyHint="go"
-            placeholder="https://www.threads.com/@…/post/…"
+            placeholder="https://www.threads.com/@…/post/… 或 https://youtu.be/…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onPaste={onPaste}
@@ -289,7 +300,7 @@ export default function PastePage() {
           )}
         </div>
         <button type="submit" className="th-submit" disabled={loading || wait > 0 || !input.trim()}>
-          {loading ? '查詢中…' : wait > 0 ? `${wait} 秒後可再查` : '抓影片'}
+          {loading ? '查詢中…（YouTube 要等伺服器下載完）' : wait > 0 ? `${wait} 秒後可再查` : '抓影片'}
         </button>
         {error && (
           <p className="error" role="alert">
@@ -297,8 +308,11 @@ export default function PastePage() {
           </p>
         )}
         <p className="muted th-note">
-          同一個網路 10 秒只能查一次，跟捷徑共用。影片網址幾天後就會失效，請盡快下載；要登入 Threads
+          同一個網路 10 秒只能查一次，跟捷徑共用。Threads 的影片網址幾天後就會失效，請盡快下載；要登入 Threads
           才看得到的貼文抓不到。
+        </p>
+        <p className="muted th-note">
+          YouTube 由伺服器先下載，最高 1080p、20 分鐘以內的公開影片，下載好的檔案 1 小時後刪除。請只下載你有權保存的影片。
         </p>
       </form>
 
@@ -307,12 +321,12 @@ export default function PastePage() {
           <div className="th-post-head">
             {postUrl ? (
               <a className="text-link" href={postUrl} target="_blank" rel="noreferrer">
-                @{post.author}
+                {youtube ? post.author || 'YouTube' : `@${post.author}`}
               </a>
             ) : (
               <span>貼文 {post.code}</span>
             )}
-            <span className="muted">{post.videos.length} 支影片</span>
+            <span className="muted">{youtube ? 'YouTube' : `${post.videos.length} 支影片`}</span>
           </div>
           {post.caption && <p className="th-caption">{post.caption}</p>}
           <ul className="th-videos">

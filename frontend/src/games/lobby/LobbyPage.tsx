@@ -4,6 +4,7 @@ import { useAuth } from '../../auth'
 import { GAME_CATEGORIES, GAMES, type GameInfo } from '../registry'
 import { ChatBox, PartyNotice } from '../shared/Party'
 import { loadPartyName, MAX_NAME } from '../shared/useParty'
+import { useInvite } from '../shared/share'
 import { includes, playingPath, useLobby, type Lobby, type LobbyPlayer } from './useLobby'
 import '../games.css'
 import './lobby.css'
@@ -32,85 +33,89 @@ export default function LobbyPage() {
   }
 
   return (
+    <div className="lobby-page">
+      <LobbyHeader lobby={lobby} onLeave={leave} />
+      <PartyNotice party={lobby} />
+      {lobby.state && lobby.me && (
+        <div className="lobby-columns">
+          <div className="lobby-main">
+            <NowPlaying lobby={lobby} />
+            <InviteCard lobby={lobby} />
+            <GamePicker lobby={lobby} />
+          </div>
+          <div className="lobby-side">
+            <Roster lobby={lobby} />
+            <ChatBox party={lobby} />
+          </div>
+        </div>
+      )}
+      <LoginHint />
+    </div>
+  )
+}
+
+/** 標題列：遊戲室代碼、邀請、離開，以及連線錯誤 */
+function LobbyHeader({ lobby, onLeave }: { lobby: Lobby; onLeave: () => void }) {
+  const invite = useInvite(lobby.inviteUrl)
+  return (
     <>
-      <div className="game-title">
-        <Link to="/games" className="game-back" aria-label="回到小遊戲">
+      <header className="game-head">
+        <Link to="/games" className="game-back" aria-label="回到小遊戲" title="回到小遊戲">
           ←
         </Link>
         <h1>
-          <span aria-hidden="true">🏠</span> 遊戲室
+          <span aria-hidden="true">🏠</span> 遊戲室 <span className="lobby-code">{lobby.code}</span>
         </h1>
-      </div>
-      <div className="lobby-page">
-        <LobbyHeader lobby={lobby} onLeave={leave} />
-        <PartyNotice party={lobby} />
-        {lobby.state && lobby.me && (
-          <div className="lobby-columns">
-            <div className="lobby-main">
-              <NowPlaying lobby={lobby} />
-              <GamePicker lobby={lobby} />
-            </div>
-            <div className="lobby-side">
-              <Roster lobby={lobby} />
-              <ChatBox party={lobby} />
-            </div>
-          </div>
-        )}
-        <LoginHint />
-      </div>
+        {lobby.code && !lobby.connected && !lobby.error && <span className="muted">連線中…</span>}
+        <div className="game-head-actions">
+          {lobby.errorCode === 'replaced' && (
+            <button type="button" onClick={lobby.reconnect}>
+              在這裡繼續
+            </button>
+          )}
+          {lobby.errorCode === 'not_found' && (
+            <button type="button" onClick={lobby.create} disabled={lobby.busy}>
+              開新的遊戲室
+            </button>
+          )}
+          <button type="button" className="secondary" onClick={invite.share}>
+            {invite.copied ? '已複製連結' : '邀請朋友'}
+          </button>
+          <button type="button" className="secondary" onClick={onLeave}>
+            離開遊戲室
+          </button>
+        </div>
+      </header>
+      {lobby.error && <p className="error">{lobby.error}</p>}
     </>
   )
 }
 
-function LobbyHeader({ lobby, onLeave }: { lobby: Lobby; onLeave: () => void }) {
-  const [copied, setCopied] = useState(false)
-
-  async function share() {
-    if (!lobby.inviteUrl) return
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: '一起來玩', url: lobby.inviteUrl })
-        return
-      } catch {
-        // 使用者取消分享，改成複製
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(lobby.inviteUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      window.prompt('複製這個連結給朋友：', lobby.inviteUrl)
-    }
-  }
-
+/** 只有自己一個人在線時：連結直接擺出來，複製就能傳 */
+function InviteCard({ lobby }: { lobby: Lobby }) {
+  const invite = useInvite(lobby.inviteUrl)
+  const online = lobby.state?.players.filter((p) => p.online).length ?? 0
+  if (!lobby.inviteUrl || online >= 2) return null
   return (
-    <div className="party-header">
-      <div className="room-code">
-        <span className="muted">遊戲室</span>
-        <strong>{lobby.code}</strong>
-        {lobby.code && !lobby.connected && !lobby.error && <span className="muted">連線中…</span>}
-      </div>
-      <div className="game-toolbar">
-        {lobby.errorCode === 'replaced' && (
-          <button type="button" onClick={lobby.reconnect}>
-            在這裡繼續
-          </button>
-        )}
-        {lobby.errorCode === 'not_found' && (
-          <button type="button" onClick={lobby.create} disabled={lobby.busy}>
-            開新的遊戲室
-          </button>
-        )}
-        <button type="button" className="secondary" onClick={share}>
-          {copied ? '已複製連結' : '邀請朋友'}
-        </button>
-        <button type="button" className="secondary" onClick={onLeave}>
-          離開遊戲室
+    <section className="lobby-invite" aria-label="邀請朋友">
+      <p>
+        <strong>邀請朋友加入</strong>
+        <span className="muted">
+          把連結傳給朋友，或請他在小遊戲大廳輸入代碼 <span className="lobby-code">{lobby.code}</span>。
+        </span>
+      </p>
+      <div className="inline-form">
+        <input
+          readOnly
+          value={lobby.inviteUrl}
+          onFocus={(e) => e.currentTarget.select()}
+          aria-label="邀請連結"
+        />
+        <button type="button" onClick={invite.copy}>
+          {invite.copied ? '已複製' : '複製連結'}
         </button>
       </div>
-      {lobby.error && <p className="error">{lobby.error}</p>}
-    </div>
+    </section>
   )
 }
 
@@ -173,7 +178,7 @@ function GamePicker({ lobby }: { lobby: Lobby }) {
                     type="button"
                     className={`lobby-game${picked?.id === game.id ? ' picked' : ''}`}
                     aria-pressed={picked?.id === game.id}
-                    onClick={() => setPicked(game)}
+                    onClick={() => setPicked(picked?.id === game.id ? null : game)}
                   >
                     <span className="lobby-game-icon" aria-hidden="true">
                       {game.icon}
@@ -189,13 +194,17 @@ function GamePicker({ lobby }: { lobby: Lobby }) {
           </div>
         )
       })}
-      {picked && <StartPanel key={picked.id} lobby={lobby} game={picked} />}
+      {picked ? (
+        <StartPanel key={picked.id} lobby={lobby} game={picked} onCancel={() => setPicked(null)} />
+      ) : (
+        <p className="muted">點一款遊戲，再按「開始玩」。</p>
+      )}
     </section>
   )
 }
 
-/** 選好遊戲之後：兩人的棋類要挑誰上場，其他直接開始 */
-function StartPanel({ lobby, game }: { lobby: Lobby; game: GameInfo }) {
+/** 選好遊戲之後：兩人的棋類要挑誰上場，其他直接開始。黏在畫面底部，清單很長時也不用捲下去找 */
+function StartPanel({ lobby, game, onCancel }: { lobby: Lobby; game: GameInfo; onCancel: () => void }) {
   const online = lobby.state?.players.filter((p) => p.online) ?? []
   const [seats, setSeats] = useState<[number | null, number | null]>([null, null])
   const duel = game.lobby?.kind === 'duel'
@@ -212,13 +221,18 @@ function StartPanel({ lobby, game }: { lobby: Lobby; game: GameInfo }) {
   }
 
   return (
-    <div className="lobby-start">
-      <p>
-        <strong>
-          {game.icon} {game.name}
-        </strong>
-        <span className="muted"> · {game.lobby?.players}</span>
-      </p>
+    <div className="lobby-start" role="region" aria-label={`開始玩${game.name}`}>
+      <div className="lobby-start-head">
+        <p>
+          <strong>
+            <span aria-hidden="true">{game.icon}</span> {game.name}
+          </strong>
+          <span className="muted"> · {game.lobby?.players}</span>
+        </p>
+        <button type="button" className="lobby-start-close" onClick={onCancel} aria-label="取消" title="取消">
+          ×
+        </button>
+      </div>
       {duel && (
         <div className="lobby-seats">
           {([0, 1] as const).map((i) => (

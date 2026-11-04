@@ -92,6 +92,7 @@ export default function SetupPage() {
         </p>
         <p className="muted">
           不是 iPhone、或不想裝捷徑？到 <Link className="text-link" to="/threads/paste">貼網址下載</Link> 直接貼上貼文的網址。
+          YouTube 的影片也可以在那裡下載。
         </p>
       </section>
 
