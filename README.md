@@ -39,7 +39,7 @@ alice                  admin（系統管理員）         admin.users
 ```
 
 - 密碼用 argon2id 雜湊；session 是隨機 token 放在 HttpOnly cookie（`session_<env>`），資料庫只存 token 的 SHA-256，7 天過期。
-- 同一個 IP 15 分鐘內登入失敗 10 次會暫停登入。
+- 同一個 IP 15 分鐘內登入失敗 10 次會暫停登入。拿過假 `.env` 的 IP 24 小時內不能登入和註冊（見 [.env 蜜罐](#封鎖)）。
 - 停用帳號、重設密碼會讓該帳號所有裝置登出；自己改密碼只保留目前這個裝置。
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
@@ -584,18 +584,51 @@ GET /api/admin/access/requests?hours=24&ip=&errors=   最近 500 筆請求（可
 ## .env 蜜罐
 
 掃描器常來找 `/.env`、`/.env.local`、`/api/.env` 這類設定檔想偷資料庫密碼和金鑰。這些網址會回一份假的設定檔，並記下是誰拿走的，
-在「系統管理 › .env 蜜罐」（`/admin/honeypot`，需要 `admin.users`）看：每個 IP 來了幾次、找過哪些路徑、裝置，展開看每一次的時間和網址。程式在 `backend/src/honeypot.rs`。
+在「系統管理 › .env 蜜罐」（`/admin/honeypot`，需要 `admin.users`）看：每個 IP 來了幾次、找過哪些路徑、裝置，展開看每一次的時間和網址；
+誰拿假密碼來登入；哪些 IP 現在被擋。程式在 `backend/src/honeypot.rs`。
 
 ```
-GET /api/admin/honeypot            統計、最近的 300 個 IP、被找最多次的 30 個路徑
-GET /api/admin/honeypot/hits?ip=   最近 500 次（可以只看某個 IP）
+GET    /api/admin/honeypot              統計、最近的 300 個 IP、被找最多次的 30 個路徑、最近 100 次用假密碼登入（uses）、
+                                        現在被擋的 IP（blocks，手動的在前面）、自動封鎖有沒有開（auto_block）
+GET    /api/admin/honeypot/hits?ip=     最近 500 次（可以只看某個 IP）
+PUT    /api/admin/honeypot/auto-block   {"enabled":false}  →  {"enabled":false}
+POST   /api/admin/honeypot/blocks       {"ip":"203.0.113.5","days":7,"note":"…"}  →  201   days 不給或 null 是永久
+DELETE /api/admin/honeypot/blocks/{ip}  解除封鎖（手動和自動都解）  →  204
 ```
 
 - 路徑最後一段是 `.env` 或 `.env.<任何字>` 都算，在哪一層底下都一樣（`/laravel/.env`、`/.env.production`…），任何 method 都回同一份。
   用最外層的 middleware 攔，所以 `/api/.env` 也會被攔到；`.envrc`、`/.git/config` 這類照舊回 404。
-- 假檔案裡的主機是連不到的內網 IP，密碼和金鑰在每次啟動時隨機產生，跟真正的設定無關，也不在 git 裡。同一個容器裡每次拿到的內容一樣，看起來才像真的。
+- 假檔案裡的主機是連不到的內網 IP，密碼和金鑰由啟動時隨機產生的金鑰和來源 IP 算出來，跟真正的設定無關，也不在 git 裡。
+  每個 IP 拿到的都不一樣，同一個容器裡同一個 IP 每次拿到的一樣，看起來才像真的。
 - 紀錄存在 `honeypot_hits`，保留 180 天；帳號是當時有登入的人（通常是管理員自己點開來看）。同一個 IP 10 分鐘超過 200 筆的部分不記，照樣回假檔案。
 - IP 訪問紀錄也會記到這些請求，狀態碼是 200。
+
+### 假密碼被拿去用
+
+- 發出去的 `DB_PASSWORD`、`REDIS_PASSWORD`、`SMTP_PASSWORD`、`ADMIN_PASSWORD`（帳號 `sysadmin`）記在 `honeypot_secrets`，連同是發給哪個 IP 的。
+  有人拿其中一個來 `/api/auth/login`，不管填什麼帳號都記一筆到 `honeypot_uses`：哪個 IP 來用、用了哪一行、當初是哪個 IP 拿走的。
+  對方看到的跟一般的密碼錯誤一樣（401「帳號或密碼錯誤」）。兩邊 IP 不同很常見，掃描和實際動手的常常是不同台機器。
+- 同一個 IP 10 分鐘超過 200 次的部分不記。兩張表都保留 180 天。
+- 可以再放一組 [canarytokens.org](https://canarytokens.org) 的假 AWS 金鑰（建立 token 時選 AWS keys），有人拿去呼叫 AWS 時
+  canarytokens 會寄信通知，信裡有對方的 IP。在伺服器的 `secrets.env` 加上下面兩行，下次部署後假檔案裡就會多出 `AWS_ACCESS_KEY_ID` 這幾行；沒設定就不放：
+  ```
+  HONEYPOT_AWS_ACCESS_KEY_ID=AKIA...
+  HONEYPOT_AWS_SECRET_ACCESS_KEY=...
+  ```
+
+### 封鎖
+
+被擋的 IP 不能登入也不能註冊，錯誤訊息跟失敗太多次、申請太多次一樣，不讓對方知道原因。其他頁面照常能看。
+
+- **自動封鎖**（預設開著，管理頁可以關，存在 `site_settings` 的 `honeypot_auto_block`）：最近 24 小時拿過假檔案（有登入的那幾次不算）
+  或用過假密碼的 IP。第一次用假密碼還是回 401，之後才開始擋。
+  30 天內有帳號在那個 IP 登入過的不擋（看 IP 訪問紀錄裡有沒有帶帳號的請求），所以管理員登出後點開 `/.env` 來看，不會把自己鎖在外面。
+  關掉時照樣記錄誰來拿、誰用假密碼，只是不擋。
+- **手動封鎖**（`honeypot_blocks`）：管理頁輸入 IP、期限（1 / 7 / 30 天或永久）和備註；表格裡沒被擋的 IP 旁邊的「封鎖」會把 IP 填進表單。
+  不管自動封鎖有沒有開、那個 IP 有沒有帳號登入過都擋。IP 存成標準寫法（IPv6 小寫、縮寫），不能封鎖自己目前的 IP。
+- 被擋的 IP 旁邊有「封鎖中」或「手動封鎖」和「解除封鎖」。手動的直接刪掉；自動的把解除時間記在 `honeypot_pardons`，
+  那之前的紀錄不再算，之後再來拿還是會被擋。
+- 封鎖是每次登入、註冊時從資料庫算出來的，換版、重啟都照樣有效，換版期間的新舊容器結果也一樣。
 
 ## 主機監控
 
@@ -799,7 +832,7 @@ docker rollout app
 ```
 ~/ouyang_web/staging/   compose.yaml、staging.env、deploy.sh、traefik/（每次部署覆蓋）、.env（deploy.sh 產生）
 ~/ouyang_web/prod/      同上
-~/ouyang_web/<env>/secrets.env   手動放的金鑰（CWA_API_KEY），deploy.sh 會併進 .env
+~/ouyang_web/<env>/secrets.env   手動放的金鑰（CWA_API_KEY、HONEYPOT_AWS_*），deploy.sh 會併進 .env
 ```
 
 Traefik 以固定的專案名稱 `ouyang-web-traefik` 執行，staging 和 prod 共用，所以修改 `deploy/traefik/` 會同時影響兩個環境。

@@ -1,63 +1,134 @@
 //! 假的 `.env`：掃描器常來找 `/.env`、`/.env.local`、`/api/.env` 這類設定檔，想撿資料庫密碼和金鑰。
 //! 這裡故意回一份看起來像真的設定檔，記下是誰來拿的，在「系統管理 › .env 蜜罐」查（需要 `admin.users`）。
 //!
-//! 檔案裡的主機、帳號和密碼全是假的：IP 是連不到的內網位址，密碼是每次啟動時隨機產生的，跟真正的設定無關。
-//! 正常使用者不會打開這些網址，所以來過的幾乎都是掃描器。
+//! 檔案裡的主機、帳號和密碼全是假的：IP 是連不到的內網位址，密碼由啟動時隨機產生的金鑰和來源 IP 算出來，跟真正的設定無關。
+//! 每個 IP 拿到的密碼都不一樣（同一個 IP 每次拿到的一樣，看起來才像真的），發出去的密碼記在 `honeypot_secrets`，
+//! 之後有人拿其中一個來登入（[`check_login`]），就知道是誰拿去用、當初是發給哪個 IP 的。
+//! 有設定 canarytokens.org 的 AWS 金鑰的話也會放進去，有人拿去呼叫 AWS 時 canarytokens 會寄信通知。
+//!
+//! 正常使用者不會打開這些網址，所以拿過假檔案或用過假密碼的 IP 24 小時內不能登入和註冊（[`is_blocked`]），
+//! 除非 30 天內有帳號在那個 IP 登入過（例如管理員自己點開來看），或管理員在頁面上解除封鎖。
+//! 自動封鎖可以在頁面上關掉；管理員也可以手動封鎖任何 IP（`honeypot_blocks`），手動的不管開關和有沒有登入過都擋。
+//!
 //! 同一個 IP 10 分鐘超過 200 筆的部分不記（照樣回假檔案），紀錄保留 180 天。
 
-use std::sync::OnceLock;
+use std::{collections::HashSet, net::IpAddr};
 
 use axum::{
     Json,
-    extract::{Query, Request, State},
-    http::header,
+    extract::{Path, Query, Request, State},
+    http::{HeaderMap, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use sqlx::SqlitePool;
 
 use crate::{
     AppError, AppState,
     auth::{AdminUsers, Require, client_key, read_session_token, token_hash},
+    visits::VisitLimiter,
 };
 
 const KEEP_DAYS: u32 = 180;
+/// 拿過假檔案或用過假密碼之後，多久不能登入和註冊
+const BLOCK_HOURS: u32 = 24;
+/// 這麼多天內有帳號在這個 IP 登入過的話不擋（自己人）
+const TRUST_DAYS: u32 = 30;
+/// `site_settings` 裡自動封鎖的開關，'1' 開、'0' 關
+const AUTO_BLOCK_KEY: &str = "honeypot_auto_block";
+/// 手動封鎖最多幾天（不選就是永久）、備註最長幾個字
+const MAX_BLOCK_DAYS: u32 = 3650;
+const MAX_NOTE_LEN: usize = 200;
 const MAX_PATH_LEN: usize = 300;
 const MAX_QUERY_LEN: usize = 300;
 const MAX_USER_AGENT_LEN: usize = 300;
+const MAX_USERNAME_LEN: usize = 100;
+/// 假密碼最長 24 字，比這長的密碼不用查
+const MAX_SECRET_LEN: usize = 64;
 /// 管理頁一次列出幾個 IP、幾個路徑、幾筆紀錄
 const MAX_IPS: i64 = 300;
 const MAX_PATHS: i64 = 30;
 const MAX_HITS: i64 = 500;
+const MAX_USES: i64 = 100;
 
-/// 路徑最後一段是 `.env` 或 `.env.<什麼都可以>`（`.env.local`、`.env.production`、`.env.bak`…），在哪一層底下都算
-pub fn is_bait(path: &str) -> bool {
-    let last = path.trim_end_matches('/').rsplit('/').next().unwrap_or_default();
-    last == ".env" || last.starts_with(".env.")
+/// 產生假密碼的金鑰、每個 IP 的紀錄上限、要放進假檔案的 AWS 金鑰
+pub struct Honeypot {
+    key: [u8; 32],
+    /// 每個 IP 最多記幾次來拿假檔案
+    hits: VisitLimiter,
+    /// 每個 IP 最多記幾次用假密碼登入
+    uses: VisitLimiter,
+    aws: Option<AwsKey>,
 }
 
-fn random_text(len: usize) -> String {
-    const CHARS: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-    let mut bytes = vec![0u8; len];
-    // 只是假資料，萬一拿不到亂數也沒關係
-    let _ = getrandom::fill(&mut bytes);
-    bytes.iter().map(|b| CHARS[*b as usize % CHARS.len()] as char).collect()
+/// canarytokens.org 產生的 AWS 金鑰：有人拿去呼叫 AWS，canarytokens 會寄信通知，信裡有對方的 IP
+struct AwsKey {
+    id: String,
+    secret: String,
 }
 
-fn random_hex(bytes: usize) -> String {
-    const HEX: &[u8] = b"0123456789abcdef";
-    let mut buf = vec![0u8; bytes];
-    let _ = getrandom::fill(&mut buf);
-    buf.iter().flat_map(|b| [HEX[(b >> 4) as usize] as char, HEX[(b & 15) as usize] as char]).collect()
+impl Default for Honeypot {
+    fn default() -> Self {
+        let mut key = [0u8; 32];
+        // 只是假資料，萬一拿不到亂數也沒關係
+        let _ = getrandom::fill(&mut key);
+        Self { key, hits: VisitLimiter::default(), uses: VisitLimiter::default(), aws: None }
+    }
 }
 
-/// 假的設定檔。同一個程序裡每次拿到的都一樣，看起來才像真的檔案
-fn bait() -> &'static str {
-    static BAIT: OnceLock<String> = OnceLock::new();
-    BAIT.get_or_init(|| {
-        let db = random_text(24);
-        let redis = random_text(20);
-        format!(
+impl Honeypot {
+    /// `HONEYPOT_AWS_ACCESS_KEY_ID` 和 `HONEYPOT_AWS_SECRET_ACCESS_KEY` 都有設定才放 AWS 金鑰
+    pub fn from_env() -> Self {
+        let var = |name| std::env::var(name).ok().map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
+        match (var("HONEYPOT_AWS_ACCESS_KEY_ID"), var("HONEYPOT_AWS_SECRET_ACCESS_KEY")) {
+            (Some(id), Some(secret)) => Self::default().with_aws_key(id, secret),
+            _ => Self::default(),
+        }
+    }
+
+    pub fn with_aws_key(mut self, id: impl Into<String>, secret: impl Into<String>) -> Self {
+        self.aws = Some(AwsKey { id: id.into(), secret: secret.into() });
+        self
+    }
+
+    /// 由金鑰、欄位名稱和 IP 算出來：同一個 IP 每次一樣，不同 IP 不一樣，沒有金鑰的人猜不到
+    fn derive(&self, ip: &str, field: &str) -> Vec<u8> {
+        let mut hasher = Sha256::new();
+        hasher.update(self.key);
+        hasher.update(field.as_bytes());
+        hasher.update([0]);
+        hasher.update(ip.as_bytes());
+        hasher.finalize().to_vec()
+    }
+
+    fn text(&self, ip: &str, field: &str, len: usize) -> String {
+        const CHARS: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        self.derive(ip, field).iter().take(len).map(|b| CHARS[*b as usize % CHARS.len()] as char).collect()
+    }
+
+    fn hex(&self, ip: &str, field: &str, bytes: usize) -> String {
+        self.derive(ip, field).iter().take(bytes).map(|b| format!("{b:02x}")).collect()
+    }
+
+    /// 發給 `ip` 的假設定檔
+    fn bait(&self, ip: &str) -> Bait {
+        let secrets = [("DB_PASSWORD", 24), ("REDIS_PASSWORD", 20), ("SMTP_PASSWORD", 16), ("ADMIN_PASSWORD", 20)]
+            .map(|(field, len)| (field, self.text(ip, field, len)));
+        let [(_, db), (_, redis), (_, smtp), (_, admin)] = &secrets;
+        let aws = self.aws.as_ref().map_or_else(String::new, |key| {
+            format!(
+                "
+AWS_ACCESS_KEY_ID={}
+AWS_SECRET_ACCESS_KEY={}
+AWS_DEFAULT_REGION=ap-northeast-1
+AWS_S3_BUCKET=ouyang-prod-uploads
+",
+                key.id, key.secret
+            )
+        });
+        let text = format!(
             "NODE_ENV=production
 PORT=3000
 LOG_LEVEL=info
@@ -82,17 +153,37 @@ SMTP_HOST=10.0.1.40
 SMTP_PORT=587
 SMTP_USER=noreply
 SMTP_PASSWORD={smtp}
-",
-            jwt = random_hex(32),
-            session = random_hex(32),
-            encryption = random_hex(16),
-            smtp = random_text(16),
-        )
-    })
+
+ADMIN_USER=sysadmin
+ADMIN_PASSWORD={admin}
+{aws}",
+            jwt = self.hex(ip, "JWT_SECRET", 32),
+            session = self.hex(ip, "SESSION_SECRET", 32),
+            encryption = self.hex(ip, "ENCRYPTION_KEY", 16),
+        );
+        Bait { text, secrets }
+    }
+}
+
+struct Bait {
+    text: String,
+    /// 會記在 `honeypot_secrets` 的密碼：(哪一行, 值)
+    secrets: [(&'static str, String); 4],
+}
+
+/// 路徑最後一段是 `.env` 或 `.env.<什麼都可以>`（`.env.local`、`.env.production`、`.env.bak`…），在哪一層底下都算
+pub fn is_bait(path: &str) -> bool {
+    let last = path.trim_end_matches('/').rsplit('/').next().unwrap_or_default();
+    last == ".env" || last.starts_with(".env.")
 }
 
 fn truncate(text: &str, max: usize) -> String {
     text.chars().take(max).collect()
+}
+
+fn user_agent(headers: &HeaderMap) -> String {
+    let value = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).unwrap_or_default();
+    truncate(value, MAX_USER_AGENT_LEN)
 }
 
 /// 放在最外層的 middleware：是誘餌路徑就記一筆並回假檔案，不是就照常處理
@@ -104,20 +195,21 @@ pub async fn intercept(State(state): State<AppState>, request: Request, next: Ne
     let headers = request.headers();
     let ip = client_key(headers);
     let session = read_session_token(headers, &state.session_cookie_name()).map(|t| token_hash(&t));
-    let user_agent = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).unwrap_or_default();
-    let user_agent = truncate(user_agent, MAX_USER_AGENT_LEN);
+    let user_agent = user_agent(headers);
     let method = request.method().to_string();
     let path = truncate(request.uri().path(), MAX_PATH_LEN);
     let query = truncate(request.uri().query().unwrap_or_default(), MAX_QUERY_LEN);
     drop(request);
 
-    if state.honeypot_limiter.allow(&ip) {
-        let saved = save(&state, Hit { ip, method, path, query, session, user_agent }).await;
+    let bait = state.honeypot.bait(&ip);
+    if state.honeypot.hits.allow(&ip) {
+        let saved = save(&state.pool, Hit { ip, method, path, query, session, user_agent }, &bait.secrets).await;
         if let Err(err) = saved {
             tracing::warn!(error = %err, "failed to record honeypot hit");
         }
     }
-    ([(header::CONTENT_TYPE, "text/plain; charset=utf-8"), (header::CACHE_CONTROL, "no-store")], bait()).into_response()
+    ([(header::CONTENT_TYPE, "text/plain; charset=utf-8"), (header::CACHE_CONTROL, "no-store")], bait.text)
+        .into_response()
 }
 
 struct Hit {
@@ -130,12 +222,24 @@ struct Hit {
     user_agent: String,
 }
 
-async fn save(state: &AppState, hit: Hit) -> Result<(), sqlx::Error> {
+async fn save(pool: &SqlitePool, hit: Hit, secrets: &[(&str, String)]) -> Result<(), sqlx::Error> {
     // 很少有人來，每次順便清掉太舊的
-    sqlx::query("DELETE FROM honeypot_hits WHERE created_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?)")
-        .bind(format!("-{KEEP_DAYS} days"))
-        .execute(&state.pool)
-        .await?;
+    let cutoff = format!("-{KEEP_DAYS} days");
+    for sql in [
+        "DELETE FROM honeypot_hits WHERE created_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?)",
+        "DELETE FROM honeypot_secrets WHERE created_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?)",
+        "DELETE FROM honeypot_uses WHERE created_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?)",
+    ] {
+        sqlx::query(sql).bind(&cutoff).execute(pool).await?;
+    }
+    for (field, value) in secrets {
+        sqlx::query("INSERT OR IGNORE INTO honeypot_secrets (value, ip, field) VALUES (?, ?, ?)")
+            .bind(value)
+            .bind(&hit.ip)
+            .bind(field)
+            .execute(pool)
+            .await?;
+    }
     sqlx::query(
         "INSERT INTO honeypot_hits (ip, method, path, query, user_id, user_agent)
          VALUES (?, ?, ?, ?, (SELECT user_id FROM sessions WHERE token_hash = ?
@@ -147,20 +251,248 @@ async fn save(state: &AppState, hit: Hit) -> Result<(), sqlx::Error> {
     .bind(hit.query)
     .bind(hit.session)
     .bind(hit.user_agent)
-    .execute(&state.pool)
+    .execute(pool)
     .await?;
     Ok(())
 }
 
+// ---- 假密碼被拿去用、封鎖 ----
+
+/// 登入時先呼叫：密碼是發出去的假密碼就記一筆。查詢或寫入失敗只記 log，不影響登入本身
+pub async fn check_login(state: &AppState, headers: &HeaderMap, username: &str, password: &str) {
+    if password.is_empty() || password.len() > MAX_SECRET_LEN {
+        return;
+    }
+    let ip = client_key(headers);
+    let result = async {
+        let issued = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT field, ip, created_at FROM honeypot_secrets WHERE value = ?",
+        )
+        .bind(password)
+        .fetch_optional(&state.pool)
+        .await?;
+        let Some((field, issued_ip, issued_at)) = issued else { return Ok(()) };
+        tracing::warn!(%ip, %field, %issued_ip, "honeypot password used to log in");
+        if !state.honeypot.uses.allow(&ip) {
+            return Ok(());
+        }
+        sqlx::query(
+            "INSERT INTO honeypot_uses (ip, field, issued_ip, issued_at, username, user_agent) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&ip)
+        .bind(field)
+        .bind(issued_ip)
+        .bind(issued_at)
+        .bind(truncate(username.trim(), MAX_USERNAME_LEN))
+        .bind(user_agent(headers))
+        .execute(&state.pool)
+        .await
+        .map(|_| ())
+    }
+    .await;
+    if let Err(err) = result {
+        tracing::warn!(error = %err, "failed to check honeypot password");
+    }
+}
+
+/// 現在被擋的 IP
+#[derive(Serialize)]
+pub struct Block {
+    pub ip: String,
+    /// 擋到什麼時候；手動封鎖選「永久」的是 None
+    pub until: Option<String>,
+    /// 管理員手動封鎖的；false 是拿過假檔案或用過假密碼被自動封鎖
+    pub manual: bool,
+    /// 手動封鎖時填的備註
+    pub note: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct AutoBlock {
+    ip: String,
+    until: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct ManualBlock {
+    ip: String,
+    until: Option<String>,
+    note: String,
+}
+
+/// 沒有設定就當作開著
+async fn auto_block_enabled(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM site_settings WHERE key = ?")
+        .bind(AUTO_BLOCK_KEY)
+        .fetch_optional(pool)
+        .await?;
+    Ok(value.as_deref() != Some("0"))
+}
+
+/// `ip` 是空字串就列出全部。手動封鎖的在前面；同一個 IP 兩種都有的話算手動
+async fn blocks(pool: &SqlitePool, ip: &str) -> Result<Vec<Block>, sqlx::Error> {
+    let manual = sqlx::query_as::<_, ManualBlock>(
+        "SELECT ip, until, note FROM honeypot_blocks
+         WHERE (until IS NULL OR until > strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) AND (?1 = '' OR ip = ?1)
+         ORDER BY created_at DESC, ip",
+    )
+    .bind(ip)
+    .fetch_all(pool)
+    .await?;
+    let mut blocks: Vec<Block> =
+        manual.into_iter().map(|b| Block { ip: b.ip, until: b.until, manual: true, note: b.note }).collect();
+    if auto_block_enabled(pool).await? {
+        let manual_ips: HashSet<String> = blocks.iter().map(|b| b.ip.clone()).collect();
+        let auto = auto_blocks(pool, ip).await?.into_iter().filter(|b| !manual_ips.contains(&b.ip));
+        blocks.extend(auto.map(|b| Block { ip: b.ip, until: Some(b.until), manual: false, note: String::new() }));
+    }
+    Ok(blocks)
+}
+
+/// 最近 24 小時拿過假檔案（不算有登入的時候）或用過假密碼、
+/// 而且那之後沒有被管理員解除、30 天內沒有帳號在這個 IP 登入過的
+async fn auto_blocks(pool: &SqlitePool, ip: &str) -> Result<Vec<AutoBlock>, sqlx::Error> {
+    sqlx::query_as::<_, AutoBlock>(
+        "WITH recent AS (
+            SELECT ip, created_at FROM honeypot_hits
+            WHERE user_id IS NULL AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?1) AND (?2 = '' OR ip = ?2)
+            UNION ALL
+            SELECT ip, created_at FROM honeypot_uses
+            WHERE created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?1) AND (?2 = '' OR ip = ?2)
+         )
+         SELECT r.ip, strftime('%Y-%m-%dT%H:%M:%SZ', MAX(r.created_at), ?3) AS until
+         FROM recent r LEFT JOIN honeypot_pardons p ON p.ip = r.ip
+         WHERE r.created_at > COALESCE(p.created_at, '')
+           AND NOT EXISTS (SELECT 1 FROM access_logs a WHERE a.ip = r.ip AND a.user_id IS NOT NULL
+                           AND a.created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?4))
+         GROUP BY r.ip
+         ORDER BY until DESC",
+    )
+    .bind(format!("-{BLOCK_HOURS} hours"))
+    .bind(ip)
+    .bind(format!("+{BLOCK_HOURS} hours"))
+    .bind(format!("-{TRUST_DAYS} days"))
+    .fetch_all(pool)
+    .await
+}
+
+/// 登入和註冊前檢查
+pub async fn is_blocked(pool: &SqlitePool, ip: &str) -> Result<bool, sqlx::Error> {
+    // 空字串在 blocks 裡代表全部
+    if ip.is_empty() {
+        return Ok(false);
+    }
+    Ok(!blocks(pool, ip).await?.is_empty())
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct AutoBlockSetting {
+    pub enabled: bool,
+}
+
+/// 自動封鎖的開關。關掉時照樣記錄誰來拿、誰用假密碼，只是不擋；手動封鎖不受影響
+pub async fn set_auto_block(
+    State(state): State<AppState>,
+    _: Require<AdminUsers>,
+    Json(input): Json<AutoBlockSetting>,
+) -> Result<Json<AutoBlockSetting>, AppError> {
+    sqlx::query(
+        "INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(AUTO_BLOCK_KEY)
+    .bind(if input.enabled { "1" } else { "0" })
+    .execute(&state.pool)
+    .await?;
+    Ok(Json(input))
+}
+
+#[derive(Deserialize)]
+pub struct NewBlock {
+    pub ip: String,
+    /// 擋幾天；不給或 null 是永久
+    #[serde(default)]
+    pub days: Option<u32>,
+    #[serde(default)]
+    pub note: String,
+}
+
+/// 手動封鎖：不管自動封鎖有沒有開、那個 IP 有沒有帳號登入過都擋。同一個 IP 再封鎖一次會蓋掉期限和備註
+pub async fn create_block(
+    State(state): State<AppState>,
+    Require(user, _): Require<AdminUsers>,
+    headers: HeaderMap,
+    Json(input): Json<NewBlock>,
+) -> Result<StatusCode, AppError> {
+    // 存成標準寫法，才對得上 Traefik 給的 X-Forwarded-For
+    let ip = input.ip.trim().parse::<IpAddr>().map_err(|_| AppError::BadRequest("IP 格式不正確".into()))?.to_string();
+    if ip == client_key(&headers) {
+        return Err(AppError::BadRequest("不能封鎖自己目前的 IP".into()));
+    }
+    if let Some(days) = input.days
+        && !(1..=MAX_BLOCK_DAYS).contains(&days)
+    {
+        return Err(AppError::BadRequest(format!("天數要在 1～{MAX_BLOCK_DAYS} 之間")));
+    }
+    let note = input.note.trim();
+    if note.chars().count() > MAX_NOTE_LEN {
+        return Err(AppError::BadRequest(format!("備註不可超過 {MAX_NOTE_LEN} 字")));
+    }
+
+    // 順便清掉過期的
+    sqlx::query(
+        "DELETE FROM honeypot_blocks WHERE until IS NOT NULL AND until <= strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+    )
+    .execute(&state.pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO honeypot_blocks (ip, until, note, user_id)
+         VALUES (?1, CASE WHEN ?2 IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?2) END, ?3, ?4)
+         ON CONFLICT (ip) DO UPDATE SET until = excluded.until, note = excluded.note,
+             user_id = excluded.user_id, created_at = excluded.created_at",
+    )
+    .bind(&ip)
+    .bind(input.days.map(|days| format!("+{days} days")))
+    .bind(note)
+    .bind(user.id)
+    .execute(&state.pool)
+    .await?;
+    Ok(StatusCode::CREATED)
+}
+
+/// 解除封鎖：手動封鎖直接刪掉；自動封鎖是這之前的紀錄不再算，之後再來拿還是會被擋
+pub async fn unblock(
+    State(state): State<AppState>,
+    Require(user, _): Require<AdminUsers>,
+    Path(ip): Path<String>,
+) -> Result<StatusCode, AppError> {
+    if ip.is_empty() || ip.len() > 100 {
+        return Err(AppError::BadRequest("IP 格式不正確".into()));
+    }
+    sqlx::query("DELETE FROM honeypot_blocks WHERE ip = ?").bind(&ip).execute(&state.pool).await?;
+    sqlx::query(
+        "INSERT INTO honeypot_pardons (ip, user_id) VALUES (?, ?)
+         ON CONFLICT (ip) DO UPDATE SET user_id = excluded.user_id, created_at = excluded.created_at",
+    )
+    .bind(&ip)
+    .bind(user.id)
+    .execute(&state.pool)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 // ---- 查詢 ----
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct HoneypotSummary {
     pub hits: i64,
     pub ips: i64,
     /// 最近 24 小時的次數和不同 IP 數
     pub last_day: i64,
     pub last_day_ips: i64,
+    /// 假密碼被拿去登入的次數
+    pub uses: i64,
+    /// 現在被擋的 IP 數
+    pub blocked: usize,
 }
 
 #[derive(sqlx::FromRow)]
@@ -210,6 +542,19 @@ pub struct HoneypotPath {
     pub ips: i64,
 }
 
+/// 有人拿假密碼來登入
+#[derive(Serialize, sqlx::FromRow)]
+pub struct HoneypotUse {
+    pub id: i64,
+    pub ip: String,
+    pub field: String,
+    pub issued_ip: String,
+    pub issued_at: String,
+    pub username: String,
+    pub user_agent: String,
+    pub created_at: String,
+}
+
 #[derive(Serialize)]
 pub struct HoneypotReport {
     pub summary: HoneypotSummary,
@@ -217,18 +562,27 @@ pub struct HoneypotReport {
     pub ips: Vec<HoneypotIp>,
     /// 被找最多次的路徑
     pub paths: Vec<HoneypotPath>,
+    /// 最近 100 次用假密碼登入，新的在前面
+    pub uses: Vec<HoneypotUse>,
+    /// 現在被擋的 IP：手動封鎖的在前面，自動封鎖的包含只用過假密碼、沒拿過假檔案的
+    pub blocks: Vec<Block>,
+    /// 自動封鎖有沒有開
+    pub auto_block: bool,
 }
 
 pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Result<Json<HoneypotReport>, AppError> {
-    let summary = sqlx::query_as::<_, HoneypotSummary>(
-        "SELECT COUNT(*) AS hits, COUNT(DISTINCT ip) AS ips,
-            COALESCE(SUM(created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')), 0) AS last_day,
-            COUNT(DISTINCT CASE WHEN created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day') THEN ip END)
-                AS last_day_ips
+    let (hits, ips, last_day, last_day_ips, uses) = sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(
+        "SELECT COUNT(*), COUNT(DISTINCT ip),
+            COALESCE(SUM(created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')), 0),
+            COUNT(DISTINCT CASE WHEN created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day') THEN ip END),
+            (SELECT COUNT(*) FROM honeypot_uses)
          FROM honeypot_hits",
     )
     .fetch_one(&state.pool)
     .await?;
+    let blocks = blocks(&state.pool, "").await?;
+    let auto_block = auto_block_enabled(&state.pool).await?;
+    let summary = HoneypotSummary { hits, ips, last_day, last_day_ips, uses, blocked: blocks.len() };
 
     // 帳號名稱只有英數字和 _ . -，所以可以用 group_concat 的預設逗號分隔
     let ips = sqlx::query_as::<_, IpRow>(
@@ -254,7 +608,16 @@ pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Re
     .fetch_all(&state.pool)
     .await?;
 
-    Ok(Json(HoneypotReport { summary, ips: ips.into_iter().map(Into::into).collect(), paths }))
+    let uses = sqlx::query_as::<_, HoneypotUse>(
+        "SELECT id, ip, field, issued_ip, issued_at, username, user_agent, created_at
+         FROM honeypot_uses ORDER BY id DESC LIMIT ?",
+    )
+    .bind(MAX_USES)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let ips = ips.into_iter().map(Into::into).collect();
+    Ok(Json(HoneypotReport { summary, ips, paths, uses, blocks, auto_block }))
 }
 
 #[derive(Deserialize)]
@@ -298,7 +661,7 @@ pub async fn hits(
 
 #[cfg(test)]
 mod tests {
-    use super::is_bait;
+    use super::{Honeypot, is_bait};
 
     #[test]
     fn bait_paths() {
@@ -308,5 +671,24 @@ mod tests {
         for path in ["/", "/env", "/.envrc", "/.git/config", "/foo.env", "/.env/config", "/api/health"] {
             assert!(!is_bait(path), "{path}");
         }
+    }
+
+    #[test]
+    fn each_ip_gets_its_own_passwords() {
+        let honeypot = Honeypot::default();
+        let a = honeypot.bait("203.0.113.5");
+        assert_eq!(honeypot.bait("203.0.113.5").text, a.text);
+        let b = honeypot.bait("198.51.100.7");
+        for ((field, mine), (_, theirs)) in a.secrets.iter().zip(&b.secrets) {
+            assert_ne!(mine, theirs, "{field}");
+            assert!(a.text.contains(&format!("{field}={mine}\n")), "{field}");
+        }
+        // 另一個程序（金鑰不同）發給同一個 IP 的也不一樣
+        assert_ne!(Honeypot::default().bait("203.0.113.5").text, a.text);
+        // 沒設定 AWS 金鑰就不放
+        assert!(!a.text.contains("AWS_"));
+        let with_aws = Honeypot::default().with_aws_key("AKIAEXAMPLE", "secret/example");
+        let text = with_aws.bait("203.0.113.5").text;
+        assert!(text.contains("AWS_ACCESS_KEY_ID=AKIAEXAMPLE\nAWS_SECRET_ACCESS_KEY=secret/example\n"), "{text}");
     }
 }

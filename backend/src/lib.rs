@@ -102,8 +102,8 @@ pub struct AppState {
     /// 統一發票中獎號碼的快取（見 invoice.rs）
     pub invoice: Arc<invoice::Invoice>,
     pub visit_limiter: Arc<visits::VisitLimiter>,
-    /// 假的 `.env` 每個 IP 最多記幾筆（見 honeypot.rs）
-    pub honeypot_limiter: Arc<visits::VisitLimiter>,
+    /// 假的 `.env`：產生假密碼的金鑰、每個 IP 最多記幾筆（見 honeypot.rs）
+    pub honeypot: Arc<honeypot::Honeypot>,
     /// 全站的 IP 訪問紀錄，背景整批寫進資料庫（見 access_log.rs）
     pub access_log: Arc<access_log::AccessLog>,
     /// 主機監控：背景取樣的 CPU、記憶體、磁碟和各服務的用量（見 monitor.rs）
@@ -144,7 +144,7 @@ impl AppState {
             weather: Arc::default(),
             invoice: Arc::default(),
             visit_limiter: Arc::default(),
-            honeypot_limiter: Arc::default(),
+            honeypot: Arc::default(),
             access_log: Arc::default(),
             monitor: Arc::default(),
             threads: Arc::default(),
@@ -175,6 +175,9 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/access/requests", get(access_log::requests))
         .route("/admin/honeypot", get(honeypot::report))
         .route("/admin/honeypot/hits", get(honeypot::hits))
+        .route("/admin/honeypot/auto-block", put(honeypot::set_auto_block))
+        .route("/admin/honeypot/blocks", post(honeypot::create_block))
+        .route("/admin/honeypot/blocks/{ip}", delete(honeypot::unblock))
         .route("/admin/feedback", get(feedback::admin_list))
         .route("/admin/feedback/{id}", get(feedback::admin_get).delete(feedback::admin_delete))
         .route("/admin/feedback/{id}/messages", post(feedback::admin_reply))
