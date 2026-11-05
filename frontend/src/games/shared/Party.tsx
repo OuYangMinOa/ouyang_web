@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useAuth } from '../../auth'
-import { useInLobbyRoom } from '../lobby/useLobby'
+import { useInLobbyRoom, useLobbyWatch } from '../lobby/useLobby'
 import { useInvite } from './share'
+import { Segmented } from './ui'
 import { loadPartyName, MAX_CHAT, MAX_NAME, type AnyParty } from './useParty'
 import './party.css'
 
@@ -10,7 +11,7 @@ import './party.css'
  * 派對房間共用的畫面零件（連線見 useParty.ts）：
  * - `PartyEntry`：還沒進房間時的名字、建立／加入
  * - `PartyHeader`：房間代碼、邀請、離開、連線狀態
- * - `PartyLobby`：名單、房主的操作（加電腦、請人離開、開始），遊戲自己的選項放 `options`
+ * - `PartyLobby`：名單、上場／觀戰、房主的操作（加電腦、請人離開、開始），遊戲自己的選項放 `options`
  * - `ChatBox`：聊天室
  * - `Countdown`、`PartyNotice`：倒數和「動作被拒絕」的提示
  * 遊戲只要畫自己的 view、用 `party.act` 送動作。
@@ -219,20 +220,29 @@ export function PartyLobby({
   hint?: ReactNode
 }) {
   const { room, me, isHost } = party
+  const syncLobby = useLobbyWatch(party.code)
   if (!room || !me) return null
   const results = room.phase === 'results'
-  const ready = room.players.filter((p) => p.bot || p.online)
+  // 開局時入座的：電腦，和連著線、沒選觀戰的人
+  const ready = room.players.filter((p) => p.bot || (p.online && !p.watching))
+  const watchers = room.players.filter((p) => !p.bot && p.online && p.watching).length
   const bots = room.players.filter((p) => p.bot).length
   const seats = Math.min(ready.length, room.max)
   const canAddBot = room.maxBots > 0 && bots < room.maxBots && ready.length < room.max
   const waiting = room.min - seats
 
+  function watch(on: boolean) {
+    party.watch(on)
+    syncLobby(on)
+  }
+
   return (
     <section className="party-lobby">
       <h2>{results ? '再來一局？' : '等待開始'}</h2>
       <p>
-        <strong>{seats}</strong> 人（{room.min === room.max ? `${room.max} 人` : `${room.min}～${room.max} 人`}）
-        {ready.length > room.max && <span className="muted">，多的 {ready.length - room.max} 人觀戰</span>}
+        <strong>{seats}</strong> 人上場（{room.min === room.max ? `${room.max} 人` : `${room.min}～${room.max} 人`}）
+        {watchers > 0 && <span className="muted">，{watchers} 人觀戰</span>}
+        {ready.length > room.max && <span className="muted">，坐不下的 {ready.length - room.max} 人也觀戰</span>}
       </p>
       <ul className="party-roster">
         {room.players.map((p) => (
@@ -241,6 +251,7 @@ export function PartyLobby({
             {p.pid === room.host && <span className="chip subtle">房主</span>}
             {p.pid === me.pid && <span className="chip subtle">你</span>}
             {p.bot && <span className="chip subtle">電腦</span>}
+            {p.watching && <span className="chip subtle">觀戰</span>}
             {!p.bot && !p.online && <span className="chip subtle">離線</span>}
             {isHost && p.pid !== me.pid && (
               <button
@@ -263,6 +274,16 @@ export function PartyLobby({
           ＋ 加電腦玩家
         </button>
       )}
+      <Segmented
+        label="我要"
+        value={me.watching ? 'watch' : 'play'}
+        options={[
+          { value: 'play', label: '上場' },
+          { value: 'watch', label: '觀戰' },
+        ]}
+        onChange={(v) => watch(v === 'watch')}
+        disabled={!party.connected}
+      />
       {!results && <NameField party={party} inRoom />}
       {options}
       {hint}
@@ -275,7 +296,7 @@ export function PartyLobby({
       )}
       {isHost && waiting > 0 && (
         <p className="muted">
-          還差 {waiting} 人才能開始{room.maxBots > 0 ? '，可以先加電腦玩家' : ''}，或按上面的「邀請朋友」。
+          還差 {waiting} 人上場才能開始{room.maxBots > 0 ? '，可以先加電腦玩家' : ''}，或按上面的「邀請朋友」。
         </p>
       )}
       <LoginHint />

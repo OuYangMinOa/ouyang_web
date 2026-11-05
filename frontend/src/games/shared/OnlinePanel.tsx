@@ -86,7 +86,7 @@ export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: 
           你是 <strong>{seatNames[room.seat]}</strong>，對手是 {seatNames[opponent]}
         </p>
       )}
-      {room.spectator && <p className="muted">座位都有人了，你只能看，不能下。</p>}
+      {room.spectator && <p className="muted">你在觀戰，看得到每一步，但不能下。</p>}
       {room.connected && room.watchers > 0 && (
         <p className="muted">
           <span aria-hidden="true">👀</span> {room.watchers} 人觀戰中

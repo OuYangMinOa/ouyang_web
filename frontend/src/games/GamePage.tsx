@@ -42,7 +42,8 @@ export default function GamePage() {
         <h1>
           <span aria-hidden="true">{game.icon}</span> {game.name}
         </h1>
-        <LobbyChip />
+        {/* 派對遊戲有自己的聊天室，遊戲室的聊天只在棋類、大逃殺這些頁面打開 */}
+        <LobbyChip chat={game.lobby?.kind !== 'party'} />
         {game.music && <PageMusic key={game.id} game={game.id} load={game.music} />}
       </header>
       <Suspense fallback={<p className="muted">載入中…</p>}>

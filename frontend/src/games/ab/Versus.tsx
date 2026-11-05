@@ -288,7 +288,9 @@ function OnlineVersus({ modeSwitch, opponentSwitch }: { modeSwitch: ReactNode; o
       {opponentSwitch}
       <OnlinePanel room={room} seatNames={seatNames} />
       <p className="muted">
-        你藏的數字只存在這台裝置，不會送到伺服器；對局結束後雙方公開數字，網頁會自動檢查對手的每一次回報。
+        {room.spectator
+          ? '雙方藏的數字只存在各自的裝置，觀戰時和對手看到的一樣多；對局結束後雙方公開數字，網頁會自動檢查每一次回報。'
+          : '你藏的數字只存在這台裝置，不會送到伺服器；對局結束後雙方公開數字，網頁會自動檢查對手的每一次回報。'}
       </p>
       <Rules />
     </>

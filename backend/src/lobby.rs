@@ -1,13 +1,14 @@
 //! 遊戲室：一群人先待在同一個房間，房主選要玩哪一款，伺服器替大家開好那款遊戲的房間，所有人自動跳過去。
 //! 換遊戲時不用重開房間、重新邀請。
 //!
-//! 遊戲室不懂任何遊戲規則，只記名單、聊天和「現在在玩哪一間」（`playing`）：
+//! 遊戲室不懂任何遊戲規則，只記名單、聊天、每個人要上場還是觀戰（`watch`），和「現在在玩哪一間」（`playing`）：
 //! - 派對遊戲（`party.rs`）和大逃殺（`arena.rs`）：所有人一起去。開房時把遊戲室的順序交給那間房間，
-//!   遊戲室的房主到了那邊也是房主（不管誰先連上）。
-//! - 棋類（`games.rs`）只有兩個座位：房主挑兩個人，開房時就把座位排好，其他人連進去是觀戰，也可以留在遊戲室聊天。
+//!   遊戲室的房主到了那邊也是房主（不管誰先連上）；選了觀戰的人也交過去，到了那邊不上場、在旁邊看。
+//!   之後在遊戲室改選，也會轉給正在玩的那一間（下一局生效）。
+//! - 棋類（`games.rs`）只有兩個座位：房主從要上場的人裡挑兩個，開房時就把座位排好，其他人連進去是觀戰。
 //!
-//! 用戶端整個小遊戲區都連著遊戲室（玩遊戲的時候也是），收到新的 `playing` 而且自己在名單裡，
-//! 就跳到 `/games/<game>?room=<code>`。協定見 `frontend/src/games/lobby/useLobby.ts`。
+//! 用戶端整個小遊戲區都連著遊戲室（玩遊戲的時候也是），收到新的 `playing` 就跳到 `/games/<game>?room=<code>`，
+//! 上場和觀戰的人都一樣。協定見 `frontend/src/games/lobby/useLobby.ts`。
 //!
 //! 只放在記憶體：重啟或換版時遊戲室會消失（已經開出去的遊戲房間照各自的規則）。
 //! 斷線的人留在名單上一分鐘（手機切到背景、換頁時的短暫斷線不會被移出去），沒人連線 10 分鐘就收掉。
@@ -36,10 +37,11 @@ use tokio::{sync::mpsc, time::Instant};
 
 use crate::{
     AppError, AppState,
+    arena::{Arenas, Rules},
     auth::{CurrentUser, client_key},
     game_monitor::{PlayerInfo, RoomInfo},
     games::random_code,
-    party::{MAX_CHAT_CHARS, MAX_NAME_CHARS, clean},
+    party::{MAX_CHAT_CHARS, MAX_NAME_CHARS, Parties, PartyGame, clean},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -57,7 +59,7 @@ struct Game {
     kind: Kind,
 }
 
-/// 遊戲室能開的遊戲；新增派對遊戲或大逃殺時記得加在這裡和 `open_room`
+/// 遊戲室能開的遊戲；新增派對遊戲或大逃殺時記得加在這裡和 `room_table`
 const GAMES: [Game; 18] = [
     Game { id: "undercover", name: "誰是臥底", kind: Kind::Party },
     Game { id: "bigtwo", name: "大老二", kind: Kind::Party },
@@ -117,6 +119,8 @@ struct Member {
     name: String,
     conn: Option<Conn>,
     offline_since: Option<Instant>,
+    /// 選了觀戰：派對遊戲和大逃殺不上場，棋類不會被挑
+    watch: bool,
 }
 
 /// 現在在玩的那一間
@@ -134,6 +138,8 @@ struct Plan {
     game: &'static Game,
     /// 新房間的房主順序：遊戲室的房主在最前面，其他人照名單
     hosts: Vec<String>,
+    /// 選了觀戰的人（派對遊戲、大逃殺用）
+    watchers: Vec<String>,
     /// 棋類：兩個座位的 `(pid, key)`
     seats: Option<[(u32, String); 2]>,
 }
@@ -229,7 +235,14 @@ impl Lobby {
                 self.next_pid += 1;
                 let name = self.unique_name(&name, None);
                 self.system(format!("{name} 進來了"));
-                self.members.push(Member { pid, key: key.to_owned(), name, conn: None, offline_since: None });
+                self.members.push(Member {
+                    pid,
+                    key: key.to_owned(),
+                    name,
+                    conn: None,
+                    offline_since: None,
+                    watch: false,
+                });
                 self.members.len() - 1
             }
         };
@@ -298,8 +311,11 @@ impl Lobby {
     }
 
     fn lobby_text(&self) -> Utf8Bytes {
-        let players: Vec<Value> =
-            self.members.iter().map(|m| json!({ "pid": m.pid, "name": m.name, "online": m.conn.is_some() })).collect();
+        let players: Vec<Value> = self
+            .members
+            .iter()
+            .map(|m| json!({ "pid": m.pid, "name": m.name, "online": m.conn.is_some(), "watch": m.watch }))
+            .collect();
         let playing = self
             .playing
             .as_ref()
@@ -327,6 +343,19 @@ impl Lobby {
         Ok(())
     }
 
+    /// 改選觀戰／上場；回傳要轉給正在玩的哪一間 `(遊戲, 房間, key)`（派對遊戲和大逃殺才要轉）
+    fn set_watch(&mut self, pid: u32, watch: bool) -> Option<(&'static Game, String, String)> {
+        let i = self.index(pid)?;
+        if self.members[i].watch == watch {
+            return None;
+        }
+        self.members[i].watch = watch;
+        self.dirty = true;
+        self.flush();
+        let playing = self.playing.as_ref().filter(|p| p.game.kind != Kind::Duel)?;
+        Some((playing.game, playing.room.clone(), self.members[i].key.clone()))
+    }
+
     fn kick(&mut self, target: u32) {
         let Some(i) = self.index(target) else { return };
         let member = self.members.remove(i);
@@ -352,12 +381,10 @@ impl Lobby {
                 if a == b {
                     return Err("請挑兩個不同的人".into());
                 }
-                let key = |pid: u32| {
-                    self.members
-                        .iter()
-                        .find(|m| m.pid == pid && m.conn.is_some())
-                        .map(|m| (pid, m.key.clone()))
-                        .ok_or("挑的人不在線上")
+                let key = |pid: u32| match self.members.iter().find(|m| m.pid == pid && m.conn.is_some()) {
+                    None => Err("挑的人不在線上".to_owned()),
+                    Some(m) if m.watch => Err(format!("{} 選了觀戰", m.name)),
+                    Some(m) => Ok((pid, m.key.clone())),
                 };
                 Some([key(a)?, key(b)?])
             }
@@ -368,8 +395,10 @@ impl Lobby {
         }
         // 房主就是名單上第一個連著的人，照名單排房主自然在最前面
         let hosts = self.members.iter().filter(|m| m.conn.is_some()).map(|m| m.key.clone()).collect();
+        // 斷線的人也算：一分鐘內回來，到了那邊一樣是觀戰
+        let watchers = self.members.iter().filter(|m| m.watch).map(|m| m.key.clone()).collect();
         self.opening = true;
-        Ok(Plan { game, hosts, seats })
+        Ok(Plan { game, hosts, watchers, seats })
     }
 
     /// 房間開好了（或失敗）：記下現在在玩哪一間，大家收到新的 `playing` 就會跳過去
@@ -491,6 +520,10 @@ enum ClientMessage {
     Kick {
         pid: u32,
     },
+    /// 選觀戰（true）或上場（false）
+    Watch {
+        watch: bool,
+    },
 }
 
 impl Lobbies {
@@ -545,26 +578,69 @@ async fn run(lobbies: Arc<Lobbies>, code: String, lobby: Arc<Mutex<Lobby>>) {
     }
 }
 
+/// 派對遊戲和大逃殺的房間表，遊戲室用同一套方法開房間、轉觀戰
+trait RoomTable {
+    fn open_for_lobby(&self, hosts: Vec<String>, watchers: Vec<String>) -> Result<String, AppError>;
+    fn set_watch(&self, room: &str, key: &str, watch: bool);
+}
+
+impl<G: PartyGame> RoomTable for Arc<Parties<G>> {
+    fn open_for_lobby(&self, hosts: Vec<String>, watchers: Vec<String>) -> Result<String, AppError> {
+        self.open(hosts, watchers)
+    }
+
+    fn set_watch(&self, room: &str, key: &str, watch: bool) {
+        Parties::set_watch(self, room, key, watch);
+    }
+}
+
+impl<R: Rules> RoomTable for Arc<Arenas<R>> {
+    fn open_for_lobby(&self, hosts: Vec<String>, watchers: Vec<String>) -> Result<String, AppError> {
+        self.open(false, hosts, watchers)
+    }
+
+    fn set_watch(&self, room: &str, key: &str, watch: bool) {
+        Arenas::set_watch(self, room, key, watch);
+    }
+}
+
+/// `GAMES` 裡的派對遊戲和大逃殺對到 `AppState` 的哪一張房間表；棋類是 None
+fn room_table<'a>(state: &'a AppState, game: &Game) -> Option<&'a dyn RoomTable> {
+    Some(match game.id {
+        "undercover" => &state.undercover,
+        "bigtwo" => &state.bigtwo,
+        "draw" => &state.draw,
+        "antique" => &state.antique,
+        "uno" => &state.uno,
+        "justone" => &state.justone,
+        "telephone" => &state.telephone,
+        "poker" => &state.poker,
+        "minesweeper" => &state.minesrace,
+        "tetris" => &state.tetris,
+        "puyo" => &state.puyo,
+        _ => return None,
+    })
+}
+
 /// 照計畫開那款遊戲的房間
 async fn open_room(state: &AppState, plan: &Plan) -> Result<String, AppError> {
-    let hosts = plan.hosts.clone();
-    match (plan.game.kind, plan.game.id) {
-        (Kind::Party, "undercover") => state.undercover.open(hosts),
-        (Kind::Party, "bigtwo") => state.bigtwo.open(hosts),
-        (Kind::Party, "draw") => state.draw.open(hosts),
-        (Kind::Party, "antique") => state.antique.open(hosts),
-        (Kind::Party, "uno") => state.uno.open(hosts),
-        (Kind::Party, "justone") => state.justone.open(hosts),
-        (Kind::Party, "telephone") => state.telephone.open(hosts),
-        (Kind::Party, "poker") => state.poker.open(hosts),
-        (Kind::Party, "minesweeper") => state.minesrace.open(hosts),
-        (Kind::Arena, "tetris") => state.tetris.open(false, hosts),
-        (Kind::Arena, "puyo") => state.puyo.open(false, hosts),
-        (Kind::Duel, game) => {
-            let seats = plan.seats.clone().map(|[(_, a), (_, b)]| [Some(a), Some(b)]).unwrap_or_default();
-            state.rooms.create(&state.pool, game, seats).await
-        }
-        (_, game) => Err(AppError::Internal(format!("lobby cannot open {game}"))),
+    if plan.game.kind == Kind::Duel {
+        let seats = plan.seats.clone().map(|[(_, a), (_, b)]| [Some(a), Some(b)]).unwrap_or_default();
+        return state.rooms.create(&state.pool, plan.game.id, seats).await;
+    }
+    match room_table(state, plan.game) {
+        Some(table) => table.open_for_lobby(plan.hosts.clone(), plan.watchers.clone()),
+        None => Err(AppError::Internal(format!("lobby cannot open {}", plan.game.id))),
+    }
+}
+
+/// 改選觀戰／上場，正在玩派對遊戲或大逃殺的話也轉過去（在遊戲室的鎖外面做）
+fn watch(state: &AppState, lobby: &Mutex<Lobby>, pid: u32, watch: bool) {
+    let forward = lobby.lock().unwrap().set_watch(pid, watch);
+    if let Some((game, room, key)) = forward
+        && let Some(table) = room_table(state, game)
+    {
+        table.set_watch(&room, &key, watch);
     }
 }
 
@@ -670,6 +746,7 @@ async fn session(mut socket: WebSocket, state: AppState, code: String, identity:
                 }
                 match serde_json::from_str::<ClientMessage>(&text) {
                     Ok(ClientMessage::Play { game, players }) => play(&state, &lobby, pid, &game, players).await,
+                    Ok(ClientMessage::Watch { watch: on }) => watch(&state, &lobby, pid, on),
                     Ok(message) => lobby.lock().unwrap().handle(pid, message),
                     Err(_) => {}
                 }
@@ -799,6 +876,39 @@ mod tests {
         lobby.opened(a.pid, plan, Ok("ROOM2".into()), Instant::now());
         assert_eq!(lobby.playing.as_ref().unwrap().players, Some(vec![b.pid, a.pid]));
         assert_eq!(lobby.lines.back().unwrap()["text"], "A 開了「西洋棋」：B 對 A");
+    }
+
+    #[test]
+    fn watchers_go_along_without_playing() {
+        let mut lobby = Lobby::new(Instant::now());
+        let a = join(&mut lobby, "guest:a", "A", 1);
+        let mut b = join(&mut lobby, "guest:b", "B", 2);
+        let c = join(&mut lobby, "guest:c", "C", 3);
+
+        // 房主自己選觀戰；大家看得到
+        assert!(lobby.set_watch(a.pid, true).is_none(), "還沒在玩，不用轉");
+        let state = b.last("lobby").unwrap();
+        assert_eq!(state["players"][0]["watch"], true);
+        assert_eq!(state["players"][1]["watch"], false);
+
+        // 派對遊戲：選了觀戰的人交給新房間
+        let plan = play(&mut lobby, a.pid, "uno", None).unwrap();
+        assert_eq!(plan.watchers, ["guest:a"]);
+        lobby.opened(a.pid, plan, Ok("ROOM1".into()), Instant::now());
+        // 在玩的時候改選：要轉給那一間
+        let (game, room, key) = lobby.set_watch(c.pid, true).unwrap();
+        assert_eq!((game.id, room.as_str(), key.as_str()), ("uno", "ROOM1", "guest:c"));
+        assert!(lobby.set_watch(c.pid, true).is_none(), "沒變就不轉");
+
+        // 棋類：選了觀戰的人不能被挑上場，也不用轉
+        assert_eq!(play(&mut lobby, a.pid, "chess", Some(vec![a.pid, b.pid])).err().unwrap(), "A 選了觀戰");
+        lobby.last_play = None;
+        let plan = play(&mut lobby, a.pid, "chess", Some(vec![b.pid, b.pid]));
+        assert!(plan.is_err());
+        lobby.set_watch(c.pid, false);
+        let plan = play(&mut lobby, a.pid, "chess", Some(vec![b.pid, c.pid])).unwrap();
+        lobby.opened(a.pid, plan, Ok("ROOM2".into()), Instant::now());
+        assert!(lobby.set_watch(b.pid, true).is_none());
     }
 
     #[test]

@@ -7,7 +7,8 @@ import { normalizeCode, playerId } from '../shared/useRoom'
 
 /**
  * 遊戲室（後端見 `backend/src/lobby.rs`）：一群人先待在同一個房間，房主選遊戲，伺服器替大家開好那款遊戲的房間，
- * 收到新的 `playing` 而且自己在名單裡就自動跳到 `/games/<game>?room=<code>`。換遊戲時不用重開房間、重新邀請。
+ * 收到新的 `playing` 就自動跳到 `/games/<game>?room=<code>`。換遊戲時不用重開房間、重新邀請。
+ * 每個人可以選「上場」或「觀戰」：觀戰的人一樣跟過去，只是不上場（派對遊戲不入座、大逃殺不參戰、棋類不會被挑）。
  *
  * 整個小遊戲區（`GamesLayout`）共用一條連線，玩遊戲的時候也連著，房主換遊戲時大家才跟得過去。
  * 遊戲室代碼存在 sessionStorage（和訪客的 player id 一樣只認這個分頁），重新整理後接著連。
@@ -15,8 +16,9 @@ import { normalizeCode, playerId } from '../shared/useRoom'
  * 協定（JSON over WebSocket，`/api/games/lobby/{code}/ws?player=<id>&name=<暱稱>`，認人的方式和派對房間一樣）：
  *   client → server  { type: 'chat', text }
  *                    { type: 'name', name }
+ *                    { type: 'watch', watch }           選觀戰（true）或上場（false）；正在玩派對遊戲、大逃殺的話伺服器也會轉過去（下一局生效）
  *                    房主才能做：
- *                    { type: 'play', game, players? }   開一間 `game`（網址上的遊戲 id）；兩人的棋類要帶上場的兩個 pid（照座位順序）
+ *                    { type: 'play', game, players? }   開一間 `game`（網址上的遊戲 id）；兩人的棋類要帶上場的兩個 pid（照座位順序，不能是選了觀戰的人）
  *                    { type: 'kick', pid }              請人離開（之後不能再進來）
  *   server → client  { type: 'welcome', you }
  *                    { type: 'lobby', host, players, playing }   見 LobbyState
@@ -25,7 +27,13 @@ import { normalizeCode, playerId } from '../shared/useRoom'
  *                    { type: 'error', code, message }   之後伺服器會關閉連線（not_found、full、replaced、kicked…）
  */
 
-export type LobbyPlayer = { pid: number; name: string; online: boolean }
+export type LobbyPlayer = {
+  pid: number
+  name: string
+  online: boolean
+  /** 選了觀戰 */
+  watch: boolean
+}
 
 export type LobbyPlaying = {
   /** 每開一間加一 */
@@ -85,9 +93,11 @@ export function playingPath(playing: LobbyPlaying): string {
   return `/games/${playing.game}?room=${encodeURIComponent(playing.room)}`
 }
 
-/** 這一間有沒有我（不是棋類就是所有人） */
-export function includes(playing: LobbyPlaying, you: number | null): boolean {
-  return playing.players === null || (you !== null && playing.players.includes(you))
+/** 現在這一間我是觀戰：棋類看有沒有被挑上場，其他遊戲看自己選的 */
+export function watchingNow(lobby: Pick<Lobby, 'playing' | 'you' | 'me'>): boolean {
+  const { playing, you, me } = lobby
+  if (playing?.players) return you === null || !playing.players.includes(you)
+  return me?.watch ?? false
 }
 
 export type Lobby = ReturnType<typeof useLobbyConnection>
@@ -110,6 +120,22 @@ export function useInLobbyRoom(room: string | null | undefined): boolean {
   const { pathname } = useLocation()
   const playing = lobby?.code ? lobby.playing : null
   return !!room && playing !== null && playing.room === room && pathname === `/games/${playing.game}`
+}
+
+/**
+ * 遊戲室開的房間裡改選觀戰／上場時，遊戲室也跟著改，下一款遊戲照這個。
+ * 回傳的函式在不是遊戲室開的房間裡什麼都不做；房間自己的 `watch` 要另外送。
+ */
+export function useLobbyWatch(room: string | null | undefined): (watch: boolean) => void {
+  const lobby = useContext(LobbyContext)
+  const inLobby = useInLobbyRoom(room)
+  const send = lobby?.watch
+  return useCallback(
+    (watch: boolean) => {
+      if (inLobby) send?.(watch)
+    },
+    [inLobby, send],
+  )
 }
 
 /** 只給 `GamesLayout` 用一次，其他地方用 `useLobby` */
@@ -149,15 +175,15 @@ export function useLobbyConnection() {
 
     let stopped = false
     let welcomed = false
-    let you: number | null = null
     let retries = 0
     let timer: ReturnType<typeof setTimeout> | undefined
     let ws: WebSocket | null = null
 
+    // 上場和觀戰的人都跟過去
     function follow(playing: LobbyPlaying | null) {
       const last = seen.current.get(lobbyCode)
       seen.current.set(lobbyCode, playing?.id ?? 0)
-      if (!playing || last === undefined || last === playing.id || !includes(playing, you)) return
+      if (!playing || last === undefined || last === playing.id) return
       setFollow((n) => n + 1)
       navigateRef.current(playingPath(playing))
     }
@@ -182,7 +208,6 @@ export function useLobbyConnection() {
           case 'welcome':
             retries = 0
             welcomed = true
-            you = msg.you
             setLive((prev) => ({
               key: roomKey,
               you: msg.you,
@@ -276,6 +301,7 @@ export function useLobbyConnection() {
   const say = useCallback((text: string) => raw({ type: 'chat', text }), [raw])
   const play = useCallback((game: string, players?: number[]) => raw({ type: 'play', game, players }), [raw])
   const kick = useCallback((pid: number) => raw({ type: 'kick', pid }), [raw])
+  const watch = useCallback((on: boolean) => raw({ type: 'watch', watch: on }), [raw])
   const rename = useCallback(
     (name: string) => {
       savePartyName(name)
@@ -308,6 +334,7 @@ export function useLobbyConnection() {
     say,
     play,
     kick,
+    watch,
     rename,
   }
 }

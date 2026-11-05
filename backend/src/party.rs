@@ -16,6 +16,8 @@
 //!   結算時遊戲物件還留著（大家還看得到最後的畫面），下一局開局時交給新的一局（`previous`），可以累計分數。
 //! - 開局時連著線的人加上電腦依名單順序入座（座位 0、1、2…），超過人數上限的人觀戰。
 //!   對局中才進來的人也是觀戰，等下一局。
+//! - 每個人可以自己選「觀戰」（`watch`）：開局時不入座，人數沒滿也一樣。記在 `watchers`（用 key 認人），
+//!   不在名單上的時候（斷線、還沒連進來）也記得；遊戲室開房時會先把選了觀戰的人放進來，之後再改也會轉過來。
 //! - 對局中斷線的人保留座位（其他人看得到「離線」），要怎麼處理（逾時自動行動、跳過）由遊戲決定。
 //!   被房主踢掉的人不能再進這個房間；如果他在座位上，座位一樣保留到這局結束。
 //! - 每個房間一個計時器（`PartyGame::TICK`）呼叫遊戲的 `tick`，推進倒數、回合逾時和電腦玩家。
@@ -336,6 +338,8 @@ struct Room<G: PartyGame> {
     banned: HashSet<String>,
     /// 遊戲室開的房間：照遊戲室的順序決定房主（見 `host`），其他房間是空的
     hosts: Vec<String>,
+    /// 選了觀戰的人（key），開局時不入座
+    watchers: HashSet<String>,
     dirty_room: bool,
     dirty_views: bool,
     empty_since: Option<Instant>,
@@ -360,6 +364,7 @@ impl<G: PartyGame> Room<G> {
             lines: VecDeque::new(),
             banned: HashSet::new(),
             hosts: Vec::new(),
+            watchers: HashSet::new(),
             dirty_room: true,
             dirty_views: false,
             empty_since: None,
@@ -379,6 +384,16 @@ impl<G: PartyGame> Room<G> {
 
     fn online_humans(&self) -> usize {
         self.members.iter().filter(|m| m.conn.is_some()).count()
+    }
+
+    /// 這個人選了觀戰
+    fn watching(&self, m: &Member) -> bool {
+        m.key.as_ref().is_some_and(|k| self.watchers.contains(k))
+    }
+
+    /// 開局時會入座的人：電腦，和連著線、沒選觀戰的人
+    fn ready(&self, m: &Member) -> bool {
+        m.key.is_none() || (m.conn.is_some() && !self.watching(m))
     }
 
     fn humans(&self) -> usize {
@@ -549,6 +564,7 @@ impl<G: PartyGame> Room<G> {
                     "bot": m.key.is_none(),
                     "online": m.key.is_none() || m.conn.is_some(),
                     "seat": self.seat_of(m.pid),
+                    "watching": self.watching(m),
                 })
             })
             .collect();
@@ -660,8 +676,8 @@ impl<G: PartyGame> Room<G> {
         if self.phase == Phase::Playing {
             return Err("對局進行中".into());
         }
-        // 斷線的人（上一局留著座位的）不算；先檢查完再動名單，沒開成時結算畫面還在
-        let ready = self.members.iter().filter(|m| m.key.is_none() || m.conn.is_some()).count();
+        // 斷線的人（上一局留著座位的）和選了觀戰的人不算；先檢查完再動名單，沒開成時結算畫面還在
+        let ready = self.members.iter().filter(|m| self.ready(m)).count();
         let count = ready.min(G::MAX_PLAYERS);
         if count < G::MIN_PLAYERS {
             return Err(if G::MAX_BOTS > 0 {
@@ -674,7 +690,7 @@ impl<G: PartyGame> Room<G> {
         let previous = self.game.take().or_else(|| self.previous.take());
         self.drop_offline();
         // 名單是人在前、電腦在後，超過座位數的人觀戰
-        self.seats = self.members.iter().take(count).map(|m| m.pid).collect();
+        self.seats = self.members.iter().filter(|m| self.ready(m)).take(count).map(|m| m.pid).collect();
         let seats = self.seat_infos();
         let mut out = Outbox::default();
         let game = {
@@ -771,7 +787,7 @@ impl<G: PartyGame> Room<G> {
         if self.bots() >= G::MAX_BOTS {
             return Err(format!("最多 {} 個電腦玩家", G::MAX_BOTS));
         }
-        if self.online_humans() + self.bots() >= G::MAX_PLAYERS {
+        if self.members.iter().filter(|m| self.ready(m)).count() >= G::MAX_PLAYERS {
             return Err("座位已經滿了".into());
         }
         let pid = self.next_pid;
@@ -828,6 +844,12 @@ impl<G: PartyGame> Room<G> {
                 Ok(())
             }
             ClientMessage::Name { name } => self.rename(pid, &name),
+            ClientMessage::Watch { watch } => {
+                if let Some(key) = self.index(pid).and_then(|i| self.members[i].key.clone()) {
+                    self.set_watch(key, watch);
+                }
+                Ok(())
+            }
             ClientMessage::Start if host => self.start(now),
             ClientMessage::Options { options } if host && idle => serde_json::from_value(options)
                 .map_err(|_| "選項格式不對".to_string())
@@ -850,6 +872,14 @@ impl<G: PartyGame> Room<G> {
             self.send(i, &text(json!({ "type": "notice", "message": message })));
         }
         self.flush(now);
+    }
+
+    /// 選觀戰或上場：下一局開局時才生效，這局有座位的人照樣打完
+    fn set_watch(&mut self, key: String, watch: bool) {
+        let changed = if watch { self.watchers.insert(key) } else { self.watchers.remove(&key) };
+        if changed {
+            self.dirty_room = true;
+        }
     }
 
     fn tick(&mut self, now: Instant) {
@@ -885,7 +915,7 @@ impl<G: PartyGame> Room<G> {
                 let conn = m.conn.as_ref().map(|c| (c.ip.as_str(), c.since));
                 let status = match self.seat_of(m.pid) {
                     Some(seat) => format!("座位 {}", seat + 1),
-                    None if self.phase != Phase::Lobby => "觀戰".to_owned(),
+                    None if self.phase != Phase::Lobby || self.watching(m) => "觀戰".to_owned(),
                     None => String::new(),
                 };
                 Some(
@@ -933,6 +963,10 @@ enum ClientMessage {
     Name {
         name: String,
     },
+    /// 選觀戰（true）或上場（false）
+    Watch {
+        watch: bool,
+    },
     Start,
     Options {
         options: Value,
@@ -945,8 +979,9 @@ enum ClientMessage {
 }
 
 impl<G: PartyGame> Parties<G> {
-    /// 開一間新房間；`hosts` 是遊戲室替大家開房時的房主順序（`user:<id>`／`guest:<id>`），自己開的是空的
-    pub(crate) fn open(self: &Arc<Self>, hosts: Vec<String>) -> Result<String, AppError> {
+    /// 開一間新房間；`hosts` 是遊戲室替大家開房時的房主順序（`user:<id>`／`guest:<id>`），
+    /// `watchers` 是遊戲室裡選了觀戰的人，自己開的房間兩個都是空的
+    pub(crate) fn open(self: &Arc<Self>, hosts: Vec<String>, watchers: Vec<String>) -> Result<String, AppError> {
         let mut live = self.live.lock().unwrap();
         if live.len() >= MAX_ROOMS {
             return Err(AppError::ServiceUnavailable("目前房間太多，請稍後再試"));
@@ -959,6 +994,7 @@ impl<G: PartyGame> Parties<G> {
         };
         let mut room = Room::<G>::new();
         room.hosts = hosts;
+        room.watchers = watchers.into_iter().collect();
         let room = Arc::new(Mutex::new(room));
         live.insert(code.clone(), room.clone());
         tokio::spawn(run(self.clone(), code.clone(), room));
@@ -967,6 +1003,16 @@ impl<G: PartyGame> Parties<G> {
 
     fn get(&self, code: &str) -> Option<Arc<Mutex<Room<G>>>> {
         self.live.lock().unwrap().get(code).cloned()
+    }
+
+    /// 遊戲室裡有人改選觀戰／上場：轉給遊戲室開的這間房間（`key` 不一定已經連進來）
+    pub(crate) fn set_watch(&self, code: &str, key: &str, watch: bool) {
+        let Some(room) = self.get(code) else { return };
+        let mut room = room.lock().unwrap();
+        if !room.closed {
+            room.set_watch(key.to_owned(), watch);
+            room.flush(Instant::now());
+        }
     }
 
     /// 給系統管理看：所有開著的房間
@@ -1000,7 +1046,7 @@ async fn run<G: PartyGame>(parties: Arc<Parties<G>>, code: String, room: Arc<Mut
 }
 
 pub async fn create<G: PartyGame>(State(state): State<AppState>) -> Result<(StatusCode, Json<Value>), AppError> {
-    let code = G::rooms(&state).open(Vec::new())?;
+    let code = G::rooms(&state).open(Vec::new(), Vec::new())?;
     Ok((StatusCode::CREATED, Json(json!({ "code": code }))))
 }
 
@@ -1486,6 +1532,38 @@ mod tests {
         send(&mut room, &a, json!({ "type": "start" }));
         assert_eq!(room.phase, Phase::Playing);
         assert_eq!(a.last("room").unwrap()["players"][1]["name"], "電腦 1");
+    }
+
+    #[test]
+    fn watchers_are_not_seated() {
+        let mut room = Room::<Secret>::new();
+        // 遊戲室開房時就選了觀戰的人（還沒連進來）
+        room.watchers = HashSet::from(["guest:c".to_owned()]);
+        let mut a = join(&mut room, "guest:a", "A", 1);
+        let mut b = join(&mut room, "guest:b", "B", 2);
+        let c = join(&mut room, "guest:c", "C", 3);
+        let state = a.last("room").unwrap();
+        assert_eq!(state["players"][2]["watching"], true);
+
+        // 房主自己也可以觀戰；人數不夠就不能開
+        send(&mut room, &a, json!({ "type": "watch", "watch": true }));
+        send(&mut room, &a, json!({ "type": "start" }));
+        assert_eq!(a.last("notice").unwrap()["message"], "至少要 2 人才能開始，可以加電腦玩家");
+        // 觀戰的人不佔座位：加得了電腦
+        send(&mut room, &a, json!({ "type": "addBot" }));
+        send(&mut room, &a, json!({ "type": "start" }));
+        assert_eq!(room.phase, Phase::Playing);
+        let bot = room.members.iter().find(|m| m.key.is_none()).unwrap().pid;
+        assert_eq!(room.seats, [b.pid, bot]);
+        assert_eq!(b.last("view").unwrap()["view"]["mine"], 100);
+        assert_eq!(a.last("view").unwrap()["view"]["mine"], Value::Null);
+
+        // 對局中改回上場：這局照樣觀戰，下一局才入座
+        send(&mut room, &c, json!({ "type": "watch", "watch": false }));
+        assert_eq!(room.seats, [b.pid, bot]);
+        send(&mut room, &b, json!({ "type": "action", "action": { "type": "win" } }));
+        send(&mut room, &a, json!({ "type": "start" }));
+        assert_eq!(room.seats, [b.pid, c.pid, bot]);
     }
 
     #[test]

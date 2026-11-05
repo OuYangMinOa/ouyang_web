@@ -16,6 +16,7 @@ import { normalizeCode, playerId } from './useRoom'
  *   client → server  { type: 'action', action }    遊戲動作（格式由各遊戲定義）
  *                    { type: 'chat', text }          聊天（最多 200 字），對局中會先交給遊戲決定誰看得到
  *                    { type: 'name', name }          改名字（對局中有座位時不行）
+                    { type: 'watch', watch }        選觀戰（true，開局時不入座）或上場（false）；對局中改的話下一局才生效
  *                    房主才能做（其他人送了會被忽略）：
  *                    { type: 'start' }               開始／再來一局
  *                    { type: 'options', options }    改選項（不在對局中時）
@@ -43,6 +44,8 @@ export type PartyPlayer = {
   online: boolean
   /** 這局的座位；大廳裡、觀戰的人是 null */
   seat: number | null
+  /** 自己選了觀戰（下一局開局時不入座）；電腦一定是 false */
+  watching: boolean
 }
 
 export type PartyRoom<O> = {
@@ -288,6 +291,7 @@ export function useParty<T extends PartyTypes>(
   const setOptions = useCallback((options: T['options']) => raw({ type: 'options', options }), [raw])
   const addBot = useCallback(() => raw({ type: 'addBot' }), [raw])
   const kick = useCallback((pid: number) => raw({ type: 'kick', pid }), [raw])
+  const watch = useCallback((on: boolean) => raw({ type: 'watch', watch: on }), [raw])
   const abort = useCallback(() => raw({ type: 'abort' }), [raw])
   const rename = useCallback(
     (name: string) => {
@@ -344,6 +348,7 @@ export function useParty<T extends PartyTypes>(
     setOptions,
     addBot,
     kick,
+    watch,
     abort,
     rename,
     subscribe,
