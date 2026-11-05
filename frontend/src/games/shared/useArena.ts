@@ -16,6 +16,7 @@ import { normalizeCode, playerId } from './useRoom'
  * 登入時 player 和 name 會被忽略，改用帳號）：
  *   client → server  { type: 'bots', count }            房主在開局前調整電腦人數
  *                    { type: 'start' }                   房主開局
+                    { type: 'watch', watch }            選觀戰（true，開局時不上場）或上場（false）；對局中改的話下一局才生效
  *                    { type: 'strategy', strategy }      自動選目標的方式
  *                    { type: 'target', pid }             手動指定目標
  *                    { type: 'attack', lines }           抵銷完自己的之後要送出的攻擊（俄羅斯方塊是行數，魔法氣泡是干擾泡顆數）
@@ -47,6 +48,8 @@ export type ArenaPlayer = {
   target: number | null
   strategy: Strategy
   manual: boolean
+  /** 自己選了觀戰：下一局開局時不上場 */
+  watching: boolean
 }
 
 export type ArenaState = {
@@ -64,6 +67,7 @@ export type ArenaState = {
 export type ClientMessage =
   | { type: 'bots'; count: number }
   | { type: 'start' }
+  | { type: 'watch'; watch: boolean }
   | { type: 'strategy'; strategy: Strategy }
   | { type: 'target'; pid: number }
   | { type: 'attack'; lines: number }

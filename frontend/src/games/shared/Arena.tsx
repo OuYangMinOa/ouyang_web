@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useAuth } from '../../auth'
-import { useInLobbyRoom } from '../lobby/useLobby'
+import { useInLobbyRoom, useLobbyWatch } from '../lobby/useLobby'
 import { badgeCount, stars } from './badges'
-import { MiniBoards } from './MiniBoards'
+import { MiniBoards, WatchBoards } from './MiniBoards'
 import type { MiniInfo } from './minis'
 import { useInvite } from './share'
 import { Overlay, Segmented, StatusLine } from './ui'
@@ -13,6 +13,7 @@ import { STRATEGIES, type ArenaMatch } from './useArenaMatch'
 /**
  * 大逃殺的畫面（俄羅斯方塊、魔法氣泡共用）：`useArenaMatch`（useArenaMatch.ts）管手上這局和伺服器之間的同步，
  * `ArenaScreen` 排出房間列、狀態列、主盤面和兩側的小盤面、攻擊目標、KO 訊息和大廳。
+ * 選了觀戰的人沒有自己的盤面，改成把上場的人的盤面放大排出來（`WatchBoards`），電腦在下面用小盤面。
  * 每個遊戲只要提供 `ArenaEngine`（怎麼開新局、收攻擊、取出要送的攻擊）和自己的主盤面。
  */
 
@@ -77,7 +78,18 @@ export function ArenaScreen<G>({
     )
   }
 
-  const opponents = state.players.filter((p) => p.pid !== you)
+  if (!me.inRound && me.watching) {
+    return (
+      <div ref={wrap} className="arena-online">
+        {header}
+        <Watching match={match} state={state} />
+        {phase === 'results' && <Lobby arena={arena} state={state} me={me} />}
+      </div>
+    )
+  }
+
+  // 觀戰的人沒有盤面，小盤面裡不放
+  const opponents = state.players.filter((p) => p.pid !== you && !(p.watching && !p.inRound))
   const attackers = opponents.filter((p) => p.alive && p.target === you)
   const minis: MiniInfo[] = opponents.map((p) => ({
     pid: p.pid,
@@ -110,8 +122,8 @@ export function ArenaScreen<G>({
   if (!me.inRound) {
     overlay = (
       <Overlay>
-        <strong className="arena-overlay-title">對局進行中</strong>
-        <span>下一局開始時就會加入，先看看大家打得怎樣。</span>
+        <strong className="arena-overlay-title">{phase === 'results' ? '這局結束' : '對局進行中'}</strong>
+        <span>{phase === 'results' ? '下一局開始時就會加入。' : '下一局開始時就會加入，先看看大家打得怎樣。'}</span>
       </Overlay>
     )
   } else if (phase === 'countdown') {
@@ -191,6 +203,68 @@ export function ArenaScreen<G>({
 
       {phase === 'results' && <Lobby arena={arena} state={state} me={me} />}
     </div>
+  )
+}
+
+/** 觀戰：上場的人放大，電腦用小盤面；KO 訊息照常 */
+function Watching<G>({ match, state }: { match: ArenaMatch<G>; state: ArenaState }) {
+  const { engine, arena } = match
+  const inRound = state.players.filter((p) => p.inRound)
+  const humans = inRound.filter((p) => !p.bot)
+  const bots: MiniInfo[] = inRound
+    .filter((p) => p.bot)
+    .map((p) => ({ pid: p.pid, alive: p.alive, place: p.place, targeted: false, attacker: false, waiting: false }))
+  const alive = inRound.filter((p) => p.alive).length
+
+  let status: ReactNode
+  if (state.phase === 'countdown') {
+    status = (
+      <Countdown ms={state.endsIn ?? 0} stamp={state}>
+        {(left) => <>{Math.max(1, Math.ceil(left / 1000))} 秒後開始</>}
+      </Countdown>
+    )
+  } else if (state.phase === 'results') {
+    status = '這局結束'
+  } else {
+    status = `剩 ${alive} / ${inRound.length} 人 · 速度 ${state.level}`
+  }
+
+  return (
+    <>
+      <StatusLine>👀 觀戰中 · {status}</StatusLine>
+      {humans.length > 0 ? (
+        <WatchBoards
+          players={humans}
+          boards={arena.boards}
+          version={arena.boardsVersion}
+          shape={engine.shape}
+          readPalette={engine.readPalette}
+        />
+      ) : (
+        <p className="muted arena-watch-empty">這局還沒開始，等房主按開始。</p>
+      )}
+      {bots.length > 0 && (
+        <div className="arena-watch-bots">
+          <span className="muted">電腦 {bots.length} 位</span>
+          <MiniBoards
+            minis={bots}
+            boards={arena.boards}
+            version={arena.boardsVersion}
+            fill={false}
+            shape={engine.shape}
+            readPalette={engine.readPalette}
+            label="電腦玩家"
+          />
+        </div>
+      )}
+      {match.feed.length > 0 && (
+        <ul className="arena-feed" aria-live="polite">
+          {match.feed.map((f) => (
+            <li key={f.id}>{f.text}</li>
+          ))}
+        </ul>
+      )}
+    </>
   )
 }
 
@@ -302,17 +376,27 @@ function RoomHeader({ arena, shareTitle, extra }: { arena: Arena; shareTitle: st
 }
 
 function Lobby({ arena, state, me }: { arena: Arena; state: ArenaState; me: ArenaPlayer }) {
+  const syncLobby = useLobbyWatch(arena.code)
   const humans = state.players.filter((p) => !p.bot)
+  const players = humans.filter((p) => !p.watching)
+  const watchers = humans.length - players.length
   const host = state.host === me.pid
-  const room = MAX_PLAYERS - humans.length
+  const room = MAX_PLAYERS - players.length
   const bots = Math.min(state.bots, room)
-  const canStart = humans.length + bots >= 2
+  // 至少一個人上場（只剩電腦會馬上結束），加上電腦至少兩個；和後端的 can_start 一樣
+  const canStart = players.length >= 1 && players.length + bots >= 2
+
+  function watch(on: boolean) {
+    arena.send({ type: 'watch', watch: on })
+    syncLobby(on)
+  }
 
   return (
     <section className="arena-lobby">
       <h2>{state.phase === 'results' ? '下一局' : '等待開始'}</h2>
       <p>
-        {humans.length} 位玩家 + {bots} 位電腦，共 <strong>{humans.length + bots}</strong> 人
+        {players.length} 位玩家 + {bots} 位電腦，共 <strong>{players.length + bots}</strong> 人
+        {watchers > 0 && <span className="muted">，{watchers} 人觀戰</span>}
       </p>
       <ul className="arena-roster">
         {humans.map((p) => (
@@ -320,9 +404,20 @@ function Lobby({ arena, state, me }: { arena: Arena; state: ArenaState; me: Aren
             {p.name}
             {p.pid === state.host && <span className="chip subtle">房主</span>}
             {p.pid === me.pid && <span className="chip subtle">你</span>}
+            {p.watching && <span className="chip subtle">觀戰</span>}
           </li>
         ))}
       </ul>
+      <Segmented
+        label="我要"
+        value={me.watching ? 'watch' : 'play'}
+        options={[
+          { value: 'play', label: '上場' },
+          { value: 'watch', label: '觀戰' },
+        ]}
+        onChange={(v) => watch(v === 'watch')}
+        disabled={!arena.connected}
+      />
       {host ? (
         <Segmented
           label="電腦玩家"
@@ -348,7 +443,9 @@ function Lobby({ arena, state, me }: { arena: Arena; state: ArenaState; me: Aren
       ) : (
         <p className="muted">等房主開始…</p>
       )}
-      {host && !canStart && <p className="muted">至少要兩個人，或加上電腦玩家。</p>}
+      {host && !canStart && (
+        <p className="muted">{players.length === 0 ? '至少要一個人上場。' : '至少要兩個人，或加上電腦玩家。'}</p>
+      )}
     </section>
   )
 }

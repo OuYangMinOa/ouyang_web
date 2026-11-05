@@ -657,6 +657,73 @@
   touch-action: manipulation;
 }
 
+/*
+ * 觀戰：上場的人的盤面放大排出來。一格最窄 110px（手機上兩個並排），整排最寬 n × 260px 置中，
+ * 人少時盤面大；每個盤面的寬度也不超過「標題列底下的高度」的一半，整個盤面放得進畫面
+ */
+.arena-watch {
+  --n: 1;
+  list-style: none;
+  width: 100%;
+  max-width: calc(var(--n) * 260px + (var(--n) - 1) * 12px);
+  margin: 0 auto;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(110px, 100%), 1fr));
+  gap: 16px 12px;
+}
+.arena-watch li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  justify-self: center;
+  width: 100%;
+  max-width: max(100px, calc((100dvh - var(--game-head-h, 0px) - 200px) / 2));
+  min-width: 0;
+}
+.arena-watch-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 2;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.arena-watch-name {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  color: var(--text-h);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.arena-watch-name .chip {
+  margin: 0;
+}
+.arena-watch-stats {
+  font-size: 13px;
+  color: var(--text);
+}
+.arena-watch li.out .arena-watch-name {
+  color: var(--text);
+}
+.arena-watch-empty {
+  text-align: center;
+}
+.arena-watch-bots {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  font-size: 13px;
+}
+
 .arena-strategy {
   display: flex;
   flex-direction: column;
