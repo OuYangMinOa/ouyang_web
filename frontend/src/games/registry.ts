@@ -135,6 +135,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./poker/song'),
   },
   {
+    id: 'werewolf',
+    name: '狼人殺',
+    icon: '🐺',
+    blurb: '夜裡狼人悄悄下手，白天大家討論、投票找出狼人；預言家、女巫、獵人、守衛各有本事。6～12 人，可以加電腦，也能當面玩、網頁當法官。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazyPage(() => import('./werewolf')),
+    lobby: { kind: 'party', players: '6～12 人，可以加電腦' },
+    music: () => import('./werewolf/song'),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',

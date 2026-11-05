@@ -133,6 +133,7 @@ pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Re
     rooms.extend(state.justone.snapshot(now));
     rooms.extend(state.telephone.snapshot(now));
     rooms.extend(state.poker.snapshot(now));
+    rooms.extend(state.werewolf.snapshot(now));
     rooms.extend(state.lobbies.snapshot(now));
     // 有人連著的在前面，再來是新開的
     rooms.sort_by_key(|r| (!r.players.iter().any(|p| p.online), r.age_secs));
