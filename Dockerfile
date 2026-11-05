@@ -4,6 +4,9 @@
 FROM node:22-alpine AS frontend
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
+# @huggingface/transformers 帶進來的 onnxruntime-node 在 linux/x64 安裝時會從 nuget.org 下載 CUDA 的檔案；
+# 前端只在瀏覽器用（onnxruntime-web），用不到，跳過免得 nuget.org 連不上就整個失敗
+ENV ONNXRUNTIME_NODE_INSTALL=skip
 RUN npm ci
 COPY frontend/ ./
 # 大於 1 KB 的文字檔與 wasm 另存一份 .gz，後端直接送壓縮版（去背用的 onnxruntime wasm 從 27 MB 降到約 7 MB）

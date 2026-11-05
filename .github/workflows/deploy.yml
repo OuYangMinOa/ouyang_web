@@ -83,6 +83,9 @@ jobs:
       - name: Frontend lint & build
         if: steps.reuse.outputs.image == ''
         working-directory: frontend
+        env:
+          # 不下載 onnxruntime-node 的 CUDA 檔案（前端用不到），原因見 Dockerfile
+          ONNXRUNTIME_NODE_INSTALL: skip
         run: |
           npm ci
           npm run lint

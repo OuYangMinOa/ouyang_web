@@ -984,6 +984,8 @@ CI 的快取：
   不用 `rust:1-bookworm` 這種會變的 tag：它一更新 Docker 快取就全部失效，整條 Rust 重編約 4 分鐘。
   升級時版本和 digest 一起改（`docker buildx imagetools inspect rust:<版本>-bookworm` 查 digest）。
 - `build` job 超過 15 分鐘會直接失敗（平常 2–5 分鐘），通常是下載 layer 卡住，重跑就好。
+- CI 和 Docker build 的 `npm ci` 都設了 `ONNXRUNTIME_NODE_INSTALL=skip`：`@huggingface/transformers` 帶進來的 `onnxruntime-node`
+  在 linux/x64 會從 nuget.org 下載 CUDA 的檔案，前端只在瀏覽器用不到，而且 nuget.org 連不上時 `npm ci` 會整個失敗。
 
 ### 不斷線部署（Traefik + docker-rollout）
 
