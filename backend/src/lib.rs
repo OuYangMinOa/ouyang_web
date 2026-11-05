@@ -32,6 +32,7 @@ pub mod undercover;
 pub mod uno;
 pub mod visits;
 pub mod weather;
+pub mod werewolf;
 pub mod youtube;
 
 use std::{
@@ -89,6 +90,7 @@ pub struct AppState {
     pub justone: Arc<party::Parties<justone::JustOne>>,
     pub telephone: Arc<party::Parties<telephone::Telephone>>,
     pub poker: Arc<party::Parties<poker::Poker>>,
+    pub werewolf: Arc<party::Parties<werewolf::Werewolf>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
@@ -137,6 +139,7 @@ impl AppState {
             justone: Arc::default(),
             telephone: Arc::default(),
             poker: Arc::default(),
+            werewolf: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
@@ -236,6 +239,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/telephone/party/{code}/ws", get(party::connect::<telephone::Telephone>))
         .route("/games/poker/party", post(party::create::<poker::Poker>))
         .route("/games/poker/party/{code}/ws", get(party::connect::<poker::Poker>))
+        .route("/games/werewolf/party", post(party::create::<werewolf::Werewolf>))
+        .route("/games/werewolf/party/{code}/ws", get(party::connect::<werewolf::Werewolf>))
         .route("/games/lobby", post(lobby::create))
         .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))
