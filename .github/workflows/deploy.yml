@@ -3,6 +3,11 @@ name: CI/CD
 # PR → 只跑測試（main 的保護規則要求 test 通過才能 merge）
 # push 到 dev  → 部署 staging（https://test.ouyang.app）
 # push 到 main → 部署 prod（https://ouyang.app）
+#
+# dev → main 不重測、不重 build：要進 main 的程式碼跟 dev 某次部署的一模一樣時（tree 相同），
+# 那次 push dev 已經測過、建好 staging-<commit> 映像，PR 略過測試，push main 直接把那個映像加上 prod 的 tag。
+# 找不到可沿用的（main 有 dev 沒有的修改、dev 還沒 build 完、那版已被 cleanup 清掉）就照常測試和 build。
+# 手動觸發（workflow_dispatch）一律重測、重 build。
 on:
   pull_request:
     branches: [dev, main]
@@ -17,24 +22,70 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      tested_image: ${{ steps.reuse.outputs.image }}
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # 要看得到 merge commit 的兩個 parent
+          fetch-depth: 2
+      - id: reuse
+        name: Find tested staging image
+        if: github.base_ref == 'main' || (github.event_name == 'push' && github.ref_name == 'main')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null || true
+          tree=$(git rev-parse 'HEAD^{tree}')
+          # HEAD：dev fast-forward 推上 main；HEAD^2：merge commit 合進來的 dev（PR 的 merge ref 也是這個形狀）
+          for rev in HEAD HEAD^2; do
+            sha=$(git rev-parse --verify --quiet "$rev^{commit}") || continue
+            [ "$(git rev-parse "$sha^{tree}")" = "$tree" ] || continue
+            # staging 映像只在 test 通過後才會 build，存在就代表這份程式碼測過了
+            if docker buildx imagetools inspect "$repo:staging-$sha" >/dev/null 2>&1; then
+              echo "::notice::程式碼和 staging-$sha 相同，沿用那個映像，略過測試和 build"
+              echo "image=$repo:staging-$sha" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "沒有可沿用的 staging 映像，照常測試和 build"
+      - id: rust
+        name: Rust version from Dockerfile
+        if: steps.reuse.outputs.image == ''
+        run: |
+          version=$(sed -n 's/^FROM rust:\([0-9.]*\)-.*/\1/p' Dockerfile)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        if: steps.reuse.outputs.image == ''
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
       - uses: Swatinem/rust-cache@v2
+        if: steps.reuse.outputs.image == ''
         with:
           workspaces: backend
           # PR 只讀 dev/main 存好的快取，不另存一份（每份約 400 MB，Actions 快取整個 repo 只有 10 GB）
           save-if: ${{ github.event_name != 'pull_request' }}
       - name: Backend tests
+        if: steps.reuse.outputs.image == ''
         working-directory: backend
         run: cargo test --locked
       - uses: actions/setup-node@v5
+        if: steps.reuse.outputs.image == ''
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Frontend lint & build
+        if: steps.reuse.outputs.image == ''
         working-directory: frontend
+        env:
+          # 不下載 onnxruntime-node 的 CUDA 檔案（前端用不到），原因見 Dockerfile
+          ONNXRUNTIME_NODE_INSTALL: skip
         run: |
           npm ci
           npm run lint
@@ -52,8 +103,10 @@ jobs:
     outputs:
       image: ${{ steps.meta.outputs.image }}
       env_name: ${{ steps.meta.outputs.env_name }}
+    env:
+      # test 找到的 staging 映像；空的就自己 build
+      TESTED_IMAGE: ${{ needs.test.outputs.tested_image }}
     steps:
-      - uses: actions/checkout@v5
       - id: meta
         # GHCR 的名稱必須全小寫
         run: |
@@ -64,13 +117,28 @@ jobs:
           echo "latest=$repo:$env_name-latest" >> "$GITHUB_OUTPUT"
           echo "cache=$repo:buildcache-$env_name" >> "$GITHUB_OUTPUT"
           echo "cache_other=$repo:buildcache-$other" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reuse staging image
+        if: env.TESTED_IMAGE != ''
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          LATEST: ${{ steps.meta.outputs.latest }}
+        # 在 GHCR 上替同一個 manifest 多加 tag，不下載、不上傳 layer。
+        # digest 必須不變：cleanup 刪 staging 舊版時，遇到還掛著 prod tag 的映像只會拿掉 staging 的 tag；
+        # 如果 prod 變成另一個 index、底下的子 manifest 跟 staging 共用，刪 staging 會連帶把 prod 的子 manifest 刪掉。
+        run: |
+          docker buildx imagetools create --tag "$IMAGE" --tag "$LATEST" "$TESTED_IMAGE"
+          cmp <(docker buildx imagetools inspect --raw "$TESTED_IMAGE") <(docker buildx imagetools inspect --raw "$IMAGE")
+      - uses: actions/checkout@v5
+        if: env.TESTED_IMAGE == ''
+      - uses: docker/setup-buildx-action@v3
+        if: env.TESTED_IMAGE == ''
       - uses: docker/build-push-action@v6
+        if: env.TESTED_IMAGE == ''
         with:
           context: .
           platforms: linux/amd64
@@ -81,7 +149,7 @@ jobs:
             ${{ steps.meta.outputs.latest }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           # Docker 層快取放在 GHCR 的 buildcache-<env>，不佔 Actions 快取。
-          # 先讀自己環境的，沒有再借另一個環境的（dev→main 的程式碼通常一樣）。
+          # 先讀自己環境的，沒有再借另一個環境的。
           cache-from: |
             type=registry,ref=${{ steps.meta.outputs.cache }}
             type=registry,ref=${{ steps.meta.outputs.cache_other }}

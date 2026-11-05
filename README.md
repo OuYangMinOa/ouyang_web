@@ -967,12 +967,25 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 
 - `main` 受保護：只能透過 PR 合併，且 CI 的 `test` 必須通過，不能 force push 或刪除。
 - 對 `dev` / `main` 開的 PR 只會跑測試，merge 後才會建置並部署。
+- **dev → main 沿用 staging 的映像**：要進 main 的程式碼跟 dev 某次部署的一模一樣（tree 相同），
+  而且 GHCR 上還有那次的 `staging-<commit>` 時，dev→main 的 PR 略過測試（`test` 照樣回報通過），
+  push 到 main 時也不測、不 build，直接把那個映像加上 `prod-<commit>`、`prod-latest` 的 tag 再部署，整個流程約 1 分多鐘。
+  那個映像在 push 到 dev 時已經測過、在 staging 跑過；同一個映像，所以 prod 的 `/api/health` 回的 `commit` 是 dev 那邊的 commit。
+  - 照常測試和 build 的情況：main 有 dev 沒有的修改（例如直接修在 main 的 hotfix）、dev 還沒 build 完就 merge、
+    那版已經被 cleanup 清掉（只留 10 版），或是手動觸發（workflow_dispatch，想強制重 build 時用這個）。
+  - staging 和 prod 的 tag 指向同一個映像，cleanup 清掉其中一邊的舊版時只會拿掉那個 tag，另一邊還在用就不會被刪。
 
 CI 的快取：
 - Docker 層快取存在 GHCR 的 `buildcache-staging` / `buildcache-prod`，先讀自己環境的，沒有再讀另一個環境的。
   沒放在 Actions 快取：整個 repo 只有 10 GB，Docker 層快取一份就要好幾 GB，超過上限時 GitHub 會一直清掉舊快取。
 - Rust 和 npm 的快取在 Actions 快取。Rust 快取只在 push 到 `dev` / `main` 時存，PR 只讀。
+  main 大多沿用 staging 映像、不跑測試，它的 Rust 快取 7 天沒用到會被 GitHub 清掉；之後要在 main 照常測試時會從頭編，比較久。
+- Rust 版本固定在 `Dockerfile` 的 `FROM rust:<版本>-bookworm@sha256:…`，CI 的 `cargo test` 也從這一行讀版本。
+  不用 `rust:1-bookworm` 這種會變的 tag：它一更新 Docker 快取就全部失效，整條 Rust 重編約 4 分鐘。
+  升級時版本和 digest 一起改（`docker buildx imagetools inspect rust:<版本>-bookworm` 查 digest）。
 - `build` job 超過 15 分鐘會直接失敗（平常 2–5 分鐘），通常是下載 layer 卡住，重跑就好。
+- CI 和 Docker build 的 `npm ci` 都設了 `ONNXRUNTIME_NODE_INSTALL=skip`：`@huggingface/transformers` 帶進來的 `onnxruntime-node`
+  在 linux/x64 會從 nuget.org 下載 CUDA 的檔案，前端只在瀏覽器用不到，而且 nuget.org 連不上時 `npm ci` 會整個失敗。
 
 ### 不斷線部署（Traefik + docker-rollout）
 
@@ -1000,7 +1013,7 @@ Traefik 每秒主動檢查 health，看到 503 就把它移出負載平衡，之
 **migration 必須跟上一版相容**：換版期間新舊兩版會同時跑在同一個 SQLite 上。
 例如要改欄位名稱，分兩次部署：先加新欄位並讓程式兩邊都寫，下一版再移除舊欄位。
 
-`/api/health` 會回傳 `commit`，可以用來確認目前是哪一版在接流量。
+`/api/health` 會回傳 `commit`，可以用來確認目前是哪一版在接流量（prod 沿用 staging 映像時是 dev 那邊的 commit）。
 
 每次部署成功後會清掉同環境的舊 image：伺服器上只留這次的加上前 2 版（`deploy.sh` 的 `KEEP_PREVIOUS_IMAGES`），
 GHCR 上留最近 10 版（workflow 的 `cleanup` job，同時清掉沒有 tag 的舊版，例如被覆蓋掉的 `buildcache-*`）。
