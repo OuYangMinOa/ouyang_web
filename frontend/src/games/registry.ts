@@ -135,6 +135,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./poker/song'),
   },
   {
+    id: 'chinesecheckers',
+    name: '跳棋',
+    icon: '⭐',
+    blurb: '六角星棋盤上的跳棋：走一步，或連續跳過任何人的棋，先把 10 顆棋全部走進對面角落的人贏。2～6 人，可以加電腦。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazyPage(() => import('./chinesecheckers')),
+    lobby: { kind: 'party', players: '2～6 人，可以加電腦' },
+    music: () => import('./chinesecheckers/song'),
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',

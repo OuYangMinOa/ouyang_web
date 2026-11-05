@@ -5,6 +5,7 @@ pub mod arena;
 pub mod auth;
 pub mod bigtwo;
 pub mod calendar;
+pub mod chinesecheckers;
 pub mod draw;
 pub mod feedback;
 pub mod game_monitor;
@@ -89,6 +90,7 @@ pub struct AppState {
     pub justone: Arc<party::Parties<justone::JustOne>>,
     pub telephone: Arc<party::Parties<telephone::Telephone>>,
     pub poker: Arc<party::Parties<poker::Poker>>,
+    pub chinesecheckers: Arc<party::Parties<chinesecheckers::ChineseCheckers>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
@@ -137,6 +139,7 @@ impl AppState {
             justone: Arc::default(),
             telephone: Arc::default(),
             poker: Arc::default(),
+            chinesecheckers: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
@@ -236,6 +239,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/telephone/party/{code}/ws", get(party::connect::<telephone::Telephone>))
         .route("/games/poker/party", post(party::create::<poker::Poker>))
         .route("/games/poker/party/{code}/ws", get(party::connect::<poker::Poker>))
+        .route("/games/chinesecheckers/party", post(party::create::<chinesecheckers::ChineseCheckers>))
+        .route("/games/chinesecheckers/party/{code}/ws", get(party::connect::<chinesecheckers::ChineseCheckers>))
         .route("/games/lobby", post(lobby::create))
         .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))
