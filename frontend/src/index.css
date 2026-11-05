@@ -167,6 +167,27 @@
   --ct-bystander: #7a7264;
   --ct-traitor: #9f1239;
   --ct-ink: #fffaf3;
+  /* 數字合併：盤面、空格，方塊 2、4、8…2048 各一色（再大都用第 12 色），
+     以及方塊上的字色，分五段：a 是 2～8、b 是 16～64、c 是 128～256、d 是 512～2048、e 是更大的 */
+  --mg-board: #d6ccb9;
+  --mg-slot: #e6dece;
+  --mg-1: #e3e8ec;
+  --mg-2: #c9dbe8;
+  --mg-3: #8fb8de;
+  --mg-4: #3f7fc4;
+  --mg-5: #2f8f80;
+  --mg-6: #3f8a3a;
+  --mg-7: #d9a50a;
+  --mg-8: #ec7a24;
+  --mg-9: #c2410c;
+  --mg-10: #be123c;
+  --mg-11: #7c3aed;
+  --mg-12: #26221d;
+  --mg-ink-a: #1c1a17;
+  --mg-ink-b: #fffaf3;
+  --mg-ink-c: #1c1a17;
+  --mg-ink-d: #fffaf3;
+  --mg-ink-e: #f2d27a;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -327,6 +348,25 @@
     --ct-bystander: #8a8175;
     --ct-traitor: #fb7185;
     --ct-ink: #100e0c;
+    --mg-board: #1f1b17;
+    --mg-slot: #2b2621;
+    --mg-1: #39434b;
+    --mg-2: #2c4a63;
+    --mg-3: #2f6aa3;
+    --mg-4: #5aa2f0;
+    --mg-5: #2ec4ae;
+    --mg-6: #6ccf5f;
+    --mg-7: #f5c33c;
+    --mg-8: #ff9a4d;
+    --mg-9: #ff6a3d;
+    --mg-10: #ff5c86;
+    --mg-11: #b88cff;
+    --mg-12: #f4ede2;
+    --mg-ink-a: #f4ede2;
+    --mg-ink-b: #100e0c;
+    --mg-ink-c: #100e0c;
+    --mg-ink-d: #100e0c;
+    --mg-ink-e: #c2410c;
     color-scheme: dark;
   }
 }
@@ -477,6 +517,25 @@
   --ct-bystander: #8a8175;
   --ct-traitor: #fb7185;
   --ct-ink: #100e0c;
+  --mg-board: #1f1b17;
+  --mg-slot: #2b2621;
+  --mg-1: #39434b;
+  --mg-2: #2c4a63;
+  --mg-3: #2f6aa3;
+  --mg-4: #5aa2f0;
+  --mg-5: #2ec4ae;
+  --mg-6: #6ccf5f;
+  --mg-7: #f5c33c;
+  --mg-8: #ff9a4d;
+  --mg-9: #ff6a3d;
+  --mg-10: #ff5c86;
+  --mg-11: #b88cff;
+  --mg-12: #f4ede2;
+  --mg-ink-a: #f4ede2;
+  --mg-ink-b: #100e0c;
+  --mg-ink-c: #100e0c;
+  --mg-ink-d: #100e0c;
+  --mg-ink-e: #c2410c;
   color-scheme: dark;
 }
 

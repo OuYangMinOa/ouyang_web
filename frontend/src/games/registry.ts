@@ -189,6 +189,16 @@ export const GAMES: GameInfo[] = [
     music: () => import('./snake/song'),
   },
   {
+    id: 'merge',
+    name: '數字合併',
+    icon: '🧮',
+    blurb: '整盤方塊一起往同一邊滑，相同的數字撞在一起就合成兩倍，4×4 合出 2048 就過關。3×3 到 6×6 四種盤面，每局可以退回三步。',
+    tags: ['單人'],
+    category: '單人',
+    component: lazyPage(() => import('./merge')),
+    music: () => import('./merge/song'),
+  },
+  {
     id: 'gomoku',
     name: '五子棋',
     icon: '⚫',
