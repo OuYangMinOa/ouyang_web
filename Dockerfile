@@ -12,7 +12,11 @@ RUN npm run build \
       -size +1k -exec gzip -k -9 {} +
 
 # ---- 後端：cargo-chef 把相依套件獨立成一層，Cargo.lock 沒變就不會重編 ----
-FROM rust:1-bookworm AS chef
+# Rust 連 digest 一起固定：rust:1-bookworm 這種浮動 tag 一更新（Rust 小版本、Debian 更新），Docker 快取就全部失效，
+# 整條 Rust 重編約 4 分鐘。這一段只負責編譯，最後的映像是 distroless，不會因此少了安全更新。
+# 升級時版本和 digest 一起改（digest 用 docker buildx imagetools inspect rust:<版本>-bookworm 查）；
+# CI 的 cargo test 也從這一行讀版本，兩邊用同一版編譯。
+FROM rust:1.99.1-bookworm@sha256:cfcbed05398d0f6f81b7c3a24579475c567f97007ae7837ab421f9ca3e66333d AS chef
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
