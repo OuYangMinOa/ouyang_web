@@ -1,20 +1,26 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { api, errorMessage } from '../../api'
 import { usePolling } from '../../feedback/util'
 import LineChart from './LineChart'
 import type { MonitorGroup, MonitorHistory, MonitorPoint, MonitorSnapshot, MonitorStatus, MonitorTarget } from './types'
 
 const REFRESH_MS = 5000
-/** 24 小時的圖每分鐘才多一點 */
-const DAY_REFRESH_MS = 60_000
 const RECENT_POINTS = 720
+const MINUTE = 60_000
 
+/**
+ * refresh：多久重抓一次整段歷史；1 小時的圖改成每 5 秒把目前的快照接在後面，不重抓。
+ * gap：相鄰兩點隔超過這麼久就斷開不連線。1 小時的圖剛重啟時前面補的是分鐘點，所以也用分鐘點的標準。
+ */
 const RANGES = [
-  { id: '1h', label: '1 小時' },
-  { id: '24h', label: '24 小時' },
+  { id: '1h', label: '1 小時', refresh: 0, gap: 2.5 * MINUTE },
+  { id: '24h', label: '24 小時', refresh: MINUTE, gap: 2.5 * MINUTE },
+  { id: '7d', label: '7 天', refresh: 5 * MINUTE, gap: 25 * MINUTE },
 ] as const
 
 type Range = (typeof RANGES)[number]['id']
+
+const rangeOf = (id: Range) => RANGES.find((r) => r.id === id) ?? RANGES[0]
 
 const KIND_LABELS: Record<MonitorGroup['kind'], string> = {
   service: 'systemd',
@@ -144,11 +150,13 @@ function Tiles({ snapshot }: { snapshot: MonitorSnapshot }) {
 
 function Charts({
   points,
+  gap,
   memTotal,
   range,
   onRange,
 }: {
   points: MonitorPoint[]
+  gap: number
   memTotal: number
   range: Range
   onRange: (r: Range) => void
@@ -241,7 +249,14 @@ function Charts({
                 </span>
               )}
             </header>
-            <LineChart times={times} series={chart.series} format={chart.format} max={chart.max} label={chart.title} />
+            <LineChart
+              times={times}
+              series={chart.series}
+              format={chart.format}
+              max={chart.max}
+              gap={gap}
+              label={chart.title}
+            />
           </div>
         ))}
       </div>
@@ -252,11 +267,13 @@ function Charts({
 function TargetCard({
   target,
   points,
+  gap,
   now,
   onDelete,
 }: {
   target: MonitorTarget
   points: MonitorPoint[]
+  gap: number
   now: number
   onDelete: () => void
 }) {
@@ -317,6 +334,7 @@ function TargetCard({
               },
             ]}
             format={formatBytes}
+            gap={gap}
           />
           {downs > 0 && <p className="error sys-downs">這段時間有 {downs} 個取樣點沒在跑</p>}
         </>
@@ -461,15 +479,20 @@ function GroupTable({
 
 export default function AdminSystem() {
   const [status, setStatus] = useState<MonitorStatus | null>(null)
-  const [points, setPoints] = useState<MonitorPoint[]>([])
   const [range, setRange] = useState<Range>('1h')
+  // 圖上的點是哪個範圍的：切換後新的歷史還沒回來前，5 秒的快照不會接到別的範圍上
+  const [history, setHistory] = useState<{ range: Range; points: MonitorPoint[] }>({ range: '1h', points: [] })
+  // 請求回來時對照「現在」選的範圍，切換前送出、晚回來的不蓋掉新的
+  const rangeRef = useRef<Range>('1h')
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft>({ label: '', pattern: '' })
   const [filter, setFilter] = useState('')
 
   const loadHistory = useCallback(() => {
     api<MonitorHistory>(`/admin/system/history?range=${range}`)
-      .then((h) => setPoints(h.points))
+      .then((h) => {
+        if (rangeRef.current === range) setHistory({ range, points: h.points })
+      })
       .catch((e) => setError(errorMessage(e)))
   }, [range])
 
@@ -479,19 +502,37 @@ export default function AdminSystem() {
         setStatus(s)
         setError(null)
         const point = pointFrom(s)
-        if (range === '1h' && point) {
-          setPoints((prev) =>
-            prev.length && prev[prev.length - 1].t >= point.t ? prev : [...prev, point].slice(-RECENT_POINTS),
-          )
-        }
+        if (!point) return
+        setHistory((prev) => {
+          const last = prev.points[prev.points.length - 1]
+          if (prev.range !== '1h' || (last && last.t >= point.t)) return prev
+          return { range: '1h', points: [...prev.points, point].slice(-RECENT_POINTS) }
+        })
       })
       .catch((e) => setError(errorMessage(e)))
-  }, [range])
+  }, [])
 
+  const selectRange = (id: Range) => {
+    rangeRef.current = id
+    setRange(id)
+  }
+
+  const { refresh } = rangeOf(range)
   useEffect(load, [load])
   useEffect(loadHistory, [loadHistory])
   usePolling(load, REFRESH_MS)
-  usePolling(() => range === '24h' && loadHistory(), DAY_REFRESH_MS)
+  usePolling(() => refresh > 0 && loadHistory(), refresh || REFRESH_MS)
+  // 分頁藏起來時沒在接 5 秒的點，回來時重抓 1 小時的歷史，中間才不會斷掉
+  useEffect(() => {
+    if (range !== '1h') return
+    const resync = () => {
+      if (document.visibilityState === 'visible') loadHistory()
+    }
+    document.addEventListener('visibilitychange', resync)
+    return () => document.removeEventListener('visibilitychange', resync)
+  }, [range, loadHistory])
+  const points = history.points
+  const gap = rangeOf(history.range).gap
 
   const remove = async (target: MonitorTarget) => {
     if (!confirm(`從監控清單移除「${target.label}」？`)) return
@@ -527,7 +568,7 @@ export default function AdminSystem() {
       <h1>主機監控</h1>
       <p className="muted">
         整台主機的 CPU、記憶體、磁碟和網路，以及上面每個服務（systemd、Docker 容器）用了多少，每 5 秒更新一次。 CPU
-        一律是佔整台主機的比例。歷史只放在記憶體，網站重啟或換版後重新累積。
+        一律是佔整台主機的比例。趨勢圖的每分鐘平均存在資料庫裡（保留 7 天），換版後也看得到。
       </p>
       {snapshot && (
         <p className="muted sys-host">
@@ -543,7 +584,7 @@ export default function AdminSystem() {
       {snapshot && (
         <>
           <Tiles snapshot={snapshot} />
-          <Charts points={points} memTotal={snapshot.memory.total} range={range} onRange={setRange} />
+          <Charts points={points} gap={gap} memTotal={snapshot.memory.total} range={range} onRange={selectRange} />
         </>
       )}
 
@@ -559,7 +600,7 @@ export default function AdminSystem() {
           {status.targets.length > 0 && (
             <div className="sys-targets">
               {status.targets.map((t) => (
-                <TargetCard key={t.id} target={t} points={points} now={now} onDelete={() => remove(t)} />
+                <TargetCard key={t.id} target={t} points={points} gap={gap} now={now} onDelete={() => remove(t)} />
               ))}
             </div>
           )}

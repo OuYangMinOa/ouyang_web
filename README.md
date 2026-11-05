@@ -790,7 +790,7 @@ DELETE /api/admin/honeypot/blocks/{ip}  解除封鎖（手動和自動都解） 
 
 ```
 GET    /api/admin/system                 目前的快照（snapshot，讀不到 /proc 時是 null 加上 error）、監控清單的狀態（targets）
-GET    /api/admin/system/history?range=  1h：每 5 秒一點；24h：每分鐘一點    {"step_secs","points":[{t,cpu,mem_used,rx_bps,tx_bps,read_bps,write_bps,targets:[…]}]}
+GET    /api/admin/system/history?range=  1h：每 5 秒一點；24h：每分鐘一點；7d：每 10 分鐘一點    {"step_secs","points":[{t,cpu,mem_used,rx_bps,tx_bps,read_bps,write_bps,targets:[…]}]}
 POST   /api/admin/system/targets         {"label":"歐陽小俠","pattern":"Xiao-Xia"}  →  201   最多 20 個
 DELETE /api/admin/system/targets/{id}
 ```
@@ -802,7 +802,9 @@ DELETE /api/admin/system/targets/{id}
 - 監控清單存在 `monitor_targets`：cgroup 路徑或指令列含有關鍵字（不分大小寫）的行程都算，一個都沒有就標成「沒在跑」。
   bot 用 systemd 跑的話關鍵字填 `<名稱>.service`；容器的 id 每次部署都會換，改填指令列的一部分。
 - 磁碟是資料庫所在的分割區（容器的 `/data` volume，在 EC2 上就是根目錄那顆 EBS）；網路讀主機 1 號行程的 `/proc/1/net/dev`，不算 lo 和 docker 的虛擬網卡。
-- 背景每 5 秒取樣，歷史只放在記憶體（1 小時 × 5 秒、24 小時 × 1 分鐘），重啟或換版後重新累積。staging 和 prod 各自取樣，看到的是同一台主機。
+- 背景每 5 秒取樣。最近 1 小時的 5 秒點只放在記憶體；每分鐘的平均寫進 `monitor_points`（保留 7 天），24 小時和 7 天的圖從資料庫讀，
+  換版重啟後也還在，1 小時的圖剛重啟時前面用分鐘點補。分鐘點對齊整分鐘，換版時新舊容器都會寫同一分鐘，留取樣點多（`samples`）的那筆。
+  圖的橫軸照時間比例，停機超過兩三個點的區段會斷開。staging 和 prod 各自取樣、各存各的資料庫，看到的是同一台主機。
   這個頁面的請求不記進 IP 訪問紀錄。
 
 ## 隱藏頁面
