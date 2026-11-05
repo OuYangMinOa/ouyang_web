@@ -3,7 +3,8 @@
 //!
 //! 前端打包出來的靜態檔（`static_dir` 最上層有的檔案和資料夾，例如 `/assets/*`）和 `/api/health`
 //! 不記，否則每次開頁面都是幾十筆，Traefik 每秒的 health check 也會把表灌滿。
-//! 這個頁面自己的查詢（`/api/admin/access*`）和每 5 秒更新一次的主機監控（`/api/admin/system*`）也不記，免得被自己洗版。
+//! 這個頁面自己的查詢（`/api/admin/access*`）、每 5 秒更新一次的主機監控（`/api/admin/system*`）
+//! 和 AI 功能定時看的 `/api/ai/status` 也不記，免得被自己洗版。
 //! 沒有的路徑（例如掃描器找 `/wp-login.php`）會記下來。
 //!
 //! 請求本身不碰資料庫：紀錄先放在記憶體，背景每 2 秒整批寫進 `access_logs`，帳號也是那時才從 session 查。
@@ -180,7 +181,11 @@ impl Recorder {
     }
 
     fn skip(&self, path: &str) -> bool {
-        if path == "/api/health" || path.starts_with("/api/admin/access") || path.starts_with("/api/admin/system") {
+        if path == "/api/health"
+            || path == "/api/ai/status"
+            || path.starts_with("/api/admin/access")
+            || path.starts_with("/api/admin/system")
+        {
             return true;
         }
         let first = path.trim_start_matches('/').split('/').next().unwrap_or_default();

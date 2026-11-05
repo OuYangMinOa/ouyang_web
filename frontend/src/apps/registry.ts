@@ -175,7 +175,7 @@ export const APPS: AppInfo[] = [
     name: '系統管理',
     icon: '🛠️',
     glyph: '管',
-    blurb: '帳號、角色與權限、註冊審核、回覆大家的回報與許願，全站的 IP 訪問紀錄、隱藏頁面的訪客、誰來偷拿假的 .env、現在誰在玩哪個遊戲，以及主機和上面各個 bot 的 CPU、記憶體與磁碟。之後每個 APP 的權限都從這裡發。',
+    blurb: '帳號、角色與權限、註冊審核、回覆大家的回報與許願，全站的 IP 訪問紀錄、隱藏頁面的訪客、誰來偷拿假的 .env、現在誰在玩哪個遊戲，主機和上面各個 bot 的 CPU、記憶體與磁碟，以及全站 AI 功能用哪一組模型。之後每個 APP 的權限都從這裡發。',
     tag: '僅管理員',
     permission: PERMISSIONS.adminUsers,
     nav: [
@@ -190,6 +190,7 @@ export const APPS: AppInfo[] = [
           { to: '/admin/honeypot', label: '.env 蜜罐', icon: '🍯' },
           { to: '/admin/games', label: '遊戲狀態', icon: '🎮' },
           { to: '/admin/system', label: '主機監控', icon: '📊' },
+          { to: '/admin/ai', label: 'AI 設定', icon: '🤖' },
         ],
       },
     ],
