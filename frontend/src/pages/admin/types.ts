@@ -1,3 +1,5 @@
+import type { SubmittedWord } from '../../games/draw/types'
+
 export type AdminUser = {
   id: number
   username: string
@@ -378,3 +380,14 @@ export type AiUsageReport = {
 }
 
 export type AiUserLimit = { daily_requests: number | null; daily_tokens: number | null; blocked: boolean }
+
+/** 你畫我猜的投稿題目，見後端 draw_words.rs */
+export type DrawWordsReport = {
+  pending: SubmittedWord[]
+  approved: SubmittedWord[]
+  /** 最近沒通過的 */
+  rejected: SubmittedWord[]
+  categories: string[]
+  /** 目前遊戲用的詞庫：每個分類各難度（簡單、普通、困難）有幾個詞 */
+  distribution: { category: string; builtin: [number, number, number]; submitted: [number, number, number] }[]
+}

@@ -14,6 +14,7 @@ pub mod calendar;
 pub mod chinesecheckers;
 pub mod contact;
 pub mod draw;
+pub mod draw_words;
 pub mod feedback;
 pub mod game_monitor;
 pub mod game_settings;
@@ -215,6 +216,9 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/feedback/{id}/messages", post(feedback::admin_reply))
         .route("/admin/feedback/{id}/status", put(feedback::admin_set_status))
         .route("/admin/games", get(game_monitor::report))
+        .route("/admin/draw-words", get(draw_words::admin_list))
+        .route("/admin/draw-words/status", put(draw_words::admin_review))
+        .route("/admin/draw-words/{id}", patch(draw_words::admin_update).delete(draw_words::admin_delete))
         .route("/admin/system", get(monitor::status))
         .route("/admin/system/history", get(monitor::history))
         .route("/admin/system/targets", post(monitor::create_target))
@@ -281,6 +285,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
         .route("/games/draw/party", post(party::create::<draw::Draw>))
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
+        .route("/games/draw/words", get(draw_words::mine).post(draw_words::submit))
+        .route("/games/draw/words/{id}", delete(draw_words::withdraw))
         .route("/games/antique/party", post(party::create::<antique::Antique>))
         .route("/games/antique/party/{code}/ws", get(party::connect::<antique::Antique>))
         .route("/games/uno/party", post(party::create::<uno::Uno>))

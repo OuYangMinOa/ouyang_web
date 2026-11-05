@@ -108,3 +108,62 @@ export type DrawAction =
   | { type: 'hint' }
 
 export type DrawParty = { view: DrawView; action: DrawAction; options: DrawOptions; event: DrawEvent }
+
+// ---- 投稿題目（backend/src/draw_words.rs） ----
+
+/** 資料庫裡的難度編號：1 簡單、2 普通、3 困難 */
+export type WordLevel = 1 | 2 | 3
+export const WORD_LEVELS: { value: WordLevel; label: string }[] = [
+  { value: 1, label: '簡單' },
+  { value: 2, label: '普通' },
+  { value: 3, label: '困難' },
+]
+export const WORD_LEVEL_NAMES: Record<WordLevel, string> = { 1: '簡單', 2: '普通', 3: '困難' }
+
+export type WordStatus = 'pending' | 'approved' | 'rejected'
+export const WORD_STATUS_NAMES: Record<WordStatus, string> = { pending: '待審核', approved: '已通過', rejected: '沒通過' }
+
+export type SubmittedWord = {
+  id: number
+  word: string
+  category: string
+  level: WordLevel
+  status: WordStatus
+  created_at: string
+  reviewed_at: string | null
+  /** 投稿和審核的帳號，只在管理頁有（帳號刪掉了也沒有） */
+  submitter?: string
+  reviewer?: string
+}
+
+export type MyWords = {
+  /** 現有的分類，投稿時可以挑 */
+  categories: string[]
+  /** 題庫裡有幾個詞：內建的、投稿通過的 */
+  builtin: number
+  submitted: number
+  /** 投稿直接通過（管理員） */
+  trusted: boolean
+  words: SubmittedWord[]
+}
+
+export type SubmitResult = {
+  added: string[]
+  skipped: { word: string; reason: string }[]
+}
+
+/** 和後端一樣的限制 */
+export const WORD_CHARS = { min: 2, max: 8 }
+export const CATEGORY_MAX_CHARS = 6
+export const MAX_PER_SUBMIT = 50
+
+/**
+ * 投稿框裡的字拆成一個個詞：換行、頓號、逗號、分號都算分隔。
+ * 空白不算：「冰淇 淋」要整個送出去讓伺服器說「不能有空白」，拆開的話「冰淇」會被當成一個詞收下。
+ */
+export function splitWords(text: string): string[] {
+  return text
+    .split(/[\n、，,；;]+/)
+    .map((w) => w.trim())
+    .filter(Boolean)
+}
