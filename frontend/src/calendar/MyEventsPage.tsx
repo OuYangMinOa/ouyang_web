@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from 'react'
 import { Link } from 'react-router'
 import { formatDay, parseDay, shortLabel, today } from './dates'
 import EventDialog, { type EditTarget } from './EventDialog'
+import QuickAdd from './QuickAdd'
 import { describeRepeat, useCalendarEvents, type CalendarEvent } from './events'
 import './calendar.css'
 
@@ -38,6 +39,7 @@ export default function MyEventsPage() {
           </button>
         </div>
       </div>
+      <QuickAdd onDraft={(draft) => setEditing({ date: parseDay(draft.start_date), draft })} />
       {error && <p className="error">{error}</p>}
       {pastCount > 0 && (
         <div className="checks">
@@ -94,7 +96,7 @@ export default function MyEventsPage() {
 
       {editing && (
         <EventDialog
-          key={`${editing.event?.id}:${formatDay(editing.date)}`}
+          key={`${editing.event?.id}:${formatDay(editing.date)}:${editing.draft?.title}`}
           target={editing}
           onChanged={reload}
           onClose={() => setEditing(null)}

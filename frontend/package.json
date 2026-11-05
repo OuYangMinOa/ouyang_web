@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/site-catalog.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },
@@ -22,7 +22,9 @@
     "opencc-js": "^1.4.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
     "react-router": "^7.18.5",
+    "remark-gfm": "^4.0.1",
     "three": "^0.186.1",
     "yaml": "^2.9.1"
   },

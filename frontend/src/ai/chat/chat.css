@@ -1,0 +1,587 @@
+/* ---- AI 助手的對話頁：左邊對話紀錄、右邊對話，整頁剛好一個畫面高，只有對話內容會捲動 ---- */
+
+/* 對話頁不要外層那麼大的上下留白 */
+.app-content:has(> .ai-page) {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.ai-page {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+  height: calc(100dvh - var(--site-top-h, 65px) - 32px);
+  min-height: 420px;
+}
+
+/* ---- 對話紀錄 ---- */
+
+.ai-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-right: 16px;
+  border-right: 1px solid var(--border);
+}
+.ai-chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.ai-new-chat {
+  width: 100%;
+}
+.ai-chat-list ul {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ai-chat-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-h);
+  text-align: left;
+}
+.ai-chat-item:hover {
+  background: var(--surface);
+}
+.ai-chat-item.is-current {
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.ai-chat-item-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.ai-chat-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+.ai-pending-dot {
+  color: var(--accent);
+}
+
+/* ---- 對話 ---- */
+
+.ai-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+.ai-main-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+.ai-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 20px;
+  color: var(--text-h);
+}
+.ai-head-actions {
+  display: flex;
+  gap: 8px;
+}
+.ai-rename {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+}
+.ai-list-toggle {
+  display: none;
+}
+.ai-banner {
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+}
+
+.ai-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 4px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ai-center {
+  margin: auto;
+  text-align: center;
+}
+.ai-turns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.ai-page .ai-turn.is-assistant {
+  width: 100%;
+  max-width: min(100%, 82ch);
+  gap: 10px;
+}
+.ai-page .ai-turn.is-user {
+  max-width: min(88%, 70ch);
+}
+.ai-note {
+  font-size: 13px;
+}
+.ai-error {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+/* 歡迎畫面和建議的問題 */
+.ai-welcome {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 16px 0;
+}
+.ai-welcome-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+.ai-welcome .muted {
+  max-width: 52ch;
+}
+.ai-welcome a {
+  color: var(--accent);
+  margin-left: 4px;
+}
+.ai-suggestions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: min(100%, 640px);
+  margin-top: 8px;
+}
+.ai-suggestions button {
+  text-align: left;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+/* ---- 工具 ---- */
+
+.ai-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 14px;
+}
+.ai-tool.is-pending {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.ai-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-h);
+}
+.ai-tool-icon {
+  width: 20px;
+  text-align: center;
+}
+.ai-tool.is-done .ai-tool-icon {
+  color: var(--ok);
+}
+.ai-tool.is-error .ai-tool-icon,
+.ai-tool.is-denied .ai-tool-icon {
+  color: var(--danger);
+}
+.ai-tool-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text);
+}
+.ai-tool.is-pending .ai-tool-status {
+  color: var(--accent);
+  font-weight: 600;
+}
+.ai-tool.is-error .ai-tool-status {
+  color: var(--danger);
+}
+.ai-tool-summary {
+  margin: 0;
+  color: var(--text-h);
+}
+.ai-tool-detail summary {
+  cursor: pointer;
+  color: var(--text);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.ai-tool-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ai-tool-detail[open] {
+  gap: 6px;
+}
+.ai-tool-detail pre {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font: 12px/1.5 var(--mono);
+  color: var(--text-h);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ai-tool-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ai-tool-actions button {
+  flex: 0 1 120px;
+}
+.ai-approve-all {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---- 輸入框 ---- */
+
+.ai-chat-composer textarea {
+  max-height: 40vh;
+}
+.ai-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+}
+.ai-composer-foot .checks label {
+  min-height: 32px;
+}
+
+/* ---- AI 回答的 Markdown ---- */
+
+.md {
+  color: var(--text-h);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md blockquote {
+  margin: 0 0 0.75em;
+}
+.md ul,
+.md ol {
+  padding-left: 1.5em;
+}
+.md li + li {
+  margin-top: 0.25em;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  margin: 1em 0 0.5em;
+  line-height: 1.35;
+  color: var(--text-h);
+}
+.md h1 {
+  font-size: 1.35em;
+}
+.md h2 {
+  font-size: 1.2em;
+}
+.md h3,
+.md h4 {
+  font-size: 1.05em;
+}
+.md a {
+  color: var(--accent);
+}
+.md blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text);
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+.md :not(pre) > code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-h);
+}
+.md-code {
+  margin: 0 0 0.75em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.md-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 2px 12px;
+  border-bottom: 1px solid var(--border);
+  font: 12px var(--mono);
+  color: var(--text);
+}
+.md-code pre {
+  margin: 0;
+  padding: 10px 14px 12px;
+  overflow-x: auto;
+  font: 13px/1.55 var(--mono);
+}
+.md-code pre code {
+  color: var(--text-h);
+}
+.md-copy {
+  min-height: 32px;
+  padding: 2px 10px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--text);
+}
+.md-copy:hover {
+  color: var(--text-h);
+  background: var(--bg);
+}
+.md-table {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0 0 0.75em;
+}
+.md-table table {
+  width: auto;
+  min-width: 50%;
+}
+.md-table th,
+.md-table td {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+}
+
+/* ---- 窄螢幕：對話紀錄改成從左邊滑出來 ---- */
+
+@media (max-width: 900px) {
+  .ai-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ai-side {
+    position: fixed;
+    top: var(--site-top-h, 65px);
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: min(300px, 85vw);
+    box-sizing: border-box;
+    padding: 16px;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+    box-shadow: var(--shadow);
+    transform: translateX(-105%);
+    visibility: hidden;
+  }
+  .list-open .ai-side {
+    transform: none;
+    visibility: visible;
+  }
+  .ai-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    padding: 0;
+    border-radius: 0;
+    background: var(--scrim);
+  }
+  .ai-list-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ai-side {
+    transition:
+      transform 0.2s ease,
+      visibility 0.2s;
+  }
+}
+
+@media (max-width: 600px) {
+  .ai-list-toggle-label {
+    display: none;
+  }
+  .ai-title {
+    font-size: 17px;
+  }
+  .ai-suggestions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* 手機上輸入框和送出鈕還是並排，省下垂直空間 */
+  .ai-page .ai-composer {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+  .ai-page .ai-composer button {
+    flex-shrink: 0;
+  }
+  .ai-welcome-title {
+    font-size: 20px;
+  }
+}
+
+/* ---- 工具與額度 ---- */
+
+.ai-tools-page h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+.ai-quota {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-quota h2 {
+  margin: 0;
+}
+.ai-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-meter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.ai-meter-head strong {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.ai-meter-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.ai-meter-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ok);
+}
+.ai-meter-bar.is-high span {
+  background: var(--warn);
+}
+.ai-meter-bar.is-full span {
+  background: var(--danger);
+}
+.ai-tools-page .ai-intro a {
+  color: var(--accent);
+}
+.ai-tool-group h3 {
+  margin: 16px 0 8px;
+  font-size: 15px;
+  color: var(--text-h);
+}
+.ai-tool-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.ai-tool-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.ai-tool-list-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--text-h);
+}
+.ai-tool-list-head .chip {
+  margin: 0;
+}
+@media (max-width: 400px) {
+  .ai-tool-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

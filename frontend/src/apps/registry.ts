@@ -160,6 +160,25 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'ai',
+    name: 'AI 助手',
+    icon: '✨',
+    glyph: '智',
+    blurb: '跟 AI 聊天，它會自己查天氣、地震、颱風、發票，也能幫你新增日曆事項、建立短網址。會改資料的動作都要你按允許才會做。',
+    tag: '對話 · 工具',
+    live: true,
+    loginOnly: true,
+    wide: true,
+    nav: [
+      {
+        items: [
+          { to: '/ai', label: '對話', icon: '💬' },
+          { to: '/ai/tools', label: '工具與額度', icon: '🧰' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'links',
     name: '短網址',
     icon: '🔗',
@@ -191,6 +210,8 @@ export const APPS: AppInfo[] = [
           { to: '/admin/games', label: '遊戲狀態', icon: '🎮' },
           { to: '/admin/system', label: '主機監控', icon: '📊' },
           { to: '/admin/ai', label: 'AI 設定', icon: '🤖' },
+          { to: '/admin/ai-tools', label: 'AI 工具', icon: '🧩' },
+          { to: '/admin/ai-usage', label: 'AI 用量', icon: '📈' },
         ],
       },
     ],

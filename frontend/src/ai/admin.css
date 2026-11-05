@@ -1,0 +1,263 @@
+/* AI 的管理頁：AI 工具（/admin/ai-tools）和 AI 用量（/admin/ai-usage）。共用的 class 在 ai.css */
+
+/* ---- 共用 ---- */
+
+/* 一排互斥的按鈕（期間、次數／token） */
+.ai-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ai-segmented button {
+  padding: 8px 14px;
+}
+
+/* 表格裡的勾選框：點擊範圍至少 40px 高 */
+label.ai-switch {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip.ai-chip-danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+/* ---- AI 工具 ---- */
+
+.ai-tools-provider {
+  margin: 16px 0 0;
+}
+.ai-mcp-intro {
+  margin-top: 8px;
+}
+.ai-mcp-empty {
+  margin-top: 12px;
+}
+.ai-mcp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 0 16px;
+}
+.ai-mcp.is-off {
+  opacity: 0.75;
+}
+.ai-mcp-prefix {
+  overflow-wrap: anywhere;
+}
+.ai-header-hint {
+  display: inline-block;
+  margin-right: 12px;
+}
+
+.ai-headers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ai-headers legend {
+  padding: 0 4px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.ai-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ai-header-row input {
+  flex: 1 1 160px;
+}
+.ai-header-remove {
+  flex: none;
+  width: 40px;
+  padding: 0;
+}
+.ai-header-add {
+  align-self: flex-start;
+}
+
+.ai-tool-group {
+  margin-top: 20px;
+}
+.ai-tool-group h3 {
+  margin: 0 0 4px;
+}
+.ai-tool-group h3 .muted {
+  font-weight: 400;
+}
+.ai-tool-table td:first-child {
+  width: 100%;
+}
+.ai-tool-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ai-tool-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  color: var(--text-h);
+}
+.ai-tool-title .chip {
+  margin-bottom: 0;
+}
+.ai-tool-code {
+  overflow-wrap: anywhere;
+}
+/* 說明可能很長（MCP 的工具），只顯示兩行，完整的在滑鼠提示 */
+.ai-tool-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 400;
+}
+.ai-tool-off .ai-tool-title strong {
+  color: var(--text);
+  text-decoration: line-through;
+}
+
+/* ---- AI 用量 ---- */
+
+.ai-usage-strong {
+  color: var(--text-h);
+}
+.ai-usage-h2 {
+  margin: 32px 0 4px;
+}
+
+.ai-usage-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.ai-usage-stats .card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 14px 16px;
+}
+.ai-usage-stats strong {
+  color: var(--text-h);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.ai-usage-stats strong.error {
+  color: var(--danger);
+}
+
+.ai-usage-chart-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-usage-chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ai-usage-chart-head h3 {
+  margin: 0;
+}
+.ai-usage-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 160px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.ai-usage-chart.is-dense {
+  gap: 1px;
+}
+.ai-usage-bar-slot {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.ai-usage-bar {
+  width: 100%;
+  min-height: 1px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+.ai-usage-bar-slot:hover .ai-usage-bar {
+  opacity: 0.75;
+}
+.ai-usage-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.ai-usage-table td {
+  font-variant-numeric: tabular-nums;
+}
+.ai-usage-user {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+}
+.ai-usage-user .chip {
+  margin-bottom: 0;
+}
+.ai-usage-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ai-usage-blocked .ai-usage-user > span:first-child {
+  text-decoration: line-through;
+}
+.ai-limit-form {
+  min-width: 220px;
+}
+
+@media (max-width: 640px) {
+  .ai-usage-chart {
+    height: 120px;
+  }
+  .ai-tool-table td:first-child {
+    width: auto;
+  }
+  /* 卡片排列時 td 是 flex（左邊是欄位名稱），內容要能縮，長的自己換行 */
+  .ai-tool-table td > *,
+  .ai-usage-table td > * {
+    min-width: 0;
+  }
+  .ai-tool-cell,
+  .ai-limit-form {
+    flex: 1;
+  }
+  .ai-limit-form {
+    min-width: 0;
+  }
+  label.ai-switch {
+    white-space: normal;
+  }
+}

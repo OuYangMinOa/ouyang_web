@@ -44,7 +44,7 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system`、`/admin/ai` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system`、`/admin/ai`、`/admin/ai-tools`、`/admin/ai-usage` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 回報與許願
 
@@ -948,9 +948,89 @@ POST   /api/admin/ai/chat                {"provider_id"?,"messages":[{role,conte
 1. 後端用 `state.ai.complete(&state.pool, &messages, &options)` 等整段回答（`content` 不含思考），
    或 `state.ai.stream(...)` 拿到一段一段的 `Event`，再用 `ai::ndjson(rx)` 串流給前端。都用使用中的那一組，不用管網址和金鑰。
 2. 錯誤直接 `?` 轉成 `AppError`：沒設定回「AI 功能尚未開放」、掛了回「AI 服務暫時無法使用」（都是 503），不會把上游的網址和錯誤細節給一般使用者。
-   權限和使用次數限制由各功能自己處理。
+   handler 要拿 `CurrentUser`（只給登入的人），開始前呼叫 `ai_usage::begin(&state, &user, true)` 檢查額度、拿到 `RunGuard`，
+   結束後 `ai_usage::record(...)` 記用量（見下面的「用量與額度」）。
 3. 前端頁面最上面放 `<AiStatusNotice />`，串流用 `streamChat(path, body, onEvent, signal)`（`frontend/src/ai/api.ts`），
    要依狀態停用按鈕的話用 `useAiStatus()`。
+
+### AI 助手（`/ai`）
+
+登入才能用的對話 APP（`loginOnly`），AI 可以呼叫工具查資料、操作本站功能。對話存在資料庫，每個人只看得到自己的。
+後端：`ai_chat.rs`（對話與 agent loop）、`ai_tools.rs`（工具登記）、`ai_builtin.rs`（內建工具）、`mcp.rs`（MCP 客戶端）；
+前端：`frontend/src/ai/chat/`。
+
+```
+GET    /api/ai/chats                     自己的對話  [{id,title,updated_at,pending}]
+POST   /api/ai/chats                     開新對話（順便清掉沒說過話的空對話）
+GET    /api/ai/chats/{id}                整段對話 {…, messages:[{role,content,reasoning,tool_calls,tool_*,status,usage}]}
+PATCH  /api/ai/chats/{id}                {"title"} 改名
+DELETE /api/ai/chats/{id}
+POST   /api/ai/chats/{id}/messages       {"content","thinking"?}  回 NDJSON 串流
+POST   /api/ai/chats/{id}/approve        {"decisions":[{id,approve}]}  確認或拒絕等待中的動作，接著做，回 NDJSON 串流
+GET    /api/ai/tools                     自己的對話裡能用的工具 {supported,tools}
+GET    /api/ai/usage                     自己今天的用量和額度
+POST   /api/ai/calendar/parse            {"text"}  一句話變成日曆事項的草稿（不會存）
+```
+
+- **agent loop**：把對話和能用的工具（OpenAI 的 `tools` 格式）交給模型；模型要呼叫工具就執行、把結果放回對話再問一次，
+  直到模型直接回答，最多 8 輪。每一步（AI 的回答、要呼叫的工具、工具結果）都存進 `ai_chat_messages`，給模型的對話太長時從前面整段丟掉。
+- **確認**：會改資料的工具（新增／修改／刪除事項、建立短網址）不會直接執行，存成 `pending` 讓這次串流結束，
+  畫面上出現「允許／拒絕」，按了才走 `/approve` 接著做。還在等確認時直接問別的，等待中的動作當作拒絕。
+  工具一律以目前登入的使用者身分執行，跟自己在網頁上操作一樣。
+- **串流事件**：`step`（新的一輪）、`reasoning`、`content`、`tool_call`、`tool_result`、`approval`（有動作在等確認）、
+  `title`（第一次回答完 AI 取的標題）、`done`、`error`。使用者按停止（關掉連線）時後端停止生成，已經產生的部分存成 `stopped`。
+- **工具呼叫要伺服器支援**：vLLM 要加 `--enable-auto-tool-choice --tool-call-parser hermes`（Qwen3 用 hermes）。
+  沒開的話帶 `tools` 會被拒絕（400），`ai.rs` 會記下這一組不支援，改成不帶工具重送，AI 助手變成一般聊天；
+  「AI 工具」頁和 `/api/admin/ai` 的 `tools` 看得到。改設定（重新儲存那一組）後會重新偵測。
+- **內建工具**：日曆（查、新增、修改、刪除）、國曆農曆換算（`lunar.rs`，跟前端同一份表）、天氣預報、颱風、地震、
+  統一發票對獎、短網址（查、建立）。都是直接呼叫站上現有的 handler，結果太長會截到 16,000 字。
+- **搜尋本站功能（`site_search`）**：只在瀏覽器裡跑的小工具、小遊戲後端沒辦法執行，但 AI 可以查有哪些、給連結。
+  `npm run build` 最後一步（`frontend/scripts/site-catalog.mjs`）用 Vite 載入 `apps/`、`tools/`、`games/registry.ts`，
+  產生 `dist/site-catalog.json`（名稱、說明、網址、標籤、分類、APP 底下的頁面），後端從 `STATIC_DIR` 讀。
+  新增 APP、工具或遊戲只要登記進 registry，AI 就查得到。要權限的 APP（系統管理）只有有權限的人查得到；
+  前端還沒 build 時工具回「還沒有功能清單」，不會影響其他工具。
+
+### MCP 伺服器
+
+「系統管理 › AI 工具」（`/admin/ai-tools`）可以接 MCP 伺服器，伺服器上的工具會出現在 AI 助手裡，給模型的名稱是 `前綴__工具`。
+
+```
+GET    /api/admin/ai/tools               {servers, tools:[{name,title,kind,enabled,approval,default_approval}], provider_tools}
+PUT    /api/admin/ai/tools/{name}        {"enabled","approval"}  開關工具、改要不要確認（改回預設就刪掉設定）
+POST   /api/admin/ai/mcp                 {"name","prefix","url","headers":[{name,value}],"enabled","public"}  新增並讀取工具
+PUT    /api/admin/ai/mcp/{id}            同上；header 的 value 給 null 是沿用原本的值（改了網址就不沿用）
+DELETE /api/admin/ai/mcp/{id}
+POST   /api/admin/ai/mcp/{id}/refresh    重新連線、重新讀工具清單
+```
+
+- 只支援 **Streamable HTTP**（`POST` JSON-RPC，回應是 JSON 或 SSE）。容器是 distroless，跑不了 stdio 的伺服器（`npx`、`uvx`），
+  要用的話在別台主機用 supergateway 之類的轉成 HTTP 再接進來。session（`Mcp-Session-Id`）放在記憶體，過期（404）會自己重新 initialize。
+- header（例如 `Authorization: Bearer …`）存在 `ai_mcp_servers.headers`，API 只回名稱和最後 4 碼。
+- **開放給所有登入的人**預設不勾：沒勾的伺服器只有管理員的對話裡有，因為伺服器上的金鑰是管理員的，不能讓每個人都拿去用。
+- 預設只有標成只讀（`annotations.readOnlyHint`）的工具不用確認，其他都要使用者按允許。
+
+### 用量與額度
+
+「系統管理 › AI 用量」（`/admin/ai-usage`）。程式在 `ai_usage.rs`。
+
+```
+GET    /api/admin/ai/usage?days=7        {defaults, running, users:[…], daily:[…], recent:[…]}
+PUT    /api/admin/ai/usage/defaults      {"daily_requests","daily_tokens","max_running"}  null 是不限
+PUT    /api/admin/ai/usage/users/{id}    {"daily_requests","daily_tokens","blocked"}  null 是用全站預設
+```
+
+- 每次呼叫 AI 記一筆 `ai_usage`（種類、token、工具次數、成功與否、秒數），留 400 天。
+- 每天的額度以台灣時間的日期算：`chat`（送出訊息）和 `calendar`（一句話新增）各算一次；`chat_continue`（確認後接著做）和
+  `title`（取標題）不算次數，token 照算。預設每人每天 50 次、300,000 tokens，有 `admin.users` 的人不受限。
+  用完回 429，被停用回 403，被擋的那次不會留下訊息。
+- 同一個人同時只能有一個 AI 請求；全站同時最多 `max_running` 個（預設 4，自架的 GPU 撐不了太多），滿了就請使用者稍後再試，不排隊。
+  這只記在記憶體，每個容器各自算。
+
+### 日曆：一句話新增
+
+「日曆」和「我的事項」上方的「✨ 用一句話新增」（登入且有開放 AI 才出現）：把「下週三晚上七點跟阿明吃飯」交給
+`POST /api/ai/calendar/parse`（`ai_calendar.rs`），用 `response_format` 的 JSON schema 要模型回事項的欄位，
+後端檢查日期、把農曆日期換成國曆，回傳草稿打開新增事項的視窗，使用者按儲存才走原本的 `POST /api/calendar/events`。
 
 ## 部署
 
