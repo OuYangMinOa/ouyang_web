@@ -1,6 +1,11 @@
 pub mod access_log;
 pub mod admin;
 pub mod ai;
+pub mod ai_builtin;
+pub mod ai_calendar;
+pub mod ai_chat;
+pub mod ai_tools;
+pub mod ai_usage;
 pub mod antique;
 pub mod arena;
 pub mod auth;
@@ -18,6 +23,8 @@ pub mod invoice;
 pub mod justone;
 pub mod liarsdice;
 pub mod lobby;
+pub mod lunar;
+pub mod mcp;
 pub mod minesrace;
 pub mod monitor;
 pub mod music;
@@ -125,6 +132,12 @@ pub struct AppState {
     pub short_link_limiter: Arc<visits::VisitLimiter>,
     /// 每一組 AI 設定的連線狀態，背景定時檢查（設定存在資料庫，見 ai.rs）
     pub ai: Arc<ai::Ai>,
+    /// 正在跑的 AI 請求（每人一個、全站有上限，見 ai_usage.rs）
+    pub ai_running: Arc<ai_usage::Running>,
+    /// MCP 伺服器的連線（session），見 mcp.rs
+    pub mcp: Arc<mcp::Mcp>,
+    /// 前端 build 時產生的本站功能清單（frontend/scripts/site-catalog.mjs），AI 助手的 site_search 查這份
+    pub site_catalog: PathBuf,
 }
 
 impl AppState {
@@ -166,6 +179,9 @@ impl AppState {
             youtube: Arc::default(),
             short_link_limiter: Arc::default(),
             ai: Arc::default(),
+            ai_running: Arc::default(),
+            mcp: Arc::default(),
+            site_catalog: PathBuf::from("../frontend/dist/site-catalog.json"),
         }
     }
 }
@@ -211,6 +227,21 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/ai/models", post(ai::admin_models))
         .route("/admin/ai/chat", post(ai::admin_chat))
         .route("/ai/status", get(ai::public_status))
+        .route("/admin/ai/usage", get(ai_usage::admin_report))
+        .route("/admin/ai/usage/defaults", put(ai_usage::admin_set_defaults))
+        .route("/admin/ai/usage/users/{id}", put(ai_usage::admin_set_user))
+        .route("/admin/ai/tools", get(ai_tools::admin_get))
+        .route("/admin/ai/tools/{name}", put(ai_tools::admin_set_tool))
+        .route("/admin/ai/mcp", post(mcp::admin_create))
+        .route("/admin/ai/mcp/{id}", put(mcp::admin_update).delete(mcp::admin_delete))
+        .route("/admin/ai/mcp/{id}/refresh", post(mcp::admin_refresh))
+        .route("/ai/usage", get(ai_usage::mine))
+        .route("/ai/tools", get(ai_tools::mine))
+        .route("/ai/chats", get(ai_chat::list).post(ai_chat::create))
+        .route("/ai/chats/{id}", get(ai_chat::get).patch(ai_chat::rename).delete(ai_chat::delete))
+        .route("/ai/chats/{id}/messages", post(ai_chat::send))
+        .route("/ai/chats/{id}/approve", post(ai_chat::approve))
+        .route("/ai/calendar/parse", post(ai_calendar::parse))
         .route("/admin/visits/{page}", get(visits::list_sessions))
         .route("/admin/visits/{page}/{session}", get(visits::session_events))
         .route("/visits/{page}", post(visits::track))
@@ -402,9 +433,13 @@ pub enum AppError {
     BadRequest(String),
     Unauthorized(&'static str),
     Forbidden,
+    /// 403，附上給使用者看的原因
+    Denied(String),
     NotFound,
     Conflict(String),
     TooManyRequests(&'static str),
+    /// 429，訊息裡有數字（例如 AI 的每日額度）
+    QuotaExceeded(String),
     ServiceUnavailable(&'static str),
     Database(sqlx::Error),
     Internal(String),
@@ -413,7 +448,11 @@ pub enum AppError {
 impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BadRequest(message) | Self::Conflict(message) | Self::Internal(message) => f.write_str(message),
+            Self::BadRequest(message)
+            | Self::Conflict(message)
+            | Self::Internal(message)
+            | Self::Denied(message)
+            | Self::QuotaExceeded(message) => f.write_str(message),
             Self::Unauthorized(message) | Self::TooManyRequests(message) | Self::ServiceUnavailable(message) => {
                 f.write_str(message)
             }
@@ -437,10 +476,10 @@ impl IntoResponse for AppError {
         let status = match &self {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Unauthorized(_) => StatusCode::UNAUTHORIZED,
-            Self::Forbidden => StatusCode::FORBIDDEN,
+            Self::Forbidden | Self::Denied(_) => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
-            Self::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
+            Self::TooManyRequests(_) | Self::QuotaExceeded(_) => StatusCode::TOO_MANY_REQUESTS,
             Self::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Database(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };

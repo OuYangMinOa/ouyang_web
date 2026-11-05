@@ -174,6 +174,8 @@ struct Entry {
     events: VecDeque<StatusEvent>,
     /// 每次改設定就加一：用舊設定做的檢查或呼叫，結果不能蓋掉新設定的狀態
     epoch: u64,
+    /// 能不能呼叫工具：帶工具的請求成功過是 true，被拒絕（vLLM 沒開 tool call parser）是 false，還不知道是 None
+    tools: Option<bool>,
 }
 
 pub struct Ai {
@@ -205,6 +207,22 @@ impl Ai {
 
     fn epoch(&self, id: i64) -> u64 {
         self.entries.lock().unwrap().get(&id).map_or(0, |e| e.epoch)
+    }
+
+    /// 這一組能不能呼叫工具（還不知道是 None）
+    pub fn supports_tools(&self, id: i64) -> Option<bool> {
+        self.entries.lock().unwrap().get(&id).and_then(|e| e.tools)
+    }
+
+    fn record_tools(&self, id: i64, epoch: u64, supported: bool) {
+        let mut entries = self.entries.lock().unwrap();
+        let entry = entries.entry(id).or_default();
+        if entry.epoch == epoch && entry.tools != Some(supported) {
+            if !supported {
+                tracing::warn!(id, "AI provider does not accept tools; tool calling is disabled for it");
+            }
+            entry.tools = Some(supported);
+        }
     }
 
     fn record(&self, id: i64, epoch: u64, health: Health, error: Option<String>, latency: Option<Duration>) {
@@ -244,6 +262,7 @@ impl Ai {
         let entry = entries.entry(id).or_default();
         entry.epoch += 1;
         entry.status = Status::default();
+        entry.tools = None;
     }
 
     fn forget(&self, id: i64) {
@@ -312,6 +331,12 @@ impl Ai {
         self.stream_on(&provider, messages, options).await
     }
 
+    /// 全站使用中的那一組能不能呼叫工具：還沒試過當作可以，第一次被拒絕後就不再帶工具
+    pub async fn active_supports_tools(&self, pool: &SqlitePool) -> Result<bool, AiError> {
+        let provider = active_provider(pool).await?.ok_or(AiError::NotConfigured)?;
+        Ok(self.supports_tools(provider.id) != Some(false))
+    }
+
     /// 用指定的那一組對話（管理頁測試用）
     pub async fn stream_on(
         self: &Arc<Self>,
@@ -321,12 +346,20 @@ impl Ai {
     ) -> Result<mpsc::Receiver<Event>, AiError> {
         let id = provider.id;
         let epoch = self.epoch(id);
+        // 已經知道這一組不能呼叫工具：直接不帶，當成一般對話
+        let with_tools = !options.tools.is_empty() && self.supports_tools(id) != Some(false);
         let mut body = json!({
             "model": provider.model,
-            "messages": messages,
+            "messages": messages.iter().map(Message::to_wire).collect::<Vec<_>>(),
             "stream": true,
             "stream_options": { "include_usage": true },
         });
+        if with_tools {
+            body["tools"] = json!(options.tools);
+        }
+        if let Some(format) = &options.response_format {
+            body["response_format"] = format.clone();
+        }
         if let Some(thinking) = options.thinking {
             // vLLM 的 Qwen3 等模型用這個開關思考模式；其他伺服器不一定認得，所以只有指定時才送
             body["chat_template_kwargs"] = json!({ "enable_thinking": thinking });
@@ -358,9 +391,23 @@ impl Ai {
                 self.record(id, epoch, Health::Down, Some(error.clone()), None);
                 return Err(AiError::Unavailable(error));
             }
+            let lower = error.to_lowercase();
+            // vLLM 沒開 --enable-auto-tool-choice 時帶工具會被拒絕（400，訊息裡有 tool）：記下來，不帶工具再送一次
+            if with_tools && lower.contains("tool") {
+                self.record_tools(id, epoch, false);
+                let options = ChatOptions { tools: Vec::new(), ..options.clone() };
+                return Box::pin(self.stream_on(provider, messages, &options)).await;
+            }
+            if options.response_format.is_some() && (lower.contains("response_format") || lower.contains("schema")) {
+                let options = ChatOptions { response_format: None, ..options.clone() };
+                return Box::pin(self.stream_on(provider, messages, &options)).await;
+            }
             return Err(AiError::Rejected(error));
         }
         self.record(id, epoch, Health::Ok, None, Some(started.elapsed()));
+        if with_tools {
+            self.record_tools(id, epoch, true);
+        }
 
         let (tx, rx) = mpsc::channel(64);
         let ai = self.clone();
@@ -387,6 +434,7 @@ impl Ai {
             match event {
                 Event::Reasoning { text } => completion.reasoning.push_str(&text),
                 Event::Content { text } => completion.content.push_str(&text),
+                Event::ToolCalls { calls } => completion.tool_calls.extend(calls),
                 Event::Done { finish_reason, usage } => {
                     completion.finish_reason = finish_reason;
                     completion.usage = usage;
@@ -399,14 +447,19 @@ impl Ai {
     }
 }
 
-/// 背景定時檢查每一組（改設定時 API 自己會馬上檢查那一組）
+/// 背景定時檢查每一組（改設定時 API 自己會馬上檢查那一組），順便每天清一次太舊的用量紀錄
 pub fn spawn(ai: Arc<Ai>, pool: SqlitePool) {
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(CHECK_EVERY);
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut last_prune: Option<Instant> = None;
         loop {
             tick.tick().await;
             ai.check_all(&pool).await;
+            if last_prune.is_none_or(|at| at.elapsed() > Duration::from_secs(24 * 60 * 60)) {
+                crate::ai_usage::prune(&pool).await;
+                last_prune = Some(Instant::now());
+            }
         }
     });
 }
@@ -415,15 +468,56 @@ pub fn spawn(ai: Arc<Ai>, pool: SqlitePool) {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Message {
-    /// `system`、`user` 或 `assistant`
+    /// `system`、`user`、`assistant` 或 `tool`
     pub role: String,
     pub content: String,
+    /// AI 要呼叫的工具（`assistant` 才有）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_calls: Vec<ToolCall>,
+    /// 這是哪一個呼叫的結果（`tool` 才有）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
 }
 
 impl Message {
     pub fn new(role: &str, content: impl Into<String>) -> Self {
-        Self { role: role.into(), content: content.into() }
+        Self { role: role.into(), content: content.into(), tool_calls: Vec::new(), tool_call_id: None }
     }
+
+    pub fn assistant_calls(content: impl Into<String>, calls: Vec<ToolCall>) -> Self {
+        Self { tool_calls: calls, ..Self::new("assistant", content) }
+    }
+
+    pub fn tool_result(call_id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self { tool_call_id: Some(call_id.into()), ..Self::new("tool", content) }
+    }
+
+    /// OpenAI 的格式：工具呼叫是 `{id, type: "function", function: {name, arguments}}`
+    fn to_wire(&self) -> Value {
+        let mut message = json!({ "role": self.role, "content": self.content });
+        if !self.tool_calls.is_empty() {
+            message["tool_calls"] = self
+                .tool_calls
+                .iter()
+                .map(|call| {
+                    json!({ "id": call.id, "type": "function",
+                            "function": { "name": call.name, "arguments": call.arguments } })
+                })
+                .collect();
+        }
+        if let Some(id) = &self.tool_call_id {
+            message["tool_call_id"] = json!(id);
+        }
+        message
+    }
+}
+
+/// AI 要呼叫的一個工具；`arguments` 是 JSON 字串（模型產生的，不一定是合法的 JSON）
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -432,6 +526,10 @@ pub struct ChatOptions {
     pub thinking: Option<bool>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
+    /// 可以呼叫的工具（OpenAI 的 `tools` 格式）；這一組不支援時會自動拿掉
+    pub tools: Vec<Value>,
+    /// 要求回答符合 JSON schema（OpenAI 的 `response_format`）；伺服器不認得時會自動拿掉
+    pub response_format: Option<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -444,16 +542,30 @@ pub struct Usage {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
-    Reasoning { text: String },
-    Content { text: String },
-    Done { finish_reason: Option<String>, usage: Option<Usage> },
-    Error { message: String },
+    Reasoning {
+        text: String,
+    },
+    Content {
+        text: String,
+    },
+    /// 這一輪最後 AI 要呼叫的工具（在 `Done` 前面，一次給齊）
+    ToolCalls {
+        calls: Vec<ToolCall>,
+    },
+    Done {
+        finish_reason: Option<String>,
+        usage: Option<Usage>,
+    },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Completion {
     pub content: String,
     pub reasoning: String,
+    pub tool_calls: Vec<ToolCall>,
     pub finish_reason: Option<String>,
     pub usage: Option<Usage>,
 }
@@ -530,6 +642,8 @@ struct SseParser {
     /// 還沒收到換行的部分（UTF-8 字元可能被切在兩段中間，所以先存位元組）
     line: Vec<u8>,
     think: ThinkSplitter,
+    /// 工具呼叫是一段一段來的（同一個 index 的名稱、參數接起來），結束時才一次給
+    calls: Vec<ToolCall>,
     finish_reason: Option<String>,
     usage: Option<Usage>,
     done: bool,
@@ -572,14 +686,51 @@ impl SseParser {
                 let (reasoning, content) = self.think.push(text);
                 push_text(&mut events, reasoning, content);
             }
+            for call in delta["tool_calls"].as_array().into_iter().flatten() {
+                self.push_call(call);
+            }
         }
         Ok(events)
+    }
+
+    fn push_call(&mut self, delta: &Value) {
+        let index = delta["index"].as_u64().map_or(self.calls.len().saturating_sub(1), |i| i as usize).min(63);
+        while self.calls.len() <= index {
+            self.calls.push(ToolCall { id: String::new(), name: String::new(), arguments: String::new() });
+        }
+        let call = &mut self.calls[index];
+        if let Some(id) = delta["id"].as_str().filter(|id| !id.is_empty()) {
+            call.id = id.to_owned();
+        }
+        let function = &delta["function"];
+        if let Some(name) = function["name"].as_str() {
+            call.name.push_str(name);
+        }
+        match &function["arguments"] {
+            Value::String(text) => call.arguments.push_str(text),
+            // 有的伺服器直接給物件
+            arguments @ Value::Object(_) => call.arguments = arguments.to_string(),
+            _ => {}
+        }
     }
 
     fn finish(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         let (reasoning, content) = self.think.finish();
         push_text(&mut events, reasoning, content);
+        let mut calls: Vec<ToolCall> =
+            std::mem::take(&mut self.calls).into_iter().filter(|call| !call.name.is_empty()).collect();
+        if !calls.is_empty() {
+            for (i, call) in calls.iter_mut().enumerate() {
+                if call.id.is_empty() {
+                    call.id = format!("call_{i}");
+                }
+                if call.arguments.trim().is_empty() {
+                    call.arguments = "{}".into();
+                }
+            }
+            events.push(Event::ToolCalls { calls });
+        }
         events.push(Event::Done { finish_reason: self.finish_reason.take(), usage: self.usage.take() });
         events
     }
@@ -677,7 +828,7 @@ fn partial_suffix(text: &str, tag: &str) -> usize {
     (1..tag.len()).rev().find(|&n| text.ends_with(&tag[..n])).unwrap_or(0)
 }
 
-fn describe_request_error(err: &reqwest::Error) -> String {
+pub(crate) fn describe_request_error(err: &reqwest::Error) -> String {
     let kind = if err.is_timeout() {
         "連線逾時"
     } else if err.is_connect() {
@@ -765,6 +916,8 @@ pub struct ProviderView {
     pub key_hint: Option<String>,
     pub status: Status,
     pub events: Vec<StatusEvent>,
+    /// 能不能呼叫工具（AI 助手用得到）：還沒試過是 null
+    pub tools: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -783,6 +936,7 @@ async fn admin_view(state: &AppState) -> Result<AdminView, AppError> {
             key_hint: p.key_hint(),
             status: state.ai.status(p.id),
             events: state.ai.events(p.id),
+            tools: state.ai.supports_tools(p.id),
             id: p.id,
             name: p.name,
             base_url: p.base_url,
@@ -1040,8 +1194,8 @@ pub async fn admin_chat(
     }
 }
 
-/// 把 [`Event`] 一行一個 JSON 串流給前端（`frontend/src/ai/api.ts` 的 `streamChat`）
-pub fn ndjson(rx: mpsc::Receiver<Event>) -> Response {
+/// 把事件（[`Event`]，或 AI 助手的 `ai_chat::ChatEvent`）一行一個 JSON 串流給前端（`frontend/src/ai/api.ts` 的 `streamChat`）
+pub fn ndjson<T: Serialize + Send + 'static>(rx: mpsc::Receiver<T>) -> Response {
     let lines = futures_util::stream::unfold(rx, |mut rx| async move {
         let event = rx.recv().await?;
         let mut line = serde_json::to_string(&event).unwrap_or_default();

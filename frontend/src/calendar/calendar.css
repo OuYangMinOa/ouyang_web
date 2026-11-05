@@ -459,3 +459,29 @@ button.cal-weekday-pick[aria-pressed='true'] {
     align-items: center;
   }
 }
+
+/* ---- 用一句話新增（AI） ---- */
+
+.cal-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.cal-quick-label {
+  color: var(--text-h);
+  font-weight: 600;
+}
+.cal-quick .inline-form button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.cal-draft-note {
+  margin-top: -4px;
+  color: var(--accent);
+}
+@media (max-width: 480px) {
+  .cal-quick .inline-form {
+    flex-direction: column;
+  }
+}

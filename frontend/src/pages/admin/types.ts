@@ -284,3 +284,97 @@ export type AiProvider = {
 export type AiAdminView = { active_id: number | null; providers: AiProvider[] }
 
 export type AiModel = { id: string; max_model_len: number | null }
+
+// ---- AI 工具（backend/src/ai_tools.rs、mcp.rs） ----
+
+/** 管理頁看到的 header：只有名稱和值的最後 4 碼 */
+export type McpHeaderView = { name: string; hint: string }
+
+export type McpServer = {
+  id: number
+  name: string
+  /** 工具名稱的前綴：給模型的名稱是「前綴__工具」 */
+  prefix: string
+  url: string
+  headers: McpHeaderView[]
+  enabled: boolean
+  /** 開放給所有登入的人；沒勾只有管理員的對話能用 */
+  public: boolean
+  tool_count: number
+  tools_fetched_at: string | null
+  last_error: string | null
+}
+
+export type AiToolView = {
+  name: string
+  title: string
+  description: string
+  kind: 'builtin' | 'mcp'
+  server_id: number | null
+  /** 「本站」或 MCP 伺服器的名稱 */
+  source: string
+  enabled: boolean
+  approval: boolean
+  default_approval: boolean
+}
+
+export type AiToolsView = {
+  servers: McpServer[]
+  tools: AiToolView[]
+  /** 使用中的那組 AI 能不能呼叫工具：null 是還沒試過 */
+  provider_tools: boolean | null
+}
+
+// ---- AI 用量（backend/src/ai_usage.rs） ----
+
+export type AiUsageDefaults = {
+  /** null 是不限 */
+  daily_requests: number | null
+  daily_tokens: number | null
+  max_running: number
+}
+
+export type AiUsageUser = {
+  user_id: number
+  username: string
+  today_requests: number
+  today_tokens: number
+  requests: number
+  prompt_tokens: number
+  completion_tokens: number
+  tool_calls: number
+  errors: number
+  last_used_at: string | null
+  /** 個別設定，null 是用全站預設 */
+  daily_requests: number | null
+  daily_tokens: number | null
+  blocked: boolean
+  is_admin: boolean
+}
+
+export type AiUsageDay = { day: string; requests: number; tokens: number; users: number }
+
+export type AiUsageKind = 'chat' | 'chat_continue' | 'calendar' | 'title'
+
+export type AiUsageRecent = {
+  id: number
+  username: string
+  kind: AiUsageKind | string
+  prompt_tokens: number
+  completion_tokens: number
+  tool_calls: number
+  ok: boolean
+  ms: number
+  created_at: string
+}
+
+export type AiUsageReport = {
+  defaults: AiUsageDefaults
+  days: number
+  running: number
+  users: AiUsageUser[]
+  daily: AiUsageDay[]
+  recent: AiUsageRecent[]
+}
+
+export type AiUserLimit = { daily_requests: number | null; daily_tokens: number | null; blocked: boolean }

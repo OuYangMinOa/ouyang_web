@@ -10,12 +10,18 @@ import {
   skipOccurrence,
   type CalendarEvent,
   type EventColor,
+  type EventInput,
   type Repeat,
 } from './events'
+
+/** AI 依一句話填好的新事項（後端 ai_calendar.rs），使用者看過、按儲存才會存 */
+export type EventDraft = EventInput & { lunar_label?: string | null }
 
 export type EditTarget = {
   /** 沒有就是新增 */
   event?: CalendarEvent
+  /** 新增時先填好的內容 */
+  draft?: EventDraft
   /** 從重複事項的某一次點進來時，那一次的開始日期（可以只刪這一次） */
   occurrence?: Day
   /** 新增時預設的日期 */
@@ -35,17 +41,18 @@ export default function EventDialog({
   onChanged: () => void
   onClose: () => void
 }) {
-  const { event, occurrence } = target
+  const { event, occurrence, draft } = target
+  const initial = event ?? draft
   const dialog = useRef<HTMLDialogElement>(null)
-  const [title, setTitle] = useState(event?.title ?? '')
-  const [start, setStart] = useState(event?.start_date ?? formatDay(target.date))
-  const [end, setEnd] = useState(event?.end_date ?? formatDay(target.date))
-  const [color, setColor] = useState<EventColor>(event?.color ?? 'orange')
-  const [repeat, setRepeat] = useState<Repeat>(event?.repeat ?? 'none')
-  const [interval, setRepeatInterval] = useState(event?.interval ?? 1)
-  const [weekdays, setWeekdays] = useState(event?.weekdays.length ? event.weekdays : [weekday(parseDay(start))])
-  const [until, setUntil] = useState(event?.until ?? '')
-  const [note, setNote] = useState(event?.note ?? '')
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [start, setStart] = useState(initial?.start_date ?? formatDay(target.date))
+  const [end, setEnd] = useState(initial?.end_date ?? formatDay(target.date))
+  const [color, setColor] = useState<EventColor>(initial?.color ?? 'orange')
+  const [repeat, setRepeat] = useState<Repeat>(initial?.repeat ?? 'none')
+  const [interval, setRepeatInterval] = useState(initial?.interval ?? 1)
+  const [weekdays, setWeekdays] = useState(initial?.weekdays.length ? initial.weekdays : [weekday(parseDay(start))])
+  const [until, setUntil] = useState(initial?.until ?? '')
+  const [note, setNote] = useState(initial?.note ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -117,6 +124,11 @@ export default function EventDialog({
     <dialog ref={dialog} className="cal-dialog" onClose={onClose} aria-labelledby="cal-dialog-title">
       <form className="stack" onSubmit={submit}>
         <h2 id="cal-dialog-title">{event ? '編輯事項' : '新增事項'}</h2>
+        {draft && (
+          <p className="muted cal-draft-note">
+            ✨ AI 幫你填好了{draft.lunar_label ? `（${draft.lunar_label}）` : ''}，確認沒問題再按儲存。
+          </p>
+        )}
         <label>
           標題
           <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} required autoFocus />
