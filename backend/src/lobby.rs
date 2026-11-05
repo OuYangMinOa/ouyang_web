@@ -60,7 +60,7 @@ struct Game {
 }
 
 /// 遊戲室能開的遊戲；新增派對遊戲或大逃殺時記得加在這裡和 `room_table`
-const GAMES: [Game; 18] = [
+const GAMES: [Game; 22] = [
     Game { id: "undercover", name: "誰是臥底", kind: Kind::Party },
     Game { id: "bigtwo", name: "大老二", kind: Kind::Party },
     Game { id: "draw", name: "你畫我猜", kind: Kind::Party },
@@ -69,6 +69,10 @@ const GAMES: [Game; 18] = [
     Game { id: "justone", name: "只有一個詞", kind: Kind::Party },
     Game { id: "telephone", name: "傳話畫畫", kind: Kind::Party },
     Game { id: "poker", name: "德州撲克", kind: Kind::Party },
+    Game { id: "werewolf", name: "狼人殺", kind: Kind::Party },
+    Game { id: "chinesecheckers", name: "跳棋", kind: Kind::Party },
+    Game { id: "contact", name: "暗號接頭", kind: Kind::Party },
+    Game { id: "liarsdice", name: "吹牛骰子", kind: Kind::Party },
     Game { id: "minesweeper", name: "踩地雷競速", kind: Kind::Party },
     Game { id: "tetris", name: "俄羅斯方塊 99", kind: Kind::Arena },
     Game { id: "puyo", name: "魔法氣泡", kind: Kind::Arena },
@@ -615,6 +619,10 @@ fn room_table<'a>(state: &'a AppState, game: &Game) -> Option<&'a dyn RoomTable>
         "justone" => &state.justone,
         "telephone" => &state.telephone,
         "poker" => &state.poker,
+        "werewolf" => &state.werewolf,
+        "chinesecheckers" => &state.chinesecheckers,
+        "contact" => &state.contact,
+        "liarsdice" => &state.liarsdice,
         "minesweeper" => &state.minesrace,
         "tetris" => &state.tetris,
         "puyo" => &state.puyo,

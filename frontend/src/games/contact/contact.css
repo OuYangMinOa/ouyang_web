@@ -1,0 +1,482 @@
+/* ---- 暗號接頭 ---- */
+/* 隊伍和密碼表的顏色都在 index.css（--ct-jade、--ct-amethyst、--ct-bystander、--ct-traitor、--ct-ink），
+   這裡用 --team（隊伍）和 --kind（格子）把它們接到各個元件上 */
+
+.ct {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ct-t0 {
+  --team: var(--ct-jade);
+}
+.ct-t1 {
+  --team: var(--ct-amethyst);
+}
+.ct-card.jade,
+.ct-flip.jade {
+  --kind: var(--ct-jade);
+}
+.ct-card.amethyst,
+.ct-flip.amethyst {
+  --kind: var(--ct-amethyst);
+}
+.ct-card.bystander,
+.ct-flip.bystander {
+  --kind: var(--ct-bystander);
+}
+.ct-card.traitor,
+.ct-flip.traitor {
+  --kind: var(--ct-traitor);
+}
+
+.ct-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.ct-board .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+  overflow-wrap: anywhere;
+}
+.ct-note {
+  margin: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.ct-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 比分：兩隊各剩幾張，輪到的那隊外框發亮 */
+.ct-score {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.ct-score-team {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--team);
+  border-radius: 10px;
+  background: var(--surface);
+  min-width: 0;
+}
+.ct-score-team.active {
+  border-color: var(--team);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--team) 35%, transparent);
+}
+.ct-score-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--team);
+}
+.ct-score-name small {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text);
+}
+.ct-score-left {
+  color: var(--text);
+  white-space: nowrap;
+}
+.ct-score-left strong {
+  font: 700 22px var(--mono);
+  color: var(--text-h);
+}
+
+/* 這輪的提示 */
+.ct-clue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 12px;
+  padding: 10px 14px;
+  border: 2px solid var(--team);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--team) 10%, var(--surface));
+  text-align: center;
+}
+.ct-clue-word {
+  font: 700 clamp(24px, 7vw, 34px) var(--serif);
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.ct-clue-count {
+  font: 700 clamp(24px, 7vw, 34px) var(--mono);
+  color: var(--team);
+}
+.ct-clue-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* 5×5 盤面：格子的字依盤面寬度（cqi）縮放，360px 寬的手機上四個字也放得下 */
+.ct-grid-box {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  min-width: 0;
+}
+.ct-key-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  font-size: 14px;
+}
+.ct-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(3px, 1.2cqi, 8px);
+}
+.ct-grid li {
+  min-width: 0;
+}
+.ct-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: clamp(4px, 1.4cqi, 10px);
+  background: var(--surface);
+  color: var(--text-h);
+  font: 700 clamp(10px, 3.6cqi, 24px) / 1.15 var(--serif);
+  text-align: center;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+  cursor: default;
+}
+/* 字數越少字越大；四個字時一格約 20cqi 寬，扣掉邊距還放得下 4 × 3.6cqi */
+.ct-card[data-len='1'],
+.ct-card[data-len='2'] {
+  font-size: clamp(12px, 5.6cqi, 30px);
+}
+.ct-card[data-len='3'] {
+  font-size: clamp(11px, 4.6cqi, 27px);
+}
+.ct-card[data-len='5'] {
+  font-size: clamp(9px, 2.9cqi, 20px);
+}
+.ct-card:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.ct-grid.can-mark .ct-card:not(:disabled) {
+  cursor: pointer;
+}
+.ct-grid.can-mark .ct-card:not(:disabled):hover {
+  border-color: var(--accent);
+}
+/* 看得到密碼表的人：沒翻開的格子淡淡上色 */
+.ct-card.key {
+  border: 2px solid var(--kind);
+  background: color-mix(in srgb, var(--kind) 18%, var(--surface));
+}
+/* 翻開的格子整張塗滿 */
+.ct-card.open {
+  border: 1px solid var(--kind);
+  background: var(--kind);
+  color: var(--ct-ink);
+}
+.ct-card.open .ct-word {
+  opacity: 0.85;
+}
+/* 組員的標記：有人標記是虛線，自己標記的是實線 */
+.ct-card.marked {
+  border: 2px dashed var(--accent);
+}
+.ct-card.mine {
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.ct-card.key.mine {
+  background: color-mix(in srgb, var(--kind) 18%, var(--surface));
+}
+.ct-word {
+  min-width: 0;
+}
+.ct-tag {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font: 600 clamp(8px, 2.2cqi, 13px) / 1 var(--sans);
+  color: var(--kind);
+}
+.ct-card.open .ct-tag {
+  color: var(--ct-ink);
+}
+.ct-marks {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 1.4em;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 clamp(9px, 2.4cqi, 12px) / 1.4 var(--sans);
+  box-sizing: border-box;
+}
+
+/* 給提示、猜的操作區 */
+.ct-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  min-width: 0;
+}
+.ct-actions p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ct-actions > button {
+  min-height: 44px;
+}
+.ct-actions > button.secondary {
+  align-self: flex-start;
+  min-height: 40px;
+}
+.ct-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ct-field > span {
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.ct-count {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+}
+.ct-count button {
+  padding: 0;
+  font: 700 18px var(--mono);
+}
+
+.ct-picks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ct-picks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.ct-pick-word {
+  font: 700 18px var(--serif);
+  color: var(--text-h);
+}
+.ct-pick-who {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ct-picks button {
+  margin-left: auto;
+}
+
+/* 兩隊名單（選隊時和對局中） */
+.ct-teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px;
+}
+.ct-team {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--team);
+  border-radius: 10px;
+  background: var(--surface);
+  min-width: 0;
+}
+.ct-team h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 16px;
+  color: var(--team);
+}
+.ct-team h3 .muted {
+  font-size: 13px;
+  font-weight: 400;
+}
+.ct-team p {
+  margin: 0;
+  font-size: 13px;
+}
+.ct-team ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ct-team li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.ct-name {
+  font-weight: 600;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.ct-team li.me .ct-name {
+  color: var(--accent);
+}
+.ct-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ct-chips .chip {
+  margin: 0;
+}
+.ct-team > button {
+  margin-top: auto;
+}
+button.ct-join {
+  background: var(--team);
+  color: var(--ct-ink);
+}
+.ct-run {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ct-run button {
+  flex: 1 1 140px;
+  min-height: 44px;
+}
+
+.ct-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px;
+  border: 2px solid var(--team);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--team) 10%, var(--surface));
+  text-align: center;
+}
+.ct-result h3 {
+  margin: 0;
+  font: 700 clamp(26px, 8vw, 40px) var(--serif);
+  color: var(--team);
+}
+.ct-result p {
+  margin: 0;
+}
+.ct-result-me {
+  font-size: 18px;
+  color: var(--text-h);
+}
+
+.ct-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ct-log h3 {
+  margin: 0;
+}
+.ct-log ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ct-log li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--team);
+  border-radius: 10px;
+}
+.ct-log-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.ct-log-head strong {
+  color: var(--team);
+}
+.ct-log-flips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.ct-flip {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--kind);
+  color: var(--ct-ink);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
