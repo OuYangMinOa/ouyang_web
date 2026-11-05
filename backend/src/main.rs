@@ -13,7 +13,7 @@ use std::{
 use backend::{
     AppState, access_log, ai,
     auth::upsert_admin,
-    healthcheck,
+    draw_words, healthcheck,
     honeypot::Honeypot,
     monitor::{self, Monitor},
     router,
@@ -57,6 +57,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let commit = env::var("GIT_SHA").unwrap_or_else(|_| "local".into());
     let drain = Duration::from_secs(env::var("DRAIN_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(5));
 
+    // 你畫我猜的詞庫：內建的加上審核通過的投稿
+    draw_words::reload(&pool).await?;
     let mut state = AppState::new(pool.clone(), app_env.clone(), commit.clone());
     state.site_catalog = static_dir.join("site-catalog.json");
     state.cookie_secure = env::var("COOKIE_SECURE").is_ok_and(|v| v == "true");

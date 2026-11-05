@@ -44,7 +44,7 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system`、`/admin/ai`、`/admin/ai-tools`、`/admin/ai-usage` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/draw-words`、`/admin/system`、`/admin/ai`、`/admin/ai-tools`、`/admin/ai-usage` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 回報與許願
 
@@ -445,7 +445,18 @@ GET  /api/games/lobby/{code}/ws?player=<id>&name=<暱稱>
   用戶端靠版本把 view 裡的整張畫布和之後的事件接起來（`frontend/src/games/draw/board.ts`），重連、中途觀戰的人從 view 拿回整張畫布。
   畫的人送出前會拿掉幾乎在一直線上的點（偏離不到 1 個單位）。一棒最多 1000 筆、3 萬個點、倒 60 次顏料，一則訊息最多 200 個點；這款遊戲的限速放寬到每秒 50 則、一則 8 KB。
 - 音效（開關和背景音樂分開）：輪到自己畫、自己猜對、別人猜對、差一點、揭露提示、公布答案。合成器和俄羅斯方塊共用 `frontend/src/games/shared/sfx.ts`。
-- 詞庫在 `backend/src/draw_words.txt`（680 多個詞，分難度和分類）。
+- 詞庫在 `backend/src/draw_words.txt`（680 多個詞，分難度和分類），再加上玩家投稿、審核通過的詞（下面）。
+
+投稿題目（`backend/src/draw_words.rs`，資料表 `draw_words`）：
+
+- 登入的人在 `/games/draw` 開房間的地方展開「投稿題目」，一次可以投 50 個詞（同一個分類和難度），每個詞 2～8 個字、只能有文字和數字。
+  格式不對、題庫裡已經有、已經有人投過（含沒通過的）會跳過並說明原因；比對方式跟猜題一樣（全形半形、英文大小寫不分）。
+  每個人最多同時有 200 個待審核，待審核的可以自己收回。有 `admin.users` 的人投稿直接通過。
+- 管理員在 `/admin/draw-words` 審核：可以先改分類、難度再通過，可以勾選一次審很多個；通過的可以撤下，沒通過的刪掉那筆後那個詞才能再投。
+  頁面最下面是目前題庫各分類、各難度的詞數。
+- 遊戲用的詞庫放在記憶體（內建的接上通過的投稿），伺服器啟動時讀一次，之後改到通過的詞就整份換掉；進行中的那一局不受影響，下一局才用新的。
+- API：`GET/POST /api/games/draw/words`（自己的投稿／投稿）、`DELETE /api/games/draw/words/{id}`（收回）；
+  `GET /api/admin/draw-words`、`PUT /api/admin/draw-words/status`（`{ ids, status: approved|rejected }`）、`PATCH/DELETE /api/admin/draw-words/{id}`。
 
 ### 狼人殺
 
