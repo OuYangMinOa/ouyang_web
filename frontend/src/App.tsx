@@ -56,6 +56,11 @@ const DataMatrixPage = lazyPage(() => import('./datamatrix/DataMatrixPage'))
 const ThreadsSetup = lazyPage(() => import('./threads/SetupPage'))
 const ThreadsDownloads = lazyPage(() => import('./threads/DownloadsPage'))
 const ThreadsPaste = lazyPage(() => import('./threads/PastePage'))
+// AI 助手帶著 Markdown 的套件，進到那一頁才下載
+const AiChatPage = lazyPage(() => import('./ai/chat/ChatPage'))
+const AiToolsPage = lazyPage(() => import('./ai/chat/ToolsPage'))
+const AdminAiTools = lazyPage(() => import('./pages/admin/AiTools'))
+const AdminAiUsage = lazyPage(() => import('./pages/admin/AiUsage'))
 // 詳細頁帶著產生 QR Code 的 bwip-js
 const LinksPage = lazyPage(() => import('./links/LinksPage'))
 const LinkPage = lazyPage(() => import('./links/LinkPage'))
@@ -279,6 +284,18 @@ function App() {
                   <Route index element={<Lazy page={LinksPage} />} />
                   <Route path=":id" element={<Lazy page={LinkPage} />} />
                 </Route>
+                <Route
+                  path="/ai"
+                  element={
+                    <RequireAuth>
+                      <AppLayout />
+                    </RequireAuth>
+                  }
+                >
+                  {/* 哪個對話放在 ?c=：換對話不用換頁，第一次送出時建立對話，正在串流的回答不會中斷 */}
+                  <Route index element={<Lazy page={AiChatPage} />} />
+                  <Route path="tools" element={<Lazy page={AiToolsPage} />} />
+                </Route>
                 <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
@@ -310,6 +327,8 @@ function App() {
                   <Route path="system" element={<AdminSystem />} />
                   <Route path="games" element={<AdminGames />} />
                   <Route path="ai" element={<AdminAi />} />
+                  <Route path="ai-tools" element={<Lazy page={AdminAiTools} />} />
+                  <Route path="ai-usage" element={<Lazy page={AdminAiUsage} />} />
                 </Route>
                 <Route path="*" element={<p className="muted">找不到這個頁面。</p>} />
               </Routes>

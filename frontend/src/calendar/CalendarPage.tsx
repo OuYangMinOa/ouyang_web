@@ -17,6 +17,7 @@ import {
   type Day,
 } from './dates'
 import EventDialog, { type EditTarget } from './EventDialog'
+import QuickAdd from './QuickAdd'
 import { describeRepeat, occurrencesBetween, useCalendarEvents, type Occurrence } from './events'
 import { isDayOff, marksOf, type DayMark } from './holidays'
 import { ganzhiYear, lunarDayName, lunarLabel, lunarMonthName, lunarOf, zodiac } from './lunar'
@@ -368,6 +369,8 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      <QuickAdd onDraft={(draft) => setEditing({ date: parseDay(draft.start_date), draft })} />
+
       <div className="checks cal-filters">
         <label>
           <input type="checkbox" checked={filters.lunar} onChange={() => toggle('lunar')} />
@@ -420,7 +423,7 @@ export default function CalendarPage() {
 
       {editing && (
         <EventDialog
-          key={`${editing.event?.id}:${editing.occurrence}:${editing.date}`}
+          key={`${editing.event?.id}:${editing.occurrence}:${editing.date}:${editing.draft?.title}`}
           target={editing}
           onChanged={reload}
           onClose={() => setEditing(null)}

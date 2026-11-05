@@ -44,7 +44,7 @@ impl Permission for AdminUsers {
     const NAME: &'static str = "admin.users";
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct CurrentUser {
     pub id: i64,
     pub username: String,

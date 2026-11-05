@@ -23,10 +23,10 @@ export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: stri
  * 還沒開始就失敗（AI 掛了、沒設定、輸入有問題）會丟 ApiError；這時順便重新看一次 AI 的狀態，
  * 頁面上的 <AiStatusNotice /> 會馬上出現，不用等下一次定時檢查。
  */
-export async function streamChat(
+export async function streamChat<E extends { type: string } = AiEvent>(
   path: string,
   body: unknown,
-  onEvent: (event: AiEvent) => void,
+  onEvent: (event: E) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`/api${path}`, {
@@ -47,7 +47,7 @@ export async function streamChat(
   const flush = (text: string) => {
     for (const line of text.split('\n')) {
       if (!line.trim()) continue
-      const event = JSON.parse(line) as AiEvent
+      const event = JSON.parse(line) as E
       if (event.type === 'error') refreshAiStatus()
       onEvent(event)
     }
