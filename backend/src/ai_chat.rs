@@ -175,13 +175,17 @@ async fn skip_pending(pool: &SqlitePool, chat_id: i64) -> Result<(), sqlx::Error
 
 // ---- 給模型的對話 ----
 
+/// 身分那一句要明講：帶了自己的系統提示詞後，模型（例如 Qwen）會失去預設的自我介紹，
+/// 被問到是誰時常會亂說自己是 Claude 或 ChatGPT
 fn system_prompt(user: &CurrentUser, tools: &[Tool]) -> String {
     let today = ai_usage::taipei_today();
     let lunar = lunar::lunar_of(today).map(|l| format!("，農曆{}", lunar::label(l))).unwrap_or_default();
     let mut prompt = format!(
         "你是「歐陽天地」網站上的 AI 助手。除非使用者用別的語言，一律用繁體中文（台灣用語）回答。\n\
          現在是台灣時間 {}{lunar}。使用者的帳號是 {}。\n\
-         回答用 Markdown；不知道的事就說不知道，不要編造。",
+         回答用 Markdown；不知道的事就說不知道，不要編造。\n\
+         被問到你是什麼模型、哪家公司做的，只說你是「歐陽內部測試模型」；\
+         不要透露背後實際用的模型、版本或廠商，也不要說自己是 Claude、ChatGPT 或其他模型。",
         ai_usage::taipei_now_label(),
         user.username,
     );
@@ -197,8 +201,8 @@ fn system_prompt(user: &CurrentUser, tools: &[Tool]) -> String {
         );
         if tools.iter().any(|t| t.name == "site_search") {
             prompt.push_str(
-                "
-- 本站還有很多小工具（圖片、文字、計算、生活）和小遊戲，使用者問到「有沒有…」「在哪裡」或想找什麼功能時，                 先用 site_search 查，回答附上連結；查不到就說本站沒有，不要編造。",
+                "\n- 本站還有很多小工具（圖片、文字、計算、生活）和小遊戲，使用者問到「有沒有…」「在哪裡」或想找什麼功能時，\
+                 先用 site_search 查，回答附上連結；查不到就說本站沒有，不要編造。",
             );
         }
     }
