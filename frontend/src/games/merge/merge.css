@@ -1,0 +1,228 @@
+/* ---- 數字合併 ---- */
+
+.mg-box {
+  /* 在盤面上滑動是移動方塊，不能讓頁面跟著捲動或縮放 */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * 格子的間距和大小跟著盤面寬度縮放：盤面是 container，子元素裡的 cqi 就是盤面寬度的百分之一。
+ * --gap、--tile 在這裡定義，但只在子元素裡用到，所以 cqi 量的是盤面
+ */
+.mg-board {
+  --gap: calc(12cqi / (var(--n) + 1));
+  --tile: calc((100cqi - (var(--n) + 1) * var(--gap)) / var(--n));
+  --radius: calc(var(--tile) * 0.12);
+  position: relative;
+  container-type: inline-size;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: var(--mg-board);
+}
+
+.mg-slots {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  grid-template-rows: repeat(var(--n), 1fr);
+  gap: var(--gap);
+  padding: var(--gap);
+}
+.mg-slot {
+  border-radius: var(--radius);
+  background: var(--mg-slot);
+}
+
+.mg-tiles {
+  position: absolute;
+  inset: 0;
+}
+
+/* 外層負責位置（換格子時滑過去），內層負責出現、合併的縮放動畫，兩個 transform 才不會互相蓋掉 */
+.mg-tile {
+  position: absolute;
+  top: var(--gap);
+  left: var(--gap);
+  width: var(--tile);
+  height: var(--tile);
+  z-index: 1;
+  transform: translate(
+    calc(var(--c) * (var(--tile) + var(--gap))),
+    calc(var(--r) * (var(--tile) + var(--gap)))
+  );
+  transition: transform 100ms ease-in-out;
+}
+/* 被合併掉的兩塊滑到位置後，被合出來的新方塊蓋住 */
+.mg-tile.mg-gone {
+  z-index: 0;
+}
+
+.mg-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius);
+  background: var(--tile-bg);
+  color: var(--tile-ink);
+  font: 700 var(--fs) / 1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* 位數越多字越小 */
+.mg-d1,
+.mg-d2 {
+  --fs: calc(var(--tile) * 0.5);
+}
+.mg-d3 {
+  --fs: calc(var(--tile) * 0.4);
+}
+.mg-d4 {
+  --fs: calc(var(--tile) * 0.31);
+}
+.mg-d5 {
+  --fs: calc(var(--tile) * 0.25);
+}
+
+/* 顏色從冷到暖：藍、青、綠、金、橘、紅、紫，最大的亮色是墨底金字、深色是紙底橘字（字色分組見 index.css） */
+.mg-v1 {
+  --tile-bg: var(--mg-1);
+  --tile-ink: var(--mg-ink-a);
+}
+.mg-v2 {
+  --tile-bg: var(--mg-2);
+  --tile-ink: var(--mg-ink-a);
+}
+.mg-v3 {
+  --tile-bg: var(--mg-3);
+  --tile-ink: var(--mg-ink-a);
+}
+.mg-v4 {
+  --tile-bg: var(--mg-4);
+  --tile-ink: var(--mg-ink-b);
+}
+.mg-v5 {
+  --tile-bg: var(--mg-5);
+  --tile-ink: var(--mg-ink-b);
+}
+.mg-v6 {
+  --tile-bg: var(--mg-6);
+  --tile-ink: var(--mg-ink-b);
+}
+.mg-v7 {
+  --tile-bg: var(--mg-7);
+  --tile-ink: var(--mg-ink-c);
+}
+.mg-v8 {
+  --tile-bg: var(--mg-8);
+  --tile-ink: var(--mg-ink-c);
+}
+.mg-v9 {
+  --tile-bg: var(--mg-9);
+  --tile-ink: var(--mg-ink-d);
+}
+.mg-v10 {
+  --tile-bg: var(--mg-10);
+  --tile-ink: var(--mg-ink-d);
+}
+.mg-v11 {
+  --tile-bg: var(--mg-11);
+  --tile-ink: var(--mg-ink-d);
+}
+.mg-v12 {
+  --tile-bg: var(--mg-12);
+  --tile-ink: var(--mg-ink-e);
+}
+/* 1024 以上會發光 */
+.mg-v10 .mg-face,
+.mg-v11 .mg-face,
+.mg-v12 .mg-face {
+  box-shadow: 0 0 calc(var(--tile) * 0.28) color-mix(in srgb, var(--tile-bg) 55%, transparent);
+}
+
+/* 新冒出來的、合出來的方塊等其他方塊滑完才出現（backwards：等待的時候停在第一格，也就是看不到） */
+.mg-new .mg-face {
+  animation: mg-appear 160ms ease-out 90ms backwards;
+}
+.mg-merged .mg-face {
+  animation: mg-pop 200ms ease-out 90ms backwards;
+}
+@keyframes mg-appear {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+@keyframes mg-pop {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.16);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 分數右上角往上飄的「+分數」（不放正上方：手機上會蓋到標題） */
+.mg-score {
+  position: relative;
+}
+.mg-gain {
+  position: absolute;
+  left: 100%;
+  bottom: 55%;
+  margin-left: 2px;
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: mg-rise 700ms ease-out forwards;
+}
+@keyframes mg-rise {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+.mg-best {
+  font-weight: 400;
+  color: var(--text);
+}
+
+.mg-overlay-title {
+  font-size: 20px;
+}
+.mg-overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mg-tile {
+    transition: none;
+  }
+  .mg-new .mg-face,
+  .mg-merged .mg-face,
+  .mg-gain {
+    animation: none;
+  }
+  .mg-gain {
+    display: none;
+  }
+}
