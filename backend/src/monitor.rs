@@ -9,7 +9,9 @@
 //! 磁碟是資料庫所在的分割區（容器裡的 /data volume，在 EC2 上就是根目錄那顆 EBS）。
 //! 網路讀 1 號行程（主機的 init）的 /proc/1/net/dev，才是主機的網卡而不是容器的。
 //!
-//! 背景每 5 秒取樣一次：最近 1 小時每 5 秒一點、最近 24 小時每分鐘一點，只放在記憶體，重啟後重新累積。
+//! 背景每 5 秒取樣一次。最近 1 小時的 5 秒點只放在記憶體；每分鐘的平均寫進資料庫（`monitor_points`，保留 7 天），
+//! 24 小時和 7 天的圖從資料庫讀，換版重啟後也還在。換版時新舊兩個容器同時在取樣，分鐘點對齊到整分鐘，
+//! 同一分鐘留取樣點多的那一筆。
 //! 本機開發（Windows、macOS）沒有 /proc，頁面會顯示讀不到。
 
 use std::{
@@ -35,11 +37,18 @@ use crate::{
 };
 
 const SAMPLE_EVERY: Duration = Duration::from_secs(5);
-/// 1 小時的 5 秒點
+/// 1 小時的 5 秒點，只放在記憶體
 const RECENT_POINTS: usize = 720;
-/// 24 小時的 1 分鐘點，每 12 個 5 秒點平均成一個
-const DAY_POINTS: usize = 1440;
-const POINTS_PER_MINUTE: usize = 12;
+const MINUTE_MS: i64 = 60_000;
+const HOUR_MS: i64 = 60 * MINUTE_MS;
+const DAY_MS: i64 = 24 * HOUR_MS;
+/// 每分鐘的平均在資料庫裡留多久，也是最長的圖
+const KEEP_MS: i64 = 7 * DAY_MS;
+/// 7 天的圖每 10 分鐘一點，約 1000 點
+const WEEK_STEP_MS: i64 = 10 * MINUTE_MS;
+/// 資料庫寫不進去時，最多先在記憶體留 1 小時的分鐘點
+const MAX_PENDING: usize = 60;
+const CLEANUP_EVERY: Duration = Duration::from_secs(60 * 60);
 const MAX_CMD_LEN: usize = 200;
 const MAX_TARGETS: i64 = 20;
 const MAX_LABEL_LEN: usize = 40;
@@ -64,9 +73,17 @@ struct Inner {
     latest: Option<Snapshot>,
     error: Option<String>,
     recent: VecDeque<Point>,
-    day: VecDeque<Point>,
-    /// 還沒湊滿一分鐘的點
+    /// 這一分鐘到目前為止的點，換到下一分鐘時平均成一點放進 pending
     minute: Vec<Point>,
+    /// 平均好、還沒寫進資料庫的分鐘點
+    pending: VecDeque<Minute>,
+}
+
+#[derive(Clone)]
+struct Minute {
+    /// t 是這一分鐘的開始
+    point: Point,
+    samples: usize,
 }
 
 /// 上一次取樣的累計值，這次減掉它才算得出速率
@@ -185,7 +202,7 @@ pub struct Point {
     pub targets: Vec<TargetPoint>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TargetPoint {
     pub id: i64,
     pub cpu: f64,
@@ -211,14 +228,52 @@ impl Monitor {
 
     /// 取樣一次。背景每 5 秒呼叫；測試直接呼叫
     pub fn sample(&self, targets: &[Target]) -> io::Result<()> {
-        let result = self.collect(targets);
+        self.sample_at(targets, Utc::now().timestamp_millis())
+    }
+
+    /// 當成在 `at`（Unix 毫秒）取樣，測試用來跨過整分鐘
+    pub fn sample_at(&self, targets: &[Target], at: i64) -> io::Result<()> {
+        let result = self.collect(targets, at);
         if let Err(err) = &result {
             self.inner.lock().unwrap().error = Some(format!("讀不到 {}：{err}", self.proc_dir.display()));
         }
         result
     }
 
-    fn collect(&self, targets: &[Target]) -> io::Result<()> {
+    /// 把平均好的分鐘點寫進資料庫。背景每次取樣完呼叫；測試直接呼叫
+    pub async fn flush(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
+        let minutes: Vec<Minute> = self.inner.lock().unwrap().pending.iter().cloned().collect();
+        let Some(last) = minutes.last().map(|m| m.point.t) else { return Ok(()) };
+        let mut tx = pool.begin().await?;
+        for Minute { point: p, samples } in &minutes {
+            sqlx::query(
+                "INSERT INTO monitor_points (t, samples, cpu, mem_used, rx_bps, tx_bps, read_bps, write_bps, targets)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT (t) DO UPDATE SET
+                     samples = excluded.samples, cpu = excluded.cpu, mem_used = excluded.mem_used,
+                     rx_bps = excluded.rx_bps, tx_bps = excluded.tx_bps,
+                     read_bps = excluded.read_bps, write_bps = excluded.write_bps, targets = excluded.targets
+                 WHERE excluded.samples > monitor_points.samples",
+            )
+            .bind(p.t)
+            .bind(*samples as i64)
+            .bind(p.cpu)
+            .bind(p.mem_used as i64)
+            .bind(p.rx_bps)
+            .bind(p.tx_bps)
+            .bind(p.read_bps)
+            .bind(p.write_bps)
+            .bind(serde_json::to_string(&p.targets).unwrap_or_else(|_| "[]".into()))
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        // 寫的期間又平均好的分鐘留著，下次再寫
+        self.inner.lock().unwrap().pending.retain(|m| m.point.t > last);
+        Ok(())
+    }
+
+    fn collect(&self, targets: &[Target], at: i64) -> io::Result<()> {
         let stat = self.read("stat")?;
         let meminfo = self.read("meminfo")?;
         let now = Instant::now();
@@ -293,7 +348,7 @@ impl Monitor {
         groups.sort_by(|a, b| b.rss.cmp(&a.rss));
 
         let snapshot = Snapshot {
-            sampled_at: Utc::now().timestamp_millis(),
+            sampled_at: at,
             kernel: self.read("sys/kernel/osrelease").map(|s| s.trim().to_owned()).unwrap_or_default(),
             cpu_model: self.read("cpuinfo").map(|s| parse_cpu_model(&s)).unwrap_or_default(),
             cpus,
@@ -330,11 +385,14 @@ impl Monitor {
                     .collect(),
             };
             push_capped(&mut inner.recent, point.clone(), RECENT_POINTS);
-            inner.minute.push(point);
-            if inner.minute.len() >= POINTS_PER_MINUTE {
-                let minute = std::mem::take(&mut inner.minute);
-                push_capped(&mut inner.day, average(&minute), DAY_POINTS);
+            // 換到下一分鐘了：上一分鐘的點平均起來等著寫進資料庫
+            if inner.minute.first().is_some_and(|first| floor_to(first.t, MINUTE_MS) != floor_to(point.t, MINUTE_MS)) {
+                let points = std::mem::take(&mut inner.minute);
+                let minute =
+                    Minute { point: average(&points, floor_to(points[0].t, MINUTE_MS)), samples: points.len() };
+                push_capped(&mut inner.pending, minute, MAX_PENDING);
             }
+            inner.minute.push(point);
         }
 
         inner.prev = Some(Counters { at: now, cpu: cpu_times, net, disk: disk_io, procs: counters });
@@ -372,8 +430,30 @@ fn push_capped<T>(queue: &mut VecDeque<T>, item: T, cap: usize) {
     queue.push_back(item);
 }
 
-/// 一分鐘裡的點平均成一個；監控目標用 id 對齊（中途新增的只平均有出現的點）
-fn average(points: &[Point]) -> Point {
+/// 對齊到 `step` 毫秒的整數倍，例如整分鐘
+fn floor_to(t: i64, step: i64) -> i64 {
+    t - t.rem_euclid(step)
+}
+
+/// 依時間每 `step` 毫秒平均成一點，t 是那一段的開始（點要依時間排好）
+fn downsample(points: Vec<Point>, step: i64) -> Vec<Point> {
+    let mut out = Vec::new();
+    let mut bucket: Vec<Point> = Vec::new();
+    for point in points {
+        if bucket.first().is_some_and(|first| floor_to(first.t, step) != floor_to(point.t, step)) {
+            out.push(average(&bucket, floor_to(bucket[0].t, step)));
+            bucket.clear();
+        }
+        bucket.push(point);
+    }
+    if let Some(first) = bucket.first() {
+        out.push(average(&bucket, floor_to(first.t, step)));
+    }
+    out
+}
+
+/// 一段時間裡的點平均成時間是 `t` 的一點；監控目標用 id 對齊（中途新增的只平均有出現的點）
+fn average(points: &[Point], t: i64) -> Point {
     let n = points.len().max(1) as f64;
     let mean = |f: fn(&Point) -> f64| points.iter().map(f).sum::<f64>() / n;
     let mut targets: Vec<(TargetPoint, f64)> = Vec::new();
@@ -391,7 +471,7 @@ fn average(points: &[Point]) -> Point {
         }
     }
     Point {
-        t: points.first().map_or(0, |p| p.t),
+        t,
         cpu: mean(|p| p.cpu),
         mem_used: mean(|p| p.mem_used as f64) as u64,
         rx_bps: mean(|p| p.rx_bps),
@@ -668,17 +748,46 @@ async fn load_targets(pool: &SqlitePool) -> Result<Vec<Target>, sqlx::Error> {
     sqlx::query_as("SELECT id, label, pattern FROM monitor_targets ORDER BY id").fetch_all(pool).await
 }
 
-/// 背景每 5 秒取樣一次
+/// `monitor_points` 的一列：t、cpu、mem_used、rx_bps、tx_bps、read_bps、write_bps、targets（JSON）
+type PointRow = (i64, f64, i64, f64, f64, f64, f64, String);
+
+/// 資料庫裡 `since`（Unix 毫秒）之後的分鐘點，依時間排好
+async fn stored_minutes(pool: &SqlitePool, since: i64) -> Result<Vec<Point>, sqlx::Error> {
+    let rows: Vec<PointRow> = sqlx::query_as(
+        "SELECT t, cpu, mem_used, rx_bps, tx_bps, read_bps, write_bps, targets
+         FROM monitor_points WHERE t >= ? ORDER BY t",
+    )
+    .bind(since)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(t, cpu, mem_used, rx_bps, tx_bps, read_bps, write_bps, targets)| Point {
+            t,
+            cpu,
+            mem_used: mem_used.max(0) as u64,
+            rx_bps,
+            tx_bps,
+            read_bps,
+            write_bps,
+            // 解不開就當成沒有監控目標，主機的線照樣畫得出來
+            targets: serde_json::from_str(&targets).unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// 背景每 5 秒取樣一次，平均好的分鐘點接著寫進資料庫，每小時清掉超過 7 天的
 pub fn spawn(monitor: Arc<Monitor>, pool: SqlitePool) {
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(SAMPLE_EVERY);
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut warned = false;
+        let mut cleaned_at: Option<Instant> = None;
         loop {
             tick.tick().await;
             let targets = load_targets(&pool).await.unwrap_or_default();
-            let monitor = monitor.clone();
-            match tokio::task::spawn_blocking(move || monitor.sample(&targets)).await {
+            let sampler = monitor.clone();
+            match tokio::task::spawn_blocking(move || sampler.sample(&targets)).await {
                 Ok(Ok(())) => warned = false,
                 // 本機開發沒有 /proc，只警告一次
                 Ok(Err(err)) if !warned => {
@@ -687,6 +796,19 @@ pub fn spawn(monitor: Arc<Monitor>, pool: SqlitePool) {
                 }
                 Ok(Err(_)) => {}
                 Err(err) => tracing::warn!(error = %err, "host monitor sampling panicked"),
+            }
+            if let Err(err) = monitor.flush(&pool).await {
+                tracing::warn!(error = %err, "failed to save host monitor history");
+            }
+            if cleaned_at.is_none_or(|at| at.elapsed() >= CLEANUP_EVERY) {
+                cleaned_at = Some(Instant::now());
+                let deleted = sqlx::query("DELETE FROM monitor_points WHERE t < ?")
+                    .bind(Utc::now().timestamp_millis() - KEEP_MS)
+                    .execute(&pool)
+                    .await;
+                if let Err(err) = deleted {
+                    tracing::warn!(error = %err, "failed to clean up host monitor history");
+                }
             }
         }
     });
@@ -718,7 +840,7 @@ pub async fn status(
 
 #[derive(Deserialize)]
 pub struct HistoryQuery {
-    /// `1h`（每 5 秒一點，預設）或 `24h`（每分鐘一點）
+    /// `1h`（每 5 秒一點，預設）、`24h`（每分鐘一點）或 `7d`（每 10 分鐘一點）
     #[serde(default)]
     pub range: String,
 }
@@ -733,19 +855,41 @@ pub async fn history(
     Require(_, _): Require<AdminUsers>,
     State(state): State<AppState>,
     Query(query): Query<HistoryQuery>,
-) -> Json<HistoryReply> {
-    let inner = state.monitor.inner.lock().unwrap();
-    let (step_secs, points) = if query.range == "24h" {
-        // 還沒湊滿一分鐘的也平均起來接在最後
-        let mut points: Vec<Point> = inner.day.iter().cloned().collect();
-        if !inner.minute.is_empty() {
-            points.push(average(&inner.minute));
-        }
-        (60, points)
-    } else {
-        (SAMPLE_EVERY.as_secs(), inner.recent.iter().cloned().collect())
+) -> Result<Json<HistoryReply>, AppError> {
+    let (span, step) = match query.range.as_str() {
+        "7d" => (KEEP_MS, WEEK_STEP_MS),
+        "24h" => (DAY_MS, MINUTE_MS),
+        _ => (HOUR_MS, SAMPLE_EVERY.as_millis() as i64),
     };
-    Json(HistoryReply { step_secs, points })
+    let since = Utc::now().timestamp_millis() - span;
+    // 先複製記憶體裡的，鎖不能跨過下面的資料庫查詢
+    let (recent, unsaved) = {
+        let inner = state.monitor.inner.lock().unwrap();
+        let mut unsaved: Vec<Point> = inner.pending.iter().map(|m| m.point.clone()).collect();
+        // 還沒過完的這一分鐘也平均起來接在最後
+        if let Some(first) = inner.minute.first() {
+            unsaved.push(average(&inner.minute, floor_to(first.t, MINUTE_MS)));
+        }
+        let recent: Vec<Point> = if span == HOUR_MS { inner.recent.iter().cloned().collect() } else { Vec::new() };
+        (recent, unsaved)
+    };
+    let mut minutes = stored_minutes(&state.pool, since).await?;
+    // 複製之後才寫進去的分鐘兩邊都有，只接比資料庫新的
+    let last = minutes.last().map_or(i64::MIN, |p| p.t);
+    minutes.extend(unsaved.into_iter().filter(|p| p.t > last && p.t >= since));
+
+    let points = match span {
+        KEEP_MS => downsample(minutes, WEEK_STEP_MS),
+        DAY_MS => minutes,
+        _ => {
+            // 以記憶體裡的 5 秒點為主；剛重啟還不滿 1 小時的部分，用資料庫的分鐘點補在前面
+            let first = recent.first().map_or(i64::MAX, |p| p.t);
+            let mut points: Vec<Point> = minutes.into_iter().filter(|p| p.t + MINUTE_MS <= first).collect();
+            points.extend(recent);
+            points
+        }
+    };
+    Ok(Json(HistoryReply { step_secs: (step / 1000) as u64, points }))
 }
 
 #[derive(Deserialize)]

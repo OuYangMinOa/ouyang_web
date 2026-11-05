@@ -207,3 +207,97 @@ async fn samples_host_and_groups_processes() {
 
     let _ = std::fs::remove_dir_all(&proc_dir);
 }
+
+async fn stored_samples(app: &TestApp) -> Vec<(i64, i64)> {
+    sqlx::query_as("SELECT t, samples FROM monitor_points ORDER BY t").fetch_all(&app.state.pool).await.unwrap()
+}
+
+/// 跨過整分鐘時把上一分鐘的平均寫進資料庫。換版時新舊兩個容器都在取樣，同一分鐘留取樣點多的；
+/// 重啟後 24 小時、7 天的圖從資料庫讀，1 小時的圖用分鐘點補上重啟前的部分。
+#[tokio::test]
+async fn keeps_minutes_in_database_across_restarts() {
+    let proc_dir = fake_proc("minutes");
+    let mut app = app().await;
+    let admin = login_admin(&app).await;
+    let now = chrono::Utc::now().timestamp_millis();
+    // 10 分鐘前的整分鐘
+    let m = now - now.rem_euclid(60_000) - 10 * 60_000;
+
+    let old = Monitor::new(&proc_dir, ".");
+    let new = Monitor::new(&proc_dir, ".");
+    let mut step = 0;
+    let mut tick = |monitor: &Monitor, secs: i64| {
+        write_counters(&proc_dir, step);
+        step += 1;
+        monitor.sample_at(&[], m + secs * 1000).unwrap();
+    };
+
+    // 第 m 分鐘：舊容器 3 個點（第一次取樣沒有上一次可以比，不算），新容器中途啟動只有 1 個點
+    for secs in [0, 5, 10, 15] {
+        tick(&old, secs);
+    }
+    tick(&new, 40);
+    tick(&new, 45);
+    // 下一分鐘的第一個點把上一分鐘平均起來
+    tick(&old, 60);
+    tick(&new, 65);
+    // 新容器先寫進去，舊容器的點比較多，蓋過去
+    new.flush(&app.state.pool).await.unwrap();
+    assert_eq!(stored_samples(&app).await, [(m, 1)]);
+    old.flush(&app.state.pool).await.unwrap();
+    assert_eq!(stored_samples(&app).await, [(m, 3)]);
+
+    // 第 m+1 分鐘：舊容器先寫，新容器的點比較少，不蓋
+    tick(&old, 70);
+    tick(&old, 80);
+    tick(&old, 120);
+    tick(&new, 125);
+    old.flush(&app.state.pool).await.unwrap();
+    new.flush(&app.state.pool).await.unwrap();
+    assert_eq!(stored_samples(&app).await, [(m, 3), (m + 60_000, 3)]);
+
+    // 3 天前同一個 10 分鐘裡的兩分鐘（7 天的圖平均成一點），以及超過 7 天的
+    let week_ago = now - 3 * 86_400_000;
+    let bucket = week_ago - week_ago.rem_euclid(600_000);
+    for (t, cpu) in [(bucket, 20.0), (bucket + 60_000, 40.0), (now - 8 * 86_400_000, 90.0)] {
+        sqlx::query("INSERT INTO monitor_points (t, samples, cpu, mem_used, rx_bps, tx_bps, read_bps, write_bps) VALUES (?, 12, ?, 0, 0, 0, 0, 0)")
+            .bind(t)
+            .bind(cpu)
+            .execute(&app.state.pool)
+            .await
+            .unwrap();
+    }
+
+    // 重啟：記憶體裡什麼都沒有，只取樣了一次（還沒有點）
+    let restarted = Arc::new(Monitor::new(&proc_dir, "."));
+    write_counters(&proc_dir, step);
+    restarted.sample_at(&[], m + 180_000).unwrap();
+    app.state.monitor = restarted.clone();
+    app.router = router(app.state.clone(), std::path::Path::new("does-not-exist"));
+
+    let times = |body: &Value| -> Vec<i64> {
+        body["points"].as_array().unwrap().iter().map(|p| p["t"].as_i64().unwrap()).collect()
+    };
+    let day = app.get("/api/admin/system/history?range=24h", Some(&admin)).await.body;
+    assert_eq!(day["step_secs"], 60);
+    assert_eq!(times(&day), [m, m + 60_000]);
+    assert_eq!(day["points"][0]["cpu"], 50.0);
+
+    let week = app.get("/api/admin/system/history?range=7d", Some(&admin)).await.body;
+    assert_eq!(week["step_secs"], 600);
+    let week_times = times(&week);
+    assert_eq!(week_times[0], bucket);
+    assert_eq!(week["points"][0]["cpu"], 30.0);
+    // 最近的兩分鐘可能落在同一個或相鄰的 10 分鐘
+    assert!(matches!(week_times.len(), 2 | 3), "{week_times:?}");
+
+    // 1 小時：重啟後的 5 秒點接在資料庫的分鐘點後面
+    assert_eq!(times(&app.get("/api/admin/system/history?range=1h", Some(&admin)).await.body), [m, m + 60_000]);
+    write_counters(&proc_dir, step + 1);
+    restarted.sample_at(&[], m + 185_000).unwrap();
+    let hour = app.get("/api/admin/system/history?range=1h", Some(&admin)).await.body;
+    assert_eq!(hour["step_secs"], 5);
+    assert_eq!(times(&hour), [m, m + 60_000, m + 185_000]);
+
+    let _ = std::fs::remove_dir_all(&proc_dir);
+}
