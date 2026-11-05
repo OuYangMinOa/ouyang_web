@@ -15,6 +15,7 @@ pub mod games;
 pub mod honeypot;
 pub mod invoice;
 pub mod justone;
+pub mod liarsdice;
 pub mod lobby;
 pub mod minesrace;
 pub mod monitor;
@@ -91,6 +92,7 @@ pub struct AppState {
     pub uno: Arc<party::Parties<uno::Uno>>,
     pub justone: Arc<party::Parties<justone::JustOne>>,
     pub contact: Arc<party::Parties<contact::Contact>>,
+    pub liarsdice: Arc<party::Parties<liarsdice::LiarsDice>>,
     pub telephone: Arc<party::Parties<telephone::Telephone>>,
     pub poker: Arc<party::Parties<poker::Poker>>,
     pub werewolf: Arc<party::Parties<werewolf::Werewolf>>,
@@ -142,6 +144,7 @@ impl AppState {
             uno: Arc::default(),
             justone: Arc::default(),
             contact: Arc::default(),
+            liarsdice: Arc::default(),
             telephone: Arc::default(),
             poker: Arc::default(),
             werewolf: Arc::default(),
@@ -243,6 +246,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/justone/party/{code}/ws", get(party::connect::<justone::JustOne>))
         .route("/games/contact/party", post(party::create::<contact::Contact>))
         .route("/games/contact/party/{code}/ws", get(party::connect::<contact::Contact>))
+        .route("/games/liarsdice/party", post(party::create::<liarsdice::LiarsDice>))
+        .route("/games/liarsdice/party/{code}/ws", get(party::connect::<liarsdice::LiarsDice>))
         .route("/games/telephone/party", post(party::create::<telephone::Telephone>))
         .route("/games/telephone/party/{code}/ws", get(party::connect::<telephone::Telephone>))
         .route("/games/poker/party", post(party::create::<poker::Poker>))

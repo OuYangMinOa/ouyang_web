@@ -1,0 +1,730 @@
+/* ---- 吹牛骰子 ----
+   顏色都借現有的變數：骰子用撲克牌的牌面（--card-face／--card-ink，一點和四點是 --card-red 的紅點），
+   桌子是 --felt，骰盅是木頭色的 --felt-rim 配 --chip 的金邊，兩種主題都已經有了 */
+
+.ld {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ld-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.ld-board .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+  text-align: center;
+}
+.ld-info {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 14px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+.ld-wild-on {
+  color: var(--ok);
+  font-weight: 600;
+}
+.ld-game-no,
+.ld-note {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+}
+
+.ld-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---- 骰子：3×3 的格子放點 ---- */
+
+.ld-die {
+  --d: 28px;
+  display: inline-grid;
+  grid-template: repeat(3, minmax(0, 1fr)) / repeat(3, minmax(0, 1fr));
+  flex: 0 0 auto;
+  width: var(--d);
+  height: var(--d);
+  box-sizing: border-box;
+  padding: calc(var(--d) * 0.13);
+  border: 1px solid var(--card-edge);
+  border-radius: calc(var(--d) * 0.22);
+  background: var(--card-face);
+  box-shadow:
+    inset 0 calc(var(--d) * -0.06) 0 rgb(0 0 0 / 0.1),
+    0 1px 2px rgb(0 0 0 / 0.25);
+  vertical-align: middle;
+  user-select: none;
+}
+.ld-die > .pip {
+  place-self: center;
+  width: 74%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--card-ink);
+}
+/* 一點和四點是紅點，一點的點特別大 */
+.ld-die.red > .pip {
+  background: var(--card-red);
+}
+.ld-die.f1 > .pip {
+  transform: scale(1.6);
+}
+.ld-die.sm {
+  --d: 20px;
+}
+.ld-die.lg {
+  --d: 46px;
+}
+
+/* 揭曉時：符合的（本身就是喊的點數）、萬用的一點、不算的 */
+.ld-die.match,
+.ld-die.mark {
+  box-shadow:
+    0 0 0 3px var(--accent),
+    0 2px 5px rgb(0 0 0 / 0.3);
+}
+.ld-die.wild {
+  outline: 3px dashed var(--ok);
+  outline-offset: 1px;
+}
+.ld-die.miss {
+  opacity: 0.38;
+  filter: saturate(0.3);
+}
+
+/* 喊價：「3 個 ⚄」 */
+.ld-bid {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.ld-bid.big {
+  gap: 8px;
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+/* ---- 骰盅：木頭色的杯子、金色的邊；換骰子時搖一下，揭曉時掀起來 ---- */
+
+.ld-cup {
+  --c: 28px;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--c);
+  height: calc(var(--c) * 0.9);
+  border-radius: 46% 46% 14% 14% / 40% 40% 12% 12%;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--felt-rim) 65%, var(--chip)) 0 18%, var(--felt-rim) 46%);
+  box-shadow:
+    inset calc(var(--c) * -0.12) calc(var(--c) * -0.08) 0 rgb(0 0 0 / 0.22),
+    0 2px 3px rgb(0 0 0 / 0.25);
+  transform-origin: 50% 90%;
+  transition:
+    transform 0.45s ease,
+    opacity 0.45s ease;
+}
+.ld-cup::after {
+  content: '';
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 14%;
+  height: 12%;
+  border-radius: 3px;
+  background: var(--chip);
+  opacity: 0.85;
+}
+.ld-cup.sm {
+  --c: 26px;
+}
+.ld-cup.lg {
+  --c: 92px;
+}
+.ld-cup.shake {
+  animation: ld-shake 0.32s ease-in-out 4;
+}
+.ld-cup.lifted {
+  transform: translateY(-5px) rotate(-20deg);
+  opacity: 0.45;
+}
+@keyframes ld-shake {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0);
+  }
+  25% {
+    transform: translate(-3px, -5px) rotate(-12deg);
+  }
+  50% {
+    transform: translate(2px, -1px) rotate(9deg);
+  }
+  75% {
+    transform: translate(-1px, -6px) rotate(-6deg);
+  }
+}
+
+/* ---- 桌子中間：現在的喊價、這輪喊過的 ---- */
+
+.ld-felt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 96px;
+  box-sizing: border-box;
+  padding: 14px 10px;
+  border-radius: 16px;
+  background: var(--felt);
+  color: var(--on-felt);
+  box-shadow: inset 0 0 0 5px var(--felt-rim);
+  text-align: center;
+}
+.ld-current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  animation: ld-pop 0.35s ease-out both;
+}
+.ld-current-who {
+  font-size: 14px;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+.ld-table-hint {
+  margin: 0;
+  font-size: 15px;
+  opacity: 0.85;
+}
+.ld-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+.ld-history li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.ld-history-who {
+  overflow-wrap: anywhere;
+}
+
+/* ---- 其他玩家：最多 9 家，自動排成幾欄 ---- */
+
+.ld-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 8px;
+}
+@media (max-width: 420px) {
+  .ld-seats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ld-seat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-h);
+}
+.ld-seat.turn,
+.ld-seat.won,
+.ld-seat.lost {
+  border-width: 2px;
+  padding: 7px 9px;
+}
+.ld-seat.turn {
+  border-color: var(--accent);
+}
+.ld-seat.won {
+  border-color: var(--ok);
+}
+.ld-seat.lost {
+  border-color: var(--danger);
+}
+.ld-seat.out {
+  opacity: 0.55;
+}
+.ld-seat-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+}
+.ld-seat-head .chip {
+  margin: 0;
+}
+.ld-seat-name {
+  margin-right: 2px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.ld-seat-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+/* 剩幾顆骰子：亮起來的小方塊 */
+.ld-pips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  font-size: 13px;
+  color: var(--text);
+}
+.ld-pips > span {
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.ld-pips > span.on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.ld-seat-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-height: 22px;
+  font-size: 13px;
+}
+.ld-cups {
+  color: var(--warn);
+  font-weight: 600;
+}
+.ld-ready {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+/* ---- 揭曉 ---- */
+
+.ld-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-h);
+}
+.ld-reveal h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.ld-open-word {
+  color: var(--danger);
+  font-size: 22px;
+  font-weight: 900;
+  animation: ld-slam 0.45s ease-out both;
+}
+.ld-hands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ld-hands li {
+  display: grid;
+  grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--felt) 12%, transparent);
+}
+.ld-hands li.loser {
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+.ld-hand-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.ld-hand-name .chip {
+  margin: 0;
+}
+.ld-hand-count {
+  min-width: 1.6em;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+}
+@media (max-width: 480px) {
+  .ld-hands li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .ld-hand-name {
+    grid-column: 1 / -1;
+  }
+}
+
+.ld-dice {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.ld-dice.reveal {
+  justify-content: flex-start;
+  gap: 6px;
+}
+/* 一顆一顆翻開，人多的時候最多拖 1.8 秒 */
+.ld-dice.reveal .ld-die {
+  animation: ld-pop 0.35s ease-out both;
+  animation-delay: min(calc(var(--i, 0) * 45ms), 1.8s);
+}
+.ld-tally {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 6px;
+  margin: 0;
+  font-size: 16px;
+  animation: ld-fade 0.4s ease-out both;
+  animation-delay: calc(min(calc(var(--i, 0) * 45ms), 1.8s) + 0.35s);
+}
+.ld-tally strong {
+  font-size: 22px;
+  color: var(--accent);
+}
+.ld-verdict {
+  margin: 0;
+  text-align: center;
+  animation: ld-fade 0.4s ease-out both;
+  animation-delay: calc(min(calc(var(--i, 0) * 45ms), 1.8s) + 0.7s);
+}
+.ld-verdict strong {
+  color: var(--danger);
+}
+.ld-reveal-note {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+}
+.ld-reveal-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+}
+.ld-reveal-next button {
+  min-height: 44px;
+}
+
+/* ---- 自己的骰盅和喊價 ---- */
+
+.ld-me {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.ld-me.my-turn {
+  border: 2px solid var(--accent);
+  padding: 11px;
+}
+@media (max-width: 600px) {
+  .ld-me {
+    padding: 10px 8px;
+  }
+  .ld-me.my-turn {
+    padding: 9px 7px;
+  }
+}
+.ld-me-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--text-h);
+  font-size: 14px;
+}
+.ld-mycup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 92px;
+}
+/* 搖完了骰子滾出來 */
+.ld-dice.fresh .ld-die {
+  animation: ld-tumble 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.15) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+.ld-have {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+}
+.ld-scatter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+  padding: 8px;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  color: var(--text-h);
+  font-weight: 600;
+  text-align: center;
+}
+.ld-scatter button {
+  min-height: 44px;
+}
+
+.ld-pad {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* 六個點數一排，手機上也是一排（每顆按鈕約 45px 寬） */
+.ld-faces {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+button.ld-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-h);
+}
+button.ld-face.active {
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.ld-face-min {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text);
+}
+button.ld-face.active .ld-face-min {
+  color: var(--accent);
+  font-weight: 700;
+}
+.ld-count {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 8px;
+}
+.ld-count button {
+  min-height: 52px;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+}
+.ld-count-value {
+  display: flex;
+  justify-content: center;
+  color: var(--text-h);
+}
+.ld-lowest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 4px;
+  margin: 0;
+  font-size: 14px;
+  text-align: center;
+}
+.ld-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.ld-actions button {
+  min-height: 48px;
+  font-size: 17px;
+  font-weight: 700;
+}
+button.ld-open {
+  background: var(--danger);
+  color: var(--on-accent);
+  letter-spacing: 0.1em;
+}
+
+/* ---- 紀錄 ---- */
+
+.ld-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ld-log h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-h);
+}
+.ld-log ol {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ld-log-round {
+  margin-top: 6px;
+  color: var(--text-h);
+  font-weight: 600;
+}
+.ld-log-round:first-child {
+  margin-top: 0;
+}
+
+/* ---- 結算 ---- */
+
+.ld-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 2px solid var(--ok);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.ld-result h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-h);
+}
+.ld-result table {
+  width: 100%;
+}
+.ld-result .chip {
+  margin: 0 0 0 6px;
+}
+.ld-result-me td.primary {
+  color: var(--accent);
+}
+
+/* ---- 動畫 ---- */
+
+/* 結尾不寫 opacity：停在元素自己的值（不算的骰子是半透明的） */
+@keyframes ld-tumble {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) rotate(-200deg) scale(0.5);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes ld-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes ld-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ld-slam {
+  from {
+    opacity: 0;
+    transform: scale(2.2) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-cup,
+  .ld-cup.shake,
+  .ld-current,
+  .ld-open-word,
+  .ld-dice.fresh .ld-die,
+  .ld-dice.reveal .ld-die,
+  .ld-tally,
+  .ld-verdict {
+    animation: none;
+    transition: none;
+  }
+}

@@ -132,6 +132,7 @@ pub async fn report(State(state): State<AppState>, _: Require<AdminUsers>) -> Re
     rooms.extend(state.uno.snapshot(now));
     rooms.extend(state.justone.snapshot(now));
     rooms.extend(state.contact.snapshot(now));
+    rooms.extend(state.liarsdice.snapshot(now));
     rooms.extend(state.telephone.snapshot(now));
     rooms.extend(state.poker.snapshot(now));
     rooms.extend(state.werewolf.snapshot(now));
