@@ -161,6 +161,12 @@
   --cc-black: #23201c;
   --cc-black-ring: rgb(28 26 23 / 0.85);
   --cc-white: #fffdf7;
+  /* 暗號接頭：翡翠隊、紫晶隊、路人、叛徒，以及翻開後卡面上的字 */
+  --ct-jade: #0f766e;
+  --ct-amethyst: #7c3aed;
+  --ct-bystander: #7a7264;
+  --ct-traitor: #9f1239;
+  --ct-ink: #fffaf3;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -316,6 +322,11 @@
     --cc-black: #121010;
     --cc-black-ring: rgb(244 237 226 / 0.65);
     --cc-white: #f4efe6;
+    --ct-jade: #2dd4bf;
+    --ct-amethyst: #c084fc;
+    --ct-bystander: #8a8175;
+    --ct-traitor: #fb7185;
+    --ct-ink: #100e0c;
     color-scheme: dark;
   }
 }
@@ -461,6 +472,11 @@
   --cc-black: #121010;
   --cc-black-ring: rgb(244 237 226 / 0.65);
   --cc-white: #f4efe6;
+  --ct-jade: #2dd4bf;
+  --ct-amethyst: #c084fc;
+  --ct-bystander: #8a8175;
+  --ct-traitor: #fb7185;
+  --ct-ink: #100e0c;
   color-scheme: dark;
 }
 

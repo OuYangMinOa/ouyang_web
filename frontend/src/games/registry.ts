@@ -113,6 +113,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./justone/song'),
   },
   {
+    id: 'contact',
+    name: '暗號接頭',
+    icon: '🕶️',
+    blurb: '分成兩隊的猜詞遊戲：只有聯絡人知道桌上 25 個詞哪些是自己人，用一個詞加一個數字讓組員接上頭，翻到叛徒就輸。4～10 人，也能當面玩。',
+    tags: ['多人', '線上', '分隊'],
+    category: '派對',
+    component: lazyPage(() => import('./contact')),
+    lobby: { kind: 'party', players: '4～10 人' },
+    music: () => import('./contact/song'),
+  },
+  {
     id: 'telephone',
     name: '傳話畫畫',
     icon: '📞',
