@@ -1,5 +1,6 @@
 pub mod access_log;
 pub mod admin;
+pub mod ai;
 pub mod antique;
 pub mod arena;
 pub mod auth;
@@ -122,6 +123,8 @@ pub struct AppState {
     pub youtube: Arc<youtube::YouTube>,
     /// 短網址每個 IP 最多記幾次點擊（見 short_links.rs）
     pub short_link_limiter: Arc<visits::VisitLimiter>,
+    /// 每一組 AI 設定的連線狀態，背景定時檢查（設定存在資料庫，見 ai.rs）
+    pub ai: Arc<ai::Ai>,
 }
 
 impl AppState {
@@ -162,6 +165,7 @@ impl AppState {
             threads: Arc::default(),
             youtube: Arc::default(),
             short_link_limiter: Arc::default(),
+            ai: Arc::default(),
         }
     }
 }
@@ -199,6 +203,14 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/admin/system/history", get(monitor::history))
         .route("/admin/system/targets", post(monitor::create_target))
         .route("/admin/system/targets/{id}", delete(monitor::delete_target))
+        .route("/admin/ai", get(ai::admin_get))
+        .route("/admin/ai/providers", post(ai::admin_create))
+        .route("/admin/ai/providers/{id}", put(ai::admin_update).delete(ai::admin_delete))
+        .route("/admin/ai/active", put(ai::admin_set_active))
+        .route("/admin/ai/check", post(ai::admin_check))
+        .route("/admin/ai/models", post(ai::admin_models))
+        .route("/admin/ai/chat", post(ai::admin_chat))
+        .route("/ai/status", get(ai::public_status))
         .route("/admin/visits/{page}", get(visits::list_sessions))
         .route("/admin/visits/{page}/{session}", get(visits::session_events))
         .route("/visits/{page}", post(visits::track))

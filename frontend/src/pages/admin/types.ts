@@ -255,3 +255,32 @@ export type MonitorPoint = {
 }
 
 export type MonitorHistory = { step_secs: number; points: MonitorPoint[] }
+
+// ---- AI 設定（backend/src/ai.rs） ----
+
+export type AiHealth = 'unknown' | 'ok' | 'down'
+
+export type AiProviderStatus = {
+  health: AiHealth
+  since: string | null
+  checked_at: string | null
+  latency_ms: number | null
+  error: string | null
+}
+
+export type AiStatusEvent = { at: string; health: AiHealth; error: string | null }
+
+export type AiProvider = {
+  id: number
+  name: string
+  base_url: string
+  model: string
+  /** 金鑰的最後 4 碼，沒設定是 null */
+  key_hint: string | null
+  status: AiProviderStatus
+  events: AiStatusEvent[]
+}
+
+export type AiAdminView = { active_id: number | null; providers: AiProvider[] }
+
+export type AiModel = { id: string; max_model_len: number | null }

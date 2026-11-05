@@ -1,0 +1,346 @@
+/* AI：使用者看到的「AI 無法使用」提示，以及系統管理的 AI 設定頁 */
+
+.ai-notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 16px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--warn);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-h);
+}
+.ai-notice-icon {
+  color: var(--warn);
+  font-size: 20px;
+  line-height: 1.4;
+}
+.ai-notice p {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* ---- 狀態 ---- */
+
+.ai-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  white-space: nowrap;
+  color: var(--text);
+}
+.ai-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text);
+}
+.ai-health.is-ok {
+  color: var(--ok);
+}
+.ai-health.is-ok .ai-dot {
+  background: var(--ok);
+}
+.ai-health.is-down {
+  color: var(--danger);
+}
+.ai-health.is-down .ai-dot {
+  background: var(--danger);
+  animation: ai-blink 1.2s ease-in-out infinite;
+}
+@keyframes ai-blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-health.is-down .ai-dot {
+    animation: none;
+  }
+}
+.ai-status-line {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.ai-status-line .muted {
+  margin-left: 4px;
+}
+
+/* ---- 設定頁 ---- */
+
+.ai-intro {
+  max-width: 70ch;
+}
+.ai-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+}
+.ai-summary-head strong {
+  color: var(--text-h);
+  font-size: 18px;
+}
+.ai-summary .ai-notice {
+  margin-bottom: 0;
+}
+
+.ai-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 32px 0 0;
+}
+.ai-section-head h2 {
+  margin: 0;
+}
+
+.ai-providers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 0 16px;
+}
+.ai-provider.is-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.ai-provider-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.ai-provider-head h3 {
+  overflow-wrap: anywhere;
+}
+.ai-provider-head .chip {
+  margin: 0;
+}
+.ai-provider-head .ai-health {
+  margin-left: auto;
+}
+.ai-provider-info {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+.ai-provider-info div {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+.ai-provider-info dt {
+  flex: none;
+  width: 3em;
+  color: var(--text);
+}
+.ai-provider-info dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-h);
+}
+.ai-provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.ai-events {
+  margin-top: 16px;
+  font-size: 14px;
+}
+.ai-events summary {
+  cursor: pointer;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+.ai-events ol {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.ai-events li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ai-events li:last-child {
+  border-bottom: 0;
+}
+.ai-events time {
+  font: 13px var(--mono);
+}
+.ai-event-error {
+  flex-basis: 100%;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.ai-form {
+  margin-top: 16px;
+}
+.ai-model-row {
+  flex-wrap: wrap;
+}
+.ai-model-row input {
+  flex: 1 1 200px;
+}
+.ai-models {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+button.ai-model-chip {
+  min-height: 40px;
+  padding: 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-h);
+  font: 14px var(--mono);
+}
+button.ai-model-chip.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.ai-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- 測試對話 ---- */
+
+.ai-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-chat-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 16px;
+}
+.ai-chat-provider {
+  flex: 1 1 240px;
+}
+.ai-chat-toolbar .checks {
+  min-height: 40px;
+  align-items: center;
+}
+.ai-system summary {
+  cursor: pointer;
+  font-size: 14px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+.ai-system textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.ai-turns {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 160px;
+  max-height: min(60vh, 640px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.ai-empty {
+  margin: auto;
+  text-align: center;
+}
+.ai-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(100%, 75ch);
+}
+.ai-turn.is-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.ai-turn.is-assistant {
+  align-self: flex-start;
+}
+.ai-bubble {
+  padding: 8px 14px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-h);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.ai-turn.is-user .ai-bubble {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.ai-typing {
+  color: var(--text);
+}
+.ai-reasoning {
+  font-size: 14px;
+  color: var(--text);
+}
+.ai-reasoning summary {
+  cursor: pointer;
+}
+.ai-reasoning > div {
+  margin-top: 4px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.ai-meta {
+  font-size: 12px;
+}
+
+.ai-composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.ai-composer textarea {
+  resize: vertical;
+  min-height: 48px;
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .ai-provider-head .ai-health {
+    margin-left: 0;
+  }
+  .ai-composer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ai-turns {
+    padding: 8px;
+  }
+}

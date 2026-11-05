@@ -44,7 +44,7 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system`、`/admin/ai` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 回報與許願
 
@@ -790,7 +790,7 @@ DELETE /api/admin/honeypot/blocks/{ip}  解除封鎖（手動和自動都解） 
 
 ```
 GET    /api/admin/system                 目前的快照（snapshot，讀不到 /proc 時是 null 加上 error）、監控清單的狀態（targets）
-GET    /api/admin/system/history?range=  1h：每 5 秒一點；24h：每分鐘一點    {"step_secs","points":[{t,cpu,mem_used,rx_bps,tx_bps,read_bps,write_bps,targets:[…]}]}
+GET    /api/admin/system/history?range=  1h：每 5 秒一點；24h：每分鐘一點；7d：每 10 分鐘一點    {"step_secs","points":[{t,cpu,mem_used,rx_bps,tx_bps,read_bps,write_bps,targets:[…]}]}
 POST   /api/admin/system/targets         {"label":"歐陽小俠","pattern":"Xiao-Xia"}  →  201   最多 20 個
 DELETE /api/admin/system/targets/{id}
 ```
@@ -802,7 +802,9 @@ DELETE /api/admin/system/targets/{id}
 - 監控清單存在 `monitor_targets`：cgroup 路徑或指令列含有關鍵字（不分大小寫）的行程都算，一個都沒有就標成「沒在跑」。
   bot 用 systemd 跑的話關鍵字填 `<名稱>.service`；容器的 id 每次部署都會換，改填指令列的一部分。
 - 磁碟是資料庫所在的分割區（容器的 `/data` volume，在 EC2 上就是根目錄那顆 EBS）；網路讀主機 1 號行程的 `/proc/1/net/dev`，不算 lo 和 docker 的虛擬網卡。
-- 背景每 5 秒取樣，歷史只放在記憶體（1 小時 × 5 秒、24 小時 × 1 分鐘），重啟或換版後重新累積。staging 和 prod 各自取樣，看到的是同一台主機。
+- 背景每 5 秒取樣。最近 1 小時的 5 秒點只放在記憶體；每分鐘的平均寫進 `monitor_points`（保留 7 天），24 小時和 7 天的圖從資料庫讀，
+  換版重啟後也還在，1 小時的圖剛重啟時前面用分鐘點補。分鐘點對齊整分鐘，換版時新舊容器都會寫同一分鐘，留取樣點多（`samples`）的那筆。
+  圖的橫軸照時間比例，停機超過兩三個點的區段會斷開。staging 和 prod 各自取樣、各存各的資料庫，看到的是同一台主機。
   這個頁面的請求不記進 IP 訪問紀錄。
 
 ## 隱藏頁面
@@ -909,6 +911,47 @@ ddragon.leagueoflegends.com                                      英雄頭像與
 - 直播和 VOD 預設繁中，其次英文。YouTube 直接嵌入；Twitch 只讓 HTTPS 網站嵌入，網站還是 HTTP 時改顯示連結。
 - 這些都是非公開 API，Riot 改版時可能要跟著調整。
 
+## AI
+
+「系統管理 › AI 設定」（`/admin/ai`，需要 `admin.users`）：設定好幾組 OpenAI 相容的 API（vLLM、Ollama、OpenAI…），
+選一組給全站的 AI 功能使用，同一頁可以挑任一組直接對話測試。程式在 `backend/src/ai.rs`，前端共用的在 `frontend/src/ai/`。
+
+```
+GET    /api/ai/status                    使用中那一組能不能用  {"configured","available","since","checked_at"}   不用登入、不含錯誤細節
+GET    /api/admin/ai                     {"active_id","providers":[{id,name,base_url,model,key_hint,status,events}]}
+POST   /api/admin/ai/providers           {"name","base_url","api_key","model"}  →  201   最多 20 組，第一組自動設成使用中
+PUT    /api/admin/ai/providers/{id}      同上；api_key 不給（null）就沿用原本的，空字串是清掉
+DELETE /api/admin/ai/providers/{id}      使用中的那一組不能刪（409）
+PUT    /api/admin/ai/active              {"id":3}，null 是停用全站的 AI 功能
+POST   /api/admin/ai/check               每一組馬上重新檢查
+POST   /api/admin/ai/models              {"base_url","api_key"?,"provider_id"?}  列出伺服器上的模型（存之前先選），上游出錯回 502
+POST   /api/admin/ai/chat                {"provider_id"?,"messages":[{role,content}],"thinking"?}  回 NDJSON 串流
+```
+
+- 設定存在 `ai_providers`，使用中的是 `site_settings.ai_active_provider`。金鑰只留在伺服器，API 只回最後 4 碼（`…abcd`）。
+  `base_url` 是含 `/v1` 的那一段（例如 `http://host:15002/v1`），結尾的 `/` 會拿掉。
+- 改網址時沒有重填金鑰，「讀取模型」不會把存著的金鑰送到新網址。
+- **狀態**：背景每 15 秒對每一組打 `GET {base_url}/models`，連不上、金鑰錯（401／403）、網址錯（404）、伺服器錯誤或模型不在清單上都算異常；
+  真的呼叫時失敗也立刻標成異常，成功就恢復。狀態只放在記憶體，每個容器各自檢查，管理頁看得到每一組最近 30 次的狀態變化。
+  4xx（例如輸入太長）只算這次請求失敗，不算服務掛掉。`/api/ai/status` 不記進 IP 訪問紀錄。
+- **告訴使用者**：AI 功能的頁面最上面放 `<AiStatusNotice />`（`frontend/src/ai/AiStatusNotice.tsx`），使用中那一組不能用時顯示「AI 服務暫時無法使用」，
+  沒選任何一組時顯示「AI 功能尚未開放」，能用時什麼都不顯示。它每 15 秒問一次 `/api/ai/status`（分頁在背景時暫停，整個分頁共用一份），
+  AI 呼叫失敗時 `streamChat` 也會馬上重問，恢復後自己消失，不用重新整理。
+- **串流**：上游一律用 `stream: true`，後端整理成一行一個 JSON 給前端：
+  `{type:"reasoning",text}`（思考）、`{type:"content",text}`（答案）、`{type:"done",finish_reason,usage}`、`{type:"error",message}`。
+  思考內容支援 vLLM 的 `reasoning_content`／`reasoning`，以及沒開 reasoning parser 時包在答案最前面的 `<think>…</think>`。
+  前端關掉連線（離開頁面、按停止）時後端也會斷開上游，上游就不會繼續生成。
+- `thinking: false` 會送 `chat_template_kwargs.enable_thinking = false`（vLLM 上 Qwen3 這類模型關掉思考），不指定就不送這個欄位，別的伺服器才不會不認得。
+
+### 新增 AI 功能
+
+1. 後端用 `state.ai.complete(&state.pool, &messages, &options)` 等整段回答（`content` 不含思考），
+   或 `state.ai.stream(...)` 拿到一段一段的 `Event`，再用 `ai::ndjson(rx)` 串流給前端。都用使用中的那一組，不用管網址和金鑰。
+2. 錯誤直接 `?` 轉成 `AppError`：沒設定回「AI 功能尚未開放」、掛了回「AI 服務暫時無法使用」（都是 503），不會把上游的網址和錯誤細節給一般使用者。
+   權限和使用次數限制由各功能自己處理。
+3. 前端頁面最上面放 `<AiStatusNotice />`，串流用 `streamChat(path, body, onEvent, signal)`（`frontend/src/ai/api.ts`），
+   要依狀態停用按鈕的話用 `useAiStatus()`。
+
 ## 部署
 
 | 環境 | 觸發 | Image tag | 網址 |
@@ -926,12 +969,25 @@ feature/xxx ──PR──▶ dev ──PR──▶ main
 
 - `main` 受保護：只能透過 PR 合併，且 CI 的 `test` 必須通過，不能 force push 或刪除。
 - 對 `dev` / `main` 開的 PR 只會跑測試，merge 後才會建置並部署。
+- **dev → main 沿用 staging 的映像**：要進 main 的程式碼跟 dev 某次部署的一模一樣（tree 相同），
+  而且 GHCR 上還有那次的 `staging-<commit>` 時，dev→main 的 PR 略過測試（`test` 照樣回報通過），
+  push 到 main 時也不測、不 build，直接把那個映像加上 `prod-<commit>`、`prod-latest` 的 tag 再部署，整個流程約 1 分多鐘。
+  那個映像在 push 到 dev 時已經測過、在 staging 跑過；同一個映像，所以 prod 的 `/api/health` 回的 `commit` 是 dev 那邊的 commit。
+  - 照常測試和 build 的情況：main 有 dev 沒有的修改（例如直接修在 main 的 hotfix）、dev 還沒 build 完就 merge、
+    那版已經被 cleanup 清掉（只留 10 版），或是手動觸發（workflow_dispatch，想強制重 build 時用這個）。
+  - staging 和 prod 的 tag 指向同一個映像，cleanup 清掉其中一邊的舊版時只會拿掉那個 tag，另一邊還在用就不會被刪。
 
 CI 的快取：
 - Docker 層快取存在 GHCR 的 `buildcache-staging` / `buildcache-prod`，先讀自己環境的，沒有再讀另一個環境的。
   沒放在 Actions 快取：整個 repo 只有 10 GB，Docker 層快取一份就要好幾 GB，超過上限時 GitHub 會一直清掉舊快取。
 - Rust 和 npm 的快取在 Actions 快取。Rust 快取只在 push 到 `dev` / `main` 時存，PR 只讀。
+  main 大多沿用 staging 映像、不跑測試，它的 Rust 快取 7 天沒用到會被 GitHub 清掉；之後要在 main 照常測試時會從頭編，比較久。
+- Rust 版本固定在 `Dockerfile` 的 `FROM rust:<版本>-bookworm@sha256:…`，CI 的 `cargo test` 也從這一行讀版本。
+  不用 `rust:1-bookworm` 這種會變的 tag：它一更新 Docker 快取就全部失效，整條 Rust 重編約 4 分鐘。
+  升級時版本和 digest 一起改（`docker buildx imagetools inspect rust:<版本>-bookworm` 查 digest）。
 - `build` job 超過 15 分鐘會直接失敗（平常 2–5 分鐘），通常是下載 layer 卡住，重跑就好。
+- CI 和 Docker build 的 `npm ci` 都設了 `ONNXRUNTIME_NODE_INSTALL=skip`：`@huggingface/transformers` 帶進來的 `onnxruntime-node`
+  在 linux/x64 會從 nuget.org 下載 CUDA 的檔案，前端只在瀏覽器用不到，而且 nuget.org 連不上時 `npm ci` 會整個失敗。
 
 ### 不斷線部署（Traefik + docker-rollout）
 
@@ -959,7 +1015,7 @@ Traefik 每秒主動檢查 health，看到 503 就把它移出負載平衡，之
 **migration 必須跟上一版相容**：換版期間新舊兩版會同時跑在同一個 SQLite 上。
 例如要改欄位名稱，分兩次部署：先加新欄位並讓程式兩邊都寫，下一版再移除舊欄位。
 
-`/api/health` 會回傳 `commit`，可以用來確認目前是哪一版在接流量。
+`/api/health` 會回傳 `commit`，可以用來確認目前是哪一版在接流量（prod 沿用 staging 映像時是 dev 那邊的 commit）。
 
 每次部署成功後會清掉同環境的舊 image：伺服器上只留這次的加上前 2 版（`deploy.sh` 的 `KEEP_PREVIOUS_IMAGES`），
 GHCR 上留最近 10 版（workflow 的 `cleanup` job，同時清掉沒有 tag 的舊版，例如被覆蓋掉的 `buildcache-*`）。
