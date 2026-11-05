@@ -328,7 +328,7 @@ impl JustOne {
         }
         let i = fresh[ctx.rng.below(fresh.len())];
         self.used.push(i);
-        WORDS[i].word
+        WORDS[i].word.as_str()
     }
 
     /// 翻下一張牌；沒牌了就結束

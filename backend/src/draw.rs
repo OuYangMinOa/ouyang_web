@@ -25,10 +25,13 @@
 //!
 //! 計分：猜中的人越早分數越高（20～100 分），畫的人每有一個人猜中得 25 分，普通的詞乘 1.2、困難的乘 1.5。
 //! 分數在同一個房間跨局累計。
+//!
+//! 題庫：內建的 `draw_words.txt`，加上玩家投稿、管理員審核通過的詞（見 `draw_words.rs`）。
+//! 兩者合成一份放在 `BANK`，伺服器啟動和管理員改了投稿之後整份換掉；每一局開局時拿當下那份，一局之中不會變。
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, RwLock},
     time::Duration,
 };
 
@@ -69,6 +72,24 @@ pub enum Level {
 }
 
 impl Level {
+    /// 資料庫和詞庫檔案裡的編號：1 簡單、2 普通、3 困難
+    pub fn from_number(n: i64) -> Option<Self> {
+        match n {
+            1 => Some(Level::Easy),
+            2 => Some(Level::Medium),
+            3 => Some(Level::Hard),
+            _ => None,
+        }
+    }
+
+    pub fn number(self) -> u8 {
+        match self {
+            Level::Easy => 1,
+            Level::Medium => 2,
+            Level::Hard => 3,
+        }
+    }
+
     fn bonus(self) -> f64 {
         match self {
             Level::Easy => 1.0,
@@ -78,13 +99,14 @@ impl Level {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
-    pub word: &'static str,
-    pub category: &'static str,
+    pub word: String,
+    pub category: String,
     pub level: Level,
 }
 
-/// 詞庫，格式見 draw_words.txt
+/// 內建詞庫，格式見 draw_words.txt
 pub static WORDS: LazyLock<Vec<Entry>> = LazyLock::new(|| {
     include_str!("draw_words.txt")
         .lines()
@@ -92,21 +114,38 @@ pub static WORDS: LazyLock<Vec<Entry>> = LazyLock::new(|| {
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .flat_map(|line| {
             let mut parts = line.splitn(3, '|');
-            let level = match parts.next().expect("難度") {
-                "1" => Level::Easy,
-                "2" => Level::Medium,
-                "3" => Level::Hard,
-                other => panic!("難度只能是 1～3：{other}"),
-            };
+            let level =
+                parts.next().and_then(|n| n.parse().ok()).and_then(Level::from_number).expect("難度只能是 1～3");
             let category = parts.next().expect("分類").trim();
             parts.next().expect("詞").split('、').map(str::trim).filter(|w| !w.is_empty()).map(move |word| Entry {
-                word,
-                category,
+                word: word.to_owned(),
+                category: category.to_owned(),
                 level,
             })
         })
         .collect()
 });
+
+/// 出題用的詞庫：內建的在前，後面接審核通過的投稿
+static BANK: LazyLock<RwLock<Arc<Vec<Entry>>>> = LazyLock::new(|| RwLock::new(Arc::new(WORDS.clone())));
+
+/// 目前的詞庫（開局時拿一份）
+pub fn bank() -> Arc<Vec<Entry>> {
+    BANK.read().unwrap().clone()
+}
+
+/// 換掉詞庫裡投稿的部分（審核通過的全部）
+pub fn set_submitted(submitted: Vec<Entry>) {
+    *BANK.write().unwrap() = Arc::new(merge(submitted));
+}
+
+/// 內建詞庫接上投稿的詞；內建已經有的（比對方式跟猜題一樣）和重複的跳過
+fn merge(submitted: Vec<Entry>) -> Vec<Entry> {
+    let mut seen: HashSet<Vec<char>> = WORDS.iter().map(|e| normalize(&e.word)).collect();
+    let mut all = WORDS.clone();
+    all.extend(submitted.into_iter().filter(|e| seen.insert(normalize(&e.word))));
+    all
+}
 
 /// 比對用：全形轉半形、只留文字和數字（空白標點不算）、英文轉小寫
 pub fn normalize(text: &str) -> Vec<char> {
@@ -261,7 +300,7 @@ enum Ending {
 #[derive(Serialize, Clone, Debug)]
 struct Done {
     drawer: usize,
-    word: &'static str,
+    word: String,
     /// 猜中幾個人
     guessed: usize,
 }
@@ -280,7 +319,9 @@ pub struct Draw {
     stage: Stage,
     deadline: Option<Instant>,
     stage_started: Instant,
-    /// 這一棒給畫的人選的詞（`WORDS` 的索引）
+    /// 這一局的詞庫（開局時的那一份）
+    bank: Arc<Vec<Entry>>,
+    /// 這一棒給畫的人選的詞（`bank` 的索引）
     choices: Vec<usize>,
     word: Option<usize>,
     /// 揭露了第幾個字
@@ -296,8 +337,8 @@ pub struct Draw {
     carried: HashMap<u32, u32>,
     canvas: Canvas,
     done: Vec<Done>,
-    /// 這個房間出過的詞，盡量不重複
-    used: HashSet<usize>,
+    /// 這個房間出過的詞，盡量不重複（存詞本身：下一局的詞庫可能多了投稿的詞，索引會不一樣）
+    used: HashSet<String>,
 }
 
 impl Draw {
@@ -305,8 +346,8 @@ impl Draw {
         self.order.len() * usize::from(self.options.cycles)
     }
 
-    fn answer(&self) -> Option<&'static str> {
-        self.word.map(|i| WORDS[i].word)
+    fn answer(&self) -> Option<&str> {
+        self.word.map(|i| self.bank[i].word.as_str())
     }
 
     /// 看得到答案的人：畫的人和已經猜中的人
@@ -355,19 +396,21 @@ impl Draw {
 
     /// 簡單、普通、困難各挑一個這個房間還沒出過的詞（某個難度用完了就從其他的補）
     fn pick_choices(&mut self, ctx: &mut Ctx) -> Vec<usize> {
-        if self.used.len() + 3 > WORDS.len() {
+        let bank = &self.bank;
+        let mut fresh: Vec<usize> = (0..bank.len()).filter(|&i| !self.used.contains(&bank[i].word)).collect();
+        if fresh.len() < 3 {
             self.used.clear();
+            fresh = (0..bank.len()).collect();
         }
         let mut picked = Vec::new();
         for level in [Level::Easy, Level::Medium, Level::Hard] {
-            let pool: Vec<usize> =
-                (0..WORDS.len()).filter(|i| WORDS[*i].level == level && !self.used.contains(i)).collect();
+            let pool: Vec<usize> = fresh.iter().copied().filter(|&i| bank[i].level == level).collect();
             if !pool.is_empty() {
                 picked.push(pool[ctx.rng.below(pool.len())]);
             }
         }
         while picked.len() < 3 {
-            let pool: Vec<usize> = (0..WORDS.len()).filter(|i| !self.used.contains(i) && !picked.contains(i)).collect();
+            let pool: Vec<usize> = fresh.iter().copied().filter(|i| !picked.contains(i)).collect();
             picked.push(pool[ctx.rng.below(pool.len())]);
         }
         picked
@@ -376,7 +419,7 @@ impl Draw {
     fn choose(&mut self, index: usize, ctx: &mut Ctx) {
         let word = self.choices[index];
         self.word = Some(word);
-        self.used.insert(word);
+        self.used.insert(self.bank[word].word.clone());
         let length = Duration::from_secs(u64::from(self.options.draw_secs));
         ctx.system(To::All, format!("{} 選好題目了，開始畫！", self.names[self.drawer]));
         self.set_stage(Stage::Draw, Some(length), ctx);
@@ -390,10 +433,10 @@ impl Draw {
 
     /// 畫的人給提示：還沒揭露的字隨機挑一個
     fn hint(&mut self, ctx: &mut Ctx) -> Result<(), String> {
-        let Some(word) = self.answer().filter(|_| self.hints_left() > 0) else {
+        let Some(chars) = self.answer().filter(|_| self.hints_left() > 0).map(|w| w.chars().count()) else {
             return Err("不能再給提示了".into());
         };
-        let hidden: Vec<usize> = (0..word.chars().count()).filter(|i| !self.revealed.contains(i)).collect();
+        let hidden: Vec<usize> = (0..chars).filter(|i| !self.revealed.contains(i)).collect();
         self.revealed.push(hidden[ctx.rng.below(hidden.len())]);
         ctx.system(To::All, format!("{} 給了一個提示", self.names[self.drawer]));
         ctx.changed();
@@ -401,7 +444,7 @@ impl Draw {
     }
 
     fn correct(&mut self, seat: usize, ctx: &mut Ctx) {
-        let level = self.word.map_or(Level::Easy, |i| WORDS[i].level);
+        let level = self.word.map_or(Level::Easy, |i| self.bank[i].level);
         let total = f64::from(self.options.draw_secs.max(1));
         let left = self.deadline.map_or(0.0, |d| d.saturating_duration_since(ctx.now).as_secs_f64());
         let points = ((20.0 + 80.0 * (left / total).clamp(0.0, 1.0)) * level.bonus()).round() as u32;
@@ -437,12 +480,12 @@ impl Draw {
             self.begin_turn(ctx);
             return;
         };
-        let entry = &WORDS[word];
+        let entry = self.bank[word].clone();
         let guessed = self.guessed.iter().filter(|g| g.is_some()).count();
         let points = (DRAWER_POINTS * guessed as f64 * entry.level.bonus()).round() as u32;
         self.turn_points[self.drawer] = points;
         self.scores[self.drawer] += points;
-        self.done.push(Done { drawer: self.drawer, word: entry.word, guessed });
+        self.done.push(Done { drawer: self.drawer, word: entry.word.clone(), guessed });
         self.ending = Some(ending);
         let why = match ending {
             Ending::AllGuessed => "大家都猜中了！".to_owned(),
@@ -600,6 +643,7 @@ impl PartyGame for Draw {
             carried,
             canvas: Canvas::default(),
             done: Vec::new(),
+            bank: bank(),
             used: previous.map(|p| p.used.clone()).unwrap_or_default(),
         };
         ctx.system(To::All, format!("新的一局：{n} 個人，每人畫 {} 次", options.cycles));
@@ -666,7 +710,7 @@ impl PartyGame for Draw {
             Stage::Reveal | Stage::End => Chat::Show,
             Stage::Choose => {
                 // 畫的人看得到三個候選詞，不能先講出來
-                if seat == Some(self.drawer) && self.choices.iter().any(|&i| says(text, WORDS[i].word)) {
+                if seat == Some(self.drawer) && self.choices.iter().any(|&i| says(text, &self.bank[i].word)) {
                     ctx.system(To::Seat(self.drawer), "不能說出題目，這句沒有送出");
                     Chat::Drop
                 } else {
@@ -674,7 +718,8 @@ impl PartyGame for Draw {
                 }
             }
             Stage::Draw => {
-                let Some(answer) = self.answer() else { return Chat::Show };
+                let Some(answer) = self.answer().map(str::to_owned) else { return Chat::Show };
+                let answer = answer.as_str();
                 match seat {
                     // 觀戰的人看不到答案，但碰巧猜中也不能公開
                     None if says(text, answer) => {
@@ -720,16 +765,19 @@ impl PartyGame for Draw {
     fn view(&self, seat: Option<usize>, now: Instant) -> Value {
         let public = matches!(self.stage, Stage::Reveal | Stage::End);
         let insider = seat.is_some_and(|s| s == self.drawer || self.guessed[s].is_some());
-        let entry = self.word.map(|i| &WORDS[i]);
+        let entry = self.word.map(|i| &self.bank[i]);
         let hint = entry.filter(|_| self.stage == Stage::Draw).map(|e| {
             let chars: Vec<Option<String>> =
                 e.word.chars().enumerate().map(|(i, c)| self.revealed.contains(&i).then(|| c.to_string())).collect();
-            json!({ "chars": chars, "category": self.options.category.then_some(e.category) })
+            json!({ "chars": chars, "category": self.options.category.then_some(&e.category) })
         });
         let choices = (self.stage == Stage::Choose && seat == Some(self.drawer)).then(|| {
             self.choices
                 .iter()
-                .map(|&i| json!({ "word": WORDS[i].word, "category": WORDS[i].category, "level": WORDS[i].level }))
+                .map(|&i| {
+                    let e = &self.bank[i];
+                    json!({ "word": e.word, "category": e.category, "level": e.level })
+                })
                 .collect::<Vec<_>>()
         });
         let seats: Vec<Value> = (0..self.names.len())
@@ -752,7 +800,7 @@ impl PartyGame for Draw {
             "you": seat,
             "options": self.options,
             "choices": choices,
-            "word": entry.filter(|_| insider || public).map(|e| e.word),
+            "word": entry.filter(|_| insider || public).map(|e| &e.word),
             "level": entry.map(|e| e.level),
             "hint": hint,
             "hintsLeft": if self.stage == Stage::Draw { self.hints_left() } else { 0 },
@@ -809,11 +857,15 @@ mod tests {
     }
 
     /// 選第一個詞，回傳答案
-    fn choose(g: &mut Draw, seats: &[SeatInfo], rng: &mut Rng) -> &'static str {
+    fn choose(g: &mut Draw, seats: &[SeatInfo], rng: &mut Rng) -> String {
         let drawer = g.drawer;
         act(g, seats, rng, drawer, Action::Choose { index: 0 }).unwrap();
         assert_eq!(g.stage, Stage::Draw);
-        g.answer().unwrap()
+        g.answer().unwrap().to_owned()
+    }
+
+    fn index_of(g: &Draw, word: &str) -> usize {
+        g.bank.iter().position(|e| e.word == word).unwrap()
     }
 
     fn guesser(g: &Draw) -> usize {
@@ -827,11 +879,42 @@ mod tests {
         for entry in WORDS.iter() {
             let len = entry.word.chars().count();
             assert!((2..=8).contains(&len), "{} 的長度不對", entry.word);
-            assert!(seen.insert(entry.word), "重複的詞：{}", entry.word);
+            assert!(seen.insert(normalize(&entry.word)), "重複的詞：{}", entry.word);
             assert!(!entry.category.is_empty());
         }
         for level in [Level::Easy, Level::Medium, Level::Hard] {
             assert!(WORDS.iter().filter(|e| e.level == level).count() >= 60, "{level:?} 的詞太少");
+        }
+    }
+
+    #[test]
+    fn submitted_words_are_appended_without_duplicates() {
+        let entry = |word: &str, level| Entry { word: word.into(), category: "投稿".into(), level };
+        let merged = merge(vec![
+            entry("長頸鹿", Level::Easy),
+            entry("電音三太子", Level::Hard),
+            entry("ＯＫ繃", Level::Medium),
+            entry("ok繃", Level::Medium),
+        ]);
+        assert_eq!(merged.len(), WORDS.len() + 2, "內建已經有的、只差全形半形大小寫的都算重複");
+        assert_eq!(merged[..WORDS.len()], WORDS[..]);
+        assert_eq!(merged[WORDS.len()].word, "電音三太子");
+        assert_eq!(merged[WORDS.len() + 1].word, "ＯＫ繃");
+    }
+
+    #[test]
+    fn a_tiny_bank_still_gives_three_choices() {
+        let (mut g, seats, mut rng) = start(2, Options::default());
+        let entry = |word: &str| Entry { word: word.into(), category: "投稿".into(), level: Level::Medium };
+        g.bank = Arc::new(vec![entry("甲乙"), entry("丙丁"), entry("戊己"), entry("庚辛")]);
+        g.used.clear();
+        for _ in 0..5 {
+            let choices = with_ctx(&seats, &mut rng, Instant::now(), |ctx| g.pick_choices(ctx));
+            let mut sorted = choices.clone();
+            sorted.sort();
+            sorted.dedup();
+            assert_eq!(sorted.len(), 3, "三個不同的詞：{choices:?}");
+            g.used.insert(g.bank[choices[0]].word.clone());
         }
     }
 
@@ -856,7 +939,7 @@ mod tests {
     #[test]
     fn choices_cover_the_levels_and_the_drawer_order_covers_everyone() {
         let (g, _, _) = start(4, Options { cycles: 3, ..Options::default() });
-        let levels: Vec<Level> = g.choices.iter().map(|&i| WORDS[i].level).collect();
+        let levels: Vec<Level> = g.choices.iter().map(|&i| g.bank[i].level).collect();
         assert_eq!(levels, [Level::Easy, Level::Medium, Level::Hard]);
         assert_eq!(g.total_turns(), 12);
         let mut order = g.order.clone();
@@ -925,7 +1008,7 @@ mod tests {
     #[test]
     fn close_guesses_get_a_private_event() {
         let (mut g, seats, mut rng) = start(3, Options::default());
-        let three = WORDS.iter().position(|e| e.word == "長頸鹿").unwrap();
+        let three = index_of(&g, "長頸鹿");
         g.choices = vec![three, three, three];
         with_ctx(&seats, &mut rng, Instant::now(), |ctx| g.choose(0, ctx));
         let a = guesser(&g);
@@ -980,12 +1063,12 @@ mod tests {
         }
         assert!(g.view(None, now)["choices"].is_null());
 
-        let answer = choose(&mut g, &seats, &mut rng);
+        let answer = &choose(&mut g, &seats, &mut rng);
         let a = guesser(&g);
         let b = (0..4).find(|&s| s != d && s != a).unwrap();
         let leaks = |g: &Draw, seat: Option<usize>| g.view(seat, Instant::now()).to_string().contains(answer);
         assert!(!leaks(&g, Some(a)) && !leaks(&g, Some(b)) && !leaks(&g, None));
-        assert_eq!(g.view(Some(d), now)["word"], answer);
+        assert_eq!(g.view(Some(d), now)["word"], *answer);
         assert_eq!(g.view(Some(a), now)["hint"]["chars"].as_array().unwrap().len(), answer.chars().count());
 
         // a 猜中：自己的那句只有自己看得到，之後 view 裡有答案
@@ -1016,8 +1099,8 @@ mod tests {
     fn scoring_and_the_turn_ends_when_everyone_guessed() {
         let (mut g, seats, mut rng) = start(3, Options::default());
         let d = g.drawer;
-        let answer = choose(&mut g, &seats, &mut rng);
-        let level = WORDS[g.word.unwrap()].level;
+        let answer = &choose(&mut g, &seats, &mut rng);
+        let level = g.bank[g.word.unwrap()].level;
         let a = guesser(&g);
         say(&mut g, &seats, &mut rng, Some(a), answer);
         let early = g.guessed[a].unwrap();
@@ -1030,7 +1113,7 @@ mod tests {
         assert_eq!(g.turn_points[d], (50.0 * level.bonus()).round() as u32);
         assert_eq!(g.scores[d], g.turn_points[d]);
         // 公布答案時大家都看得到
-        assert_eq!(g.view(None, Instant::now())["word"], answer);
+        assert_eq!(g.view(None, Instant::now())["word"], *answer);
         assert_eq!(g.done.len(), 1);
     }
 
@@ -1038,7 +1121,7 @@ mod tests {
     fn hints_are_given_by_the_drawer_but_never_all() {
         let (mut g, seats, mut rng) = start(2, Options { draw_secs: 100, ..Options::default() });
         // 換成固定的三個字的詞
-        let three = WORDS.iter().position(|e| e.word == "長頸鹿").unwrap();
+        let three = index_of(&g, "長頸鹿");
         g.choices = vec![three, three, three];
         let start = Instant::now();
         with_ctx(&seats, &mut rng, start, |ctx| g.choose(0, ctx));
@@ -1104,7 +1187,7 @@ mod tests {
         for _ in 0..2 {
             let answer = choose(&mut g, &seats, &mut rng);
             let a = guesser(&g);
-            say(&mut g, &seats, &mut rng, Some(a), answer);
+            say(&mut g, &seats, &mut rng, Some(a), &answer);
             assert_eq!(g.stage, Stage::Reveal);
             tick_at(&mut g, &seats, &mut rng, Instant::now() + REVEAL + Duration::from_millis(1));
         }
@@ -1119,10 +1202,9 @@ mod tests {
         assert_eq!((0..2).map(|s| next.total(s)).collect::<Vec<_>>(), totals);
         assert_eq!(next.scores, [0, 0]);
         // 出過的詞記下來，下一局不會再出
-        for word in g.done.iter().map(|d| d.word) {
-            let i = WORDS.iter().position(|e| e.word == word).unwrap();
-            assert!(next.used.contains(&i));
-            assert!(!next.choices.contains(&i));
+        for word in g.done.iter().map(|d| &d.word) {
+            assert!(next.used.contains(word));
+            assert!(!next.choices.iter().any(|&i| next.bank[i].word == *word));
         }
     }
 
@@ -1131,7 +1213,7 @@ mod tests {
         let (mut g, seats, mut rng) = start(3, Options::default());
         let answer = choose(&mut g, &seats, &mut rng);
         let a = guesser(&g);
-        say(&mut g, &seats, &mut rng, Some(a), answer);
+        say(&mut g, &seats, &mut rng, Some(a), &answer);
         let b = guesser(&g);
         let now = Instant::now();
         with_ctx(&seats, &mut rng, now, |ctx| g.presence(b, false, ctx));

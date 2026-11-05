@@ -3,6 +3,7 @@ import { ChatBox, Countdown, PartyEntry, PartyHeader, PartyLobby, PartyNotice } 
 import { GameLayout, Segmented, SfxButton, StatusLine } from '../shared/ui'
 import { MAX_CHAT, useParty, type Party } from '../shared/useParty'
 import { Board } from './board'
+import { Contribute } from './Contribute'
 import { useDrawSfx, useDrawSounds, type DrawSound } from './sfx'
 import { Sketch } from './Sketch'
 import { LEVEL_NAMES, type DrawOptions, type DrawParty, type DrawView } from './types'
@@ -17,9 +18,12 @@ export default function DrawGame() {
   if (!party.code) {
     return (
       <GameLayout side={<Rules />}>
-        <PartyEntry party={party}>
-          <p>輪流畫圖，其他人在聊天室猜答案，越早猜中分數越高。2～10 人，開房間把連結傳給朋友就能玩。</p>
-        </PartyEntry>
+        <div className="dg-entry">
+          <PartyEntry party={party}>
+            <p>輪流畫圖，其他人在聊天室猜答案，越早猜中分數越高。2～10 人，開房間把連結傳給朋友就能玩。</p>
+          </PartyEntry>
+          <Contribute />
+        </div>
       </GameLayout>
     )
   }
@@ -41,6 +45,7 @@ function Rules() {
         </li>
         <li>猜中的人和畫的人可以互相聊天，還沒猜中的人看不到。</li>
         <li>計分：越早猜中分數越高（20～100 分）；畫的人每有一個人猜中得 25 分。普通的詞乘 1.2、困難的乘 1.5。分數在同一個房間累計。</li>
+        <li>題目除了內建的，還有大家投稿、管理員審核通過的。登入後可以在開房間的地方「投稿題目」。</li>
       </ul>
     </div>
   )

@@ -61,6 +61,7 @@ const AiChatPage = lazyPage(() => import('./ai/chat/ChatPage'))
 const AiToolsPage = lazyPage(() => import('./ai/chat/ToolsPage'))
 const AdminAiTools = lazyPage(() => import('./pages/admin/AiTools'))
 const AdminAiUsage = lazyPage(() => import('./pages/admin/AiUsage'))
+const AdminDrawWords = lazyPage(() => import('./pages/admin/DrawWords'))
 // 詳細頁帶著產生 QR Code 的 bwip-js
 const LinksPage = lazyPage(() => import('./links/LinksPage'))
 const LinkPage = lazyPage(() => import('./links/LinkPage'))
@@ -326,6 +327,7 @@ function App() {
                   <Route path="visits" element={<AdminVisits />} />
                   <Route path="system" element={<AdminSystem />} />
                   <Route path="games" element={<AdminGames />} />
+                  <Route path="draw-words" element={<Lazy page={AdminDrawWords} />} />
                   <Route path="ai" element={<AdminAi />} />
                   <Route path="ai-tools" element={<Lazy page={AdminAiTools} />} />
                   <Route path="ai-usage" element={<Lazy page={AdminAiUsage} />} />

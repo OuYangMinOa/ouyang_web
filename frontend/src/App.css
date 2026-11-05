@@ -501,6 +501,62 @@ td .edit {
   margin-top: 8px;
 }
 
+/* 你畫我猜題目（pages/admin/DrawWords.tsx） */
+.dgw-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 0;
+}
+.dgw-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.dgw-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.dgw-pick {
+  width: 1%;
+}
+/* 桌機上勾選欄只要一個框；窄螢幕的卡片上才寫出「選取」 */
+.dgw-pick-label {
+  display: none;
+}
+.dgw-table .dgw-category {
+  width: 8em;
+}
+.dgw-table select {
+  min-width: 5.5em;
+}
+.dgw-search {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 8px 0;
+}
+.dgw-plus {
+  margin-left: 4px;
+  color: var(--ok);
+  font-size: 12px;
+}
+/* 分布表只有幾欄數字，手機上也維持表格，不改成卡片 */
+.dgw-dist th:not(:first-child),
+.dgw-dist td:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+.dgw-total td {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 /* 開關：checkbox 加上 role="switch" */
 .switch {
   flex-direction: row;
@@ -1323,6 +1379,28 @@ time {
   td .edit {
     min-width: 0;
     flex: 1;
+  }
+  .dgw-pick {
+    width: auto;
+  }
+  .dgw-pick-label {
+    display: inline;
+  }
+  .dgw-table .dgw-category {
+    width: auto;
+  }
+  .dgw-bulk .dgw-check {
+    flex: 1 1 100%;
+  }
+  .dgw-bulk button {
+    flex: 1;
+  }
+  .dgw-dist th,
+  .dgw-dist td {
+    padding: 8px 4px;
+  }
+  .dgw-search {
+    max-width: none;
   }
   .access-path {
     max-width: none;
