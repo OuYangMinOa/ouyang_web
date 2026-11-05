@@ -149,6 +149,18 @@
   --ww-moon: #f2d27a;
   --ww-night-ok: #6fd69a;
   --ww-night-danger: #ff8597;
+  /* 跳棋：星形棋盤、洞、棋子的邊和反光，以及六個座位的顏色（紅藍綠黃黑白，黑棋另外有邊框色） */
+  --cc-board: #d2ae72;
+  --cc-hole: #9c7b45;
+  --cc-edge: rgb(28 26 23 / 0.6);
+  --cc-shine: rgb(255 255 255 / 0.5);
+  --cc-red: #d1372b;
+  --cc-blue: #2463c8;
+  --cc-green: #23874a;
+  --cc-yellow: #ffd23f;
+  --cc-black: #23201c;
+  --cc-black-ring: rgb(28 26 23 / 0.85);
+  --cc-white: #fffdf7;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -293,6 +305,17 @@
     --ww-moon: #e9c869;
     --ww-night-ok: #5fd38d;
     --ww-night-danger: #ff6b81;
+    --cc-board: #5c472d;
+    --cc-hole: #2c2116;
+    --cc-edge: rgb(0 0 0 / 0.6);
+    --cc-shine: rgb(255 255 255 / 0.35);
+    --cc-red: #f0574b;
+    --cc-blue: #4f8ef5;
+    --cc-green: #3fbf6a;
+    --cc-yellow: #f5cd3c;
+    --cc-black: #121010;
+    --cc-black-ring: rgb(244 237 226 / 0.65);
+    --cc-white: #f4efe6;
     color-scheme: dark;
   }
 }
@@ -427,6 +450,17 @@
   --ww-moon: #e9c869;
   --ww-night-ok: #5fd38d;
   --ww-night-danger: #ff6b81;
+  --cc-board: #5c472d;
+  --cc-hole: #2c2116;
+  --cc-edge: rgb(0 0 0 / 0.6);
+  --cc-shine: rgb(255 255 255 / 0.35);
+  --cc-red: #f0574b;
+  --cc-blue: #4f8ef5;
+  --cc-green: #3fbf6a;
+  --cc-yellow: #f5cd3c;
+  --cc-black: #121010;
+  --cc-black-ring: rgb(244 237 226 / 0.65);
+  --cc-white: #f4efe6;
   color-scheme: dark;
 }
 
