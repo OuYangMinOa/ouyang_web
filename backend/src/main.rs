@@ -11,7 +11,7 @@ use std::{
 };
 
 use backend::{
-    AppState, access_log,
+    AppState, access_log, ai,
     auth::upsert_admin,
     healthcheck,
     honeypot::Honeypot,
@@ -77,6 +77,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host_proc = env::var("HOST_PROC").unwrap_or_else(|_| "/proc".into());
     state.monitor = Arc::new(Monitor::new(host_proc, data_dir));
     monitor::spawn(state.monitor.clone(), pool.clone());
+    // AI 服務掛掉時要馬上知道，前端的 AI 功能才能先告訴使用者
+    ai::spawn(state.ai.clone(), pool.clone());
     let draining = state.draining.clone();
     let access = state.access_log.clone();
     let app = router(state, &static_dir);

@@ -25,6 +25,7 @@ import MusicApp from './music/MusicApp'
 import MusicLibrary from './music/MusicLibrary'
 import Account from './pages/Account'
 import AdminAccess from './pages/admin/Access'
+import AdminAi from './pages/admin/Ai'
 import AdminFeedback from './pages/admin/Feedback'
 import AdminGames from './pages/admin/Games'
 import AdminHoneypot from './pages/admin/Honeypot'
@@ -308,6 +309,7 @@ function App() {
                   <Route path="visits" element={<AdminVisits />} />
                   <Route path="system" element={<AdminSystem />} />
                   <Route path="games" element={<AdminGames />} />
+                  <Route path="ai" element={<AdminAi />} />
                 </Route>
                 <Route path="*" element={<p className="muted">找不到這個頁面。</p>} />
               </Routes>

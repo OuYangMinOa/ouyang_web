@@ -44,7 +44,7 @@ alice                  admin（系統管理員）         admin.users
 - 管理員不能停用自己或移除自己的 `admin` 角色，避免把自己鎖在外面。
 - 自行註冊：預設關閉，管理員在 `/admin/registrations` 開關。開放時登入頁會出現「註冊」按鈕，送出的申請要管理員核准才會建立帳號（沒有任何角色）。同一個 IP 一天最多申請 3 次。
 
-頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
+頁面：`/login` 登入、`/register` 註冊、`/account` 改密碼、`/feedback` 回報與許願、`/admin/users`、`/admin/roles`、`/admin/registrations`、`/admin/feedback`、`/admin/access`、`/admin/visits`、`/admin/honeypot`、`/admin/games`、`/admin/system`、`/admin/ai` 系統管理（需要 `admin.users`，沒有權限的人在選單裡看不到）。
 
 ### 回報與許願
 
@@ -908,6 +908,47 @@ ddragon.leagueoflegends.com                                      英雄頭像與
   已結束的局要找終局數據：從開場往後二分搜尋還查得到的最後一段（約 10 次請求），結果存在 localStorage（最多 40 局）。
 - 直播和 VOD 預設繁中，其次英文。YouTube 直接嵌入；Twitch 只讓 HTTPS 網站嵌入，網站還是 HTTP 時改顯示連結。
 - 這些都是非公開 API，Riot 改版時可能要跟著調整。
+
+## AI
+
+「系統管理 › AI 設定」（`/admin/ai`，需要 `admin.users`）：設定好幾組 OpenAI 相容的 API（vLLM、Ollama、OpenAI…），
+選一組給全站的 AI 功能使用，同一頁可以挑任一組直接對話測試。程式在 `backend/src/ai.rs`，前端共用的在 `frontend/src/ai/`。
+
+```
+GET    /api/ai/status                    使用中那一組能不能用  {"configured","available","since","checked_at"}   不用登入、不含錯誤細節
+GET    /api/admin/ai                     {"active_id","providers":[{id,name,base_url,model,key_hint,status,events}]}
+POST   /api/admin/ai/providers           {"name","base_url","api_key","model"}  →  201   最多 20 組，第一組自動設成使用中
+PUT    /api/admin/ai/providers/{id}      同上；api_key 不給（null）就沿用原本的，空字串是清掉
+DELETE /api/admin/ai/providers/{id}      使用中的那一組不能刪（409）
+PUT    /api/admin/ai/active              {"id":3}，null 是停用全站的 AI 功能
+POST   /api/admin/ai/check               每一組馬上重新檢查
+POST   /api/admin/ai/models              {"base_url","api_key"?,"provider_id"?}  列出伺服器上的模型（存之前先選），上游出錯回 502
+POST   /api/admin/ai/chat                {"provider_id"?,"messages":[{role,content}],"thinking"?}  回 NDJSON 串流
+```
+
+- 設定存在 `ai_providers`，使用中的是 `site_settings.ai_active_provider`。金鑰只留在伺服器，API 只回最後 4 碼（`…abcd`）。
+  `base_url` 是含 `/v1` 的那一段（例如 `http://host:15002/v1`），結尾的 `/` 會拿掉。
+- 改網址時沒有重填金鑰，「讀取模型」不會把存著的金鑰送到新網址。
+- **狀態**：背景每 15 秒對每一組打 `GET {base_url}/models`，連不上、金鑰錯（401／403）、網址錯（404）、伺服器錯誤或模型不在清單上都算異常；
+  真的呼叫時失敗也立刻標成異常，成功就恢復。狀態只放在記憶體，每個容器各自檢查，管理頁看得到每一組最近 30 次的狀態變化。
+  4xx（例如輸入太長）只算這次請求失敗，不算服務掛掉。`/api/ai/status` 不記進 IP 訪問紀錄。
+- **告訴使用者**：AI 功能的頁面最上面放 `<AiStatusNotice />`（`frontend/src/ai/AiStatusNotice.tsx`），使用中那一組不能用時顯示「AI 服務暫時無法使用」，
+  沒選任何一組時顯示「AI 功能尚未開放」，能用時什麼都不顯示。它每 15 秒問一次 `/api/ai/status`（分頁在背景時暫停，整個分頁共用一份），
+  AI 呼叫失敗時 `streamChat` 也會馬上重問，恢復後自己消失，不用重新整理。
+- **串流**：上游一律用 `stream: true`，後端整理成一行一個 JSON 給前端：
+  `{type:"reasoning",text}`（思考）、`{type:"content",text}`（答案）、`{type:"done",finish_reason,usage}`、`{type:"error",message}`。
+  思考內容支援 vLLM 的 `reasoning_content`／`reasoning`，以及沒開 reasoning parser 時包在答案最前面的 `<think>…</think>`。
+  前端關掉連線（離開頁面、按停止）時後端也會斷開上游，上游就不會繼續生成。
+- `thinking: false` 會送 `chat_template_kwargs.enable_thinking = false`（vLLM 上 Qwen3 這類模型關掉思考），不指定就不送這個欄位，別的伺服器才不會不認得。
+
+### 新增 AI 功能
+
+1. 後端用 `state.ai.complete(&state.pool, &messages, &options)` 等整段回答（`content` 不含思考），
+   或 `state.ai.stream(...)` 拿到一段一段的 `Event`，再用 `ai::ndjson(rx)` 串流給前端。都用使用中的那一組，不用管網址和金鑰。
+2. 錯誤直接 `?` 轉成 `AppError`：沒設定回「AI 功能尚未開放」、掛了回「AI 服務暫時無法使用」（都是 503），不會把上游的網址和錯誤細節給一般使用者。
+   權限和使用次數限制由各功能自己處理。
+3. 前端頁面最上面放 `<AiStatusNotice />`，串流用 `streamChat(path, body, onEvent, signal)`（`frontend/src/ai/api.ts`），
+   要依狀態停用按鈕的話用 `useAiStatus()`。
 
 ## 部署
 
