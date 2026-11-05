@@ -1,0 +1,405 @@
+/* ---- 狼人殺 ---- */
+
+.ww {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ww-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  border-radius: 16px;
+  transition:
+    background-color 0.6s,
+    color 0.6s;
+}
+.ww-board .game-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+/* 夜晚：整塊換成夜空。裡面的元件沿用同一組變數名稱，只是換成 index.css 裡夜晚的那一組（亮色、深色各一組） */
+.ww-board.night {
+  --bg: var(--ww-night);
+  --surface: var(--ww-night-surface);
+  --border: var(--ww-night-border);
+  --text: var(--ww-night-text);
+  --text-h: var(--ww-night-text-h);
+  --accent: var(--ww-moon);
+  --on-accent: var(--ww-night);
+  --ok: var(--ww-night-ok);
+  --danger: var(--ww-night-danger);
+  padding: 10px;
+  background: var(--bg);
+  color: var(--text);
+  color-scheme: dark;
+}
+
+.ww-sky {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.ww-sky-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ww-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ww-options p {
+  margin: 0;
+}
+/* 自訂角色時的神職開關，長得和 Segmented 一樣，但可以複選 */
+.ww-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ww-toggles button {
+  flex: 1 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.ww-toggles button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 自己的身分：好人綠框、狼人紅框，點一下遮住 */
+.ww-role {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 16px;
+  border: 2px solid var(--ok);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: center;
+  box-sizing: border-box;
+}
+.ww-role.wolf {
+  border-color: var(--danger);
+}
+.ww-role strong {
+  font: 700 clamp(26px, 8vw, 38px) var(--serif);
+  letter-spacing: 0.06em;
+}
+.ww-role.hidden {
+  border-style: dashed;
+  border-color: var(--border);
+}
+.ww-role.hidden strong {
+  color: var(--text);
+}
+.ww-role-label,
+.ww-role-hint {
+  font-size: 13px;
+  color: var(--text);
+}
+.ww-role-info {
+  max-width: 36em;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.ww-role-mates,
+.ww-role-dead {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--danger);
+}
+.ww-role.spectator {
+  margin: 0;
+  border: 1px dashed var(--border);
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* 這個階段能做的事 */
+.ww-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-h);
+}
+.ww-actions p {
+  margin: 0;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.ww-actions p.muted {
+  font-size: 14px;
+  color: var(--text);
+}
+.ww-actions > button {
+  min-height: 44px;
+}
+.ww-actions .chip {
+  margin: 0;
+}
+.ww-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ww-buttons button {
+  min-height: 44px;
+  flex: 1 1 140px;
+}
+.ww-hint {
+  text-align: center;
+}
+.ww-actions p.ww-warn {
+  color: var(--danger);
+  font-weight: 600;
+}
+.ww-wolf-votes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 14px;
+}
+.ww-wolf-votes li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 玩家：要點人的時候整張卡片就是按鈕；窄螢幕兩欄 */
+.ww-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: 8px;
+}
+.ww-seat-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-h);
+  text-align: left;
+}
+button.ww-seat-body {
+  border: 2px solid var(--accent);
+  cursor: pointer;
+}
+button.ww-seat-body:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.ww-seat.chosen .ww-seat-body {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.ww-seat.chosen .chip.subtle {
+  color: var(--on-accent);
+  border-color: color-mix(in srgb, var(--on-accent) 50%, transparent);
+}
+.ww-seat.dead .ww-seat-body {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text);
+}
+.ww-seat.dead .ww-seat-name {
+  text-decoration: line-through;
+}
+.ww-seat-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+.ww-seat-no {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ww-seat-name {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.ww-seat.me .ww-seat-name {
+  color: var(--accent);
+}
+.ww-seat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ww-seat-chips .chip {
+  margin: 0;
+}
+.ww-seat-cta {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.ww-seat-points {
+  font-size: 12px;
+  color: var(--text);
+}
+.ww-seat.chosen .ww-seat-no,
+.ww-seat.chosen .ww-seat-name,
+.ww-seat.chosen .ww-seat-cta,
+.ww-seat.chosen .ww-seat-points {
+  color: var(--on-accent);
+}
+
+/* 陣營的小標籤：狼人紅、好人綠 */
+.chip.ww-wolf {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+.chip.ww-good {
+  background: var(--ok);
+  color: var(--on-accent);
+}
+
+/* 紀錄 */
+.ww-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ww-log h3 {
+  margin: 0;
+  color: var(--text-h);
+}
+.ww-log ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.ww-log li.muted {
+  color: var(--text);
+}
+.ww-log-day {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.ww-log-day h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  color: var(--text);
+}
+.ww-tally {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ww-ballots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+.ww-log ul.ww-notes {
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+.ww-notes .chip {
+  margin: 0;
+}
+
+/* 結算 */
+.ww-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 2px solid var(--ok);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-h);
+}
+.ww-result.wolf {
+  border-color: var(--danger);
+}
+.ww-result h3,
+.ww-result h4,
+.ww-result p {
+  margin: 0;
+}
+.ww-result h4 {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+.ww-roles,
+.ww-nights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ww-roles li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.ww-roles .chip {
+  margin: 0;
+}
+.ww-nights li {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}

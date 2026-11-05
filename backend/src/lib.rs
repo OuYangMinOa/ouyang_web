@@ -5,6 +5,8 @@ pub mod arena;
 pub mod auth;
 pub mod bigtwo;
 pub mod calendar;
+pub mod chinesecheckers;
+pub mod contact;
 pub mod draw;
 pub mod feedback;
 pub mod game_monitor;
@@ -13,6 +15,7 @@ pub mod games;
 pub mod honeypot;
 pub mod invoice;
 pub mod justone;
+pub mod liarsdice;
 pub mod lobby;
 pub mod minesrace;
 pub mod monitor;
@@ -32,6 +35,7 @@ pub mod undercover;
 pub mod uno;
 pub mod visits;
 pub mod weather;
+pub mod werewolf;
 pub mod youtube;
 
 use std::{
@@ -87,8 +91,12 @@ pub struct AppState {
     pub antique: Arc<party::Parties<antique::Antique>>,
     pub uno: Arc<party::Parties<uno::Uno>>,
     pub justone: Arc<party::Parties<justone::JustOne>>,
+    pub contact: Arc<party::Parties<contact::Contact>>,
+    pub liarsdice: Arc<party::Parties<liarsdice::LiarsDice>>,
     pub telephone: Arc<party::Parties<telephone::Telephone>>,
     pub poker: Arc<party::Parties<poker::Poker>>,
+    pub werewolf: Arc<party::Parties<werewolf::Werewolf>>,
+    pub chinesecheckers: Arc<party::Parties<chinesecheckers::ChineseCheckers>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
@@ -135,8 +143,12 @@ impl AppState {
             antique: Arc::default(),
             uno: Arc::default(),
             justone: Arc::default(),
+            contact: Arc::default(),
+            liarsdice: Arc::default(),
             telephone: Arc::default(),
             poker: Arc::default(),
+            werewolf: Arc::default(),
+            chinesecheckers: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
@@ -232,10 +244,18 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/uno/party/{code}/ws", get(party::connect::<uno::Uno>))
         .route("/games/justone/party", post(party::create::<justone::JustOne>))
         .route("/games/justone/party/{code}/ws", get(party::connect::<justone::JustOne>))
+        .route("/games/contact/party", post(party::create::<contact::Contact>))
+        .route("/games/contact/party/{code}/ws", get(party::connect::<contact::Contact>))
+        .route("/games/liarsdice/party", post(party::create::<liarsdice::LiarsDice>))
+        .route("/games/liarsdice/party/{code}/ws", get(party::connect::<liarsdice::LiarsDice>))
         .route("/games/telephone/party", post(party::create::<telephone::Telephone>))
         .route("/games/telephone/party/{code}/ws", get(party::connect::<telephone::Telephone>))
         .route("/games/poker/party", post(party::create::<poker::Poker>))
         .route("/games/poker/party/{code}/ws", get(party::connect::<poker::Poker>))
+        .route("/games/werewolf/party", post(party::create::<werewolf::Werewolf>))
+        .route("/games/werewolf/party/{code}/ws", get(party::connect::<werewolf::Werewolf>))
+        .route("/games/chinesecheckers/party", post(party::create::<chinesecheckers::ChineseCheckers>))
+        .route("/games/chinesecheckers/party/{code}/ws", get(party::connect::<chinesecheckers::ChineseCheckers>))
         .route("/games/lobby", post(lobby::create))
         .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))

@@ -140,6 +140,33 @@
   --chip: #d4a72c;
   --chip-edge: #fffaf0;
   --felt-rim: #7a5232;
+  /* 狼人殺：夜晚的天空、上面的卡片、框線、文字、月光（夜裡的強調色），以及夜裡的好人綠、狼人紅 */
+  --ww-night: #1e2344;
+  --ww-night-surface: #272d55;
+  --ww-night-border: #3d4579;
+  --ww-night-text: #b6badb;
+  --ww-night-text-h: #eef0ff;
+  --ww-moon: #f2d27a;
+  --ww-night-ok: #6fd69a;
+  --ww-night-danger: #ff8597;
+  /* 跳棋：星形棋盤、洞、棋子的邊和反光，以及六個座位的顏色（紅藍綠黃黑白，黑棋另外有邊框色） */
+  --cc-board: #d2ae72;
+  --cc-hole: #9c7b45;
+  --cc-edge: rgb(28 26 23 / 0.6);
+  --cc-shine: rgb(255 255 255 / 0.5);
+  --cc-red: #d1372b;
+  --cc-blue: #2463c8;
+  --cc-green: #23874a;
+  --cc-yellow: #ffd23f;
+  --cc-black: #23201c;
+  --cc-black-ring: rgb(28 26 23 / 0.85);
+  --cc-white: #fffdf7;
+  /* 暗號接頭：翡翠隊、紫晶隊、路人、叛徒，以及翻開後卡面上的字 */
+  --ct-jade: #0f766e;
+  --ct-amethyst: #7c3aed;
+  --ct-bystander: #7a7264;
+  --ct-traitor: #9f1239;
+  --ct-ink: #fffaf3;
 
   --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
   --serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
@@ -276,6 +303,30 @@
     --chip: #e8c050;
     --chip-edge: #3a2d12;
     --felt-rim: #4a3322;
+    --ww-night: #0c0f22;
+    --ww-night-surface: #161b38;
+    --ww-night-border: #2a3260;
+    --ww-night-text: #9ea2c6;
+    --ww-night-text-h: #e6e8fb;
+    --ww-moon: #e9c869;
+    --ww-night-ok: #5fd38d;
+    --ww-night-danger: #ff6b81;
+    --cc-board: #5c472d;
+    --cc-hole: #2c2116;
+    --cc-edge: rgb(0 0 0 / 0.6);
+    --cc-shine: rgb(255 255 255 / 0.35);
+    --cc-red: #f0574b;
+    --cc-blue: #4f8ef5;
+    --cc-green: #3fbf6a;
+    --cc-yellow: #f5cd3c;
+    --cc-black: #121010;
+    --cc-black-ring: rgb(244 237 226 / 0.65);
+    --cc-white: #f4efe6;
+    --ct-jade: #2dd4bf;
+    --ct-amethyst: #c084fc;
+    --ct-bystander: #8a8175;
+    --ct-traitor: #fb7185;
+    --ct-ink: #100e0c;
     color-scheme: dark;
   }
 }
@@ -402,6 +453,30 @@
   --chip: #e8c050;
   --chip-edge: #3a2d12;
   --felt-rim: #4a3322;
+  --ww-night: #0c0f22;
+  --ww-night-surface: #161b38;
+  --ww-night-border: #2a3260;
+  --ww-night-text: #9ea2c6;
+  --ww-night-text-h: #e6e8fb;
+  --ww-moon: #e9c869;
+  --ww-night-ok: #5fd38d;
+  --ww-night-danger: #ff6b81;
+  --cc-board: #5c472d;
+  --cc-hole: #2c2116;
+  --cc-edge: rgb(0 0 0 / 0.6);
+  --cc-shine: rgb(255 255 255 / 0.35);
+  --cc-red: #f0574b;
+  --cc-blue: #4f8ef5;
+  --cc-green: #3fbf6a;
+  --cc-yellow: #f5cd3c;
+  --cc-black: #121010;
+  --cc-black-ring: rgb(244 237 226 / 0.65);
+  --cc-white: #f4efe6;
+  --ct-jade: #2dd4bf;
+  --ct-amethyst: #c084fc;
+  --ct-bystander: #8a8175;
+  --ct-traitor: #fb7185;
+  --ct-ink: #100e0c;
   color-scheme: dark;
 }
 

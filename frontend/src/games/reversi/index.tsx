@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { OnlinePanel } from '../shared/OnlinePanel'
 import { load, save } from '../shared/storage'
+import { TakebackButton, TakebackNotice } from '../shared/TakebackControls'
 import { GameLayout, Segmented, StatusLine, Toolbar, type Option } from '../shared/ui'
 import { useRoom } from '../shared/useRoom'
 import type { Level } from './ai'
@@ -66,7 +67,7 @@ export default function Reversi() {
   let canPlay = false
   if (mode === 'ai') canPlay = !result && toMove === human
   else if (mode === 'local') canPlay = !result
-  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === toMove
+  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === toMove && !online.takeback.pending
 
   const hints = useMemo(() => legalMoves(game.board, game.toMove), [game.board, game.toMove])
 
@@ -112,11 +113,13 @@ export default function Reversi() {
     if (window.confirm('確定要認輸嗎？')) room.send({ type: 'resign' })
   }
 
-  // 狀態列
+  // 狀態列：觀戰的人和同一台輪流下一樣，只說哪一色
+  const watching = mode === 'online' && room.spectator
+  const neutral = mode === 'local' || watching
   const mine = (disc: Disc | null) =>
     mode === 'ai' ? disc === human : mode === 'online' ? disc === myOnlineColor : null
   const who = (disc: Disc) => {
-    if (mode === 'local') return discName(disc)
+    if (neutral) return discName(disc)
     if (mine(disc)) return '你'
     return mode === 'ai' ? '電腦' : '對手'
   }
@@ -126,30 +129,40 @@ export default function Reversi() {
     const score = `黑 ${blackCount} : 白 ${whiteCount}，`
     const w = result.winner
     if (w === null) status = `${score}平手`
-    else if (result.reason === 'resign') status = mine(w) ? '對手認輸，你贏了！' : '你認輸了'
-    else if (mode === 'local') status = `${score}${discName(w)}獲勝！`
+    else if (result.reason === 'resign')
+      status = watching ? `${discName(w)}獲勝（對方認輸）` : mine(w) ? '對手認輸，你贏了！' : '你認輸了'
+    else if (neutral) status = `${score}${discName(w)}獲勝！`
     else status = mine(w) ? `${score}你贏了！` : `${score}${who(w)}獲勝`
-    tone = w === null ? undefined : mode === 'local' || mine(w) ? 'ok' : 'danger'
+    tone = w === null ? undefined : neutral || mine(w) ? 'ok' : 'danger'
   } else if (mode === 'online' && !room.code) {
     status = '建立或加入房間開始對戰'
   } else if (mode === 'online' && room.error) {
     status = room.error
     tone = 'danger'
   } else if (mode === 'online' && (!room.connected || !room.peerOnline)) {
-    status = room.connected ? '等待對手…' : '連線中…'
+    status = !room.connected ? '連線中…' : watching ? '等待對局的人連線…' : '等待對手…'
   } else {
     const prefix = passed ? `${discName(passed)}無處可下，` : ''
     if (thinking) {
       status = `${prefix}電腦思考中…`
       tone = 'accent'
-    } else if (mode === 'local') {
+    } else if (neutral) {
       status = passed ? `${prefix}換${discName(toMove)}` : `輪到${discName(toMove)}`
+    } else if (mode === 'online' && online.takeback.pending) {
+      status = '悔棋請求中，暫停落子'
     } else if (mine(toMove)) {
       status = `${prefix}輪到你（${discName(toMove)}）`
       tone = 'accent'
     } else {
       status = `${prefix}等待對手（${discName(toMove)}）`
     }
+  }
+
+  const takebackProps = {
+    takeback: online.takeback,
+    seat: room.seat,
+    active: !result && room.connected && room.peerOnline,
+    send: room.send,
   }
 
   const blackIsSeat0 = blackSeat(online.round) === 0
@@ -195,6 +208,7 @@ export default function Reversi() {
   return (
     <GameLayout side={side}>
       <StatusLine tone={tone}>{status}</StatusLine>
+      {mode === 'online' && <TakebackNotice {...takebackProps} />}
       <div className="reversi-score" aria-label={`黑 ${blackCount}，白 ${whiteCount}`}>
         <span className={turnClass(BLACK)}>
           <span className="reversi-chip black" aria-hidden="true" />
@@ -221,19 +235,23 @@ export default function Reversi() {
       <Toolbar>
         {mode === 'online' ? (
           room.code &&
+          !room.spectator &&
           (result ? (
             <button type="button" onClick={() => room.send({ type: 'restart' })} disabled={!room.connected}>
               再來一局
             </button>
           ) : (
-            <button
-              type="button"
-              className="danger"
-              onClick={resign}
-              disabled={!room.connected || myOnlineColor === null}
-            >
-              認輸
-            </button>
+            <>
+              <TakebackButton {...takebackProps} />
+              <button
+                type="button"
+                className="danger"
+                onClick={resign}
+                disabled={!room.connected || myOnlineColor === null}
+              >
+                認輸
+              </button>
+            </>
           ))
         ) : (
           <>

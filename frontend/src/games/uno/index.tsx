@@ -17,6 +17,7 @@ import {
   type UnoParty,
   type UnoView,
 } from './types'
+import { useMotion, type Motion } from './motion'
 import './uno.css'
 
 type UParty = Party<UnoParty>
@@ -240,6 +241,7 @@ function Board({ party, view }: { party: UParty; view: UnoView }) {
   const ended = view.stage === 'end'
   const myTurn = me !== null && view.turn === me
   const n = view.seats.length
+  const motion = useMotion(view)
 
   let status: ReactNode
   let tone: 'ok' | 'danger' | 'accent' | undefined
@@ -268,13 +270,21 @@ function Board({ party, view }: { party: UParty; view: UnoView }) {
       </StatusLine>
       <ul className="uno-seats" aria-label="其他玩家">
         {order.map((seat) => (
-          <SeatTile key={seat} party={party} view={view} seat={seat} name={name(seat)} />
+          <SeatTile key={seat} party={party} view={view} seat={seat} name={name(seat)} motion={motion} />
         ))}
       </ul>
       <CatchBar party={party} view={view} name={name} />
-      <Table party={party} view={view} name={name} />
+      <Table party={party} view={view} name={name} motion={motion} />
       {me !== null && view.hand && !ended && (
-        <Hand key={view.game} party={party} view={view} me={me} hand={view.hand} myTurn={myTurn} />
+        <Hand
+          key={view.game}
+          party={party}
+          view={view}
+          me={me}
+          hand={view.hand}
+          myTurn={myTurn}
+          motion={motion}
+        />
       )}
       {ended && view.result && <Result party={party} view={view} name={name} />}
       <Log view={view} name={name} />
@@ -283,17 +293,34 @@ function Board({ party, view }: { party: UParty; view: UnoView }) {
   )
 }
 
-function SeatTile({ party, view, seat, name }: { party: UParty; view: UnoView; seat: number; name: string }) {
+function SeatTile({
+  party,
+  view,
+  seat,
+  name,
+  motion,
+}: {
+  party: UParty
+  view: UnoView
+  seat: number
+  name: string
+  motion: Motion
+}) {
   const s = view.seats[seat]
+  // 還在飛過來的牌先不算
+  const count = Math.max(0, s.count - (motion.lag[seat] ?? 0))
   const player = party.playerAt(seat)
   const turn = view.turn === seat
   const won = view.result?.winner === seat
   return (
-    <li className={`uno-seat${turn ? ' turn' : ''}${won ? ' won' : ''}`}>
+    <li
+      className={`uno-seat${turn ? ' turn' : ''}${won ? ' won' : ''}`}
+      ref={(el) => motion.attach.seat(seat, el)}
+    >
       <span className="uno-seat-name">{name}</span>
       <div className="uno-seat-count">
         <span className="uno-back" aria-hidden />
-        <span className={s.count === 1 ? 'uno-low' : ''}>{s.count === 0 ? '出完了' : `${s.count} 張`}</span>
+        <span className={count === 1 ? 'uno-low' : ''}>{s.count === 0 ? '出完了' : `${count} 張`}</span>
         {s.uno && s.count === 1 && <span className="uno-said">UNO!</span>}
       </div>
       <div className="uno-seat-chips">
@@ -333,10 +360,13 @@ function CatchBar({ party, view, name }: { party: UParty; view: UnoView; name: N
 }
 
 /** 桌子中間：抽牌堆、桌上的牌、現在的顏色和方向 */
-function Table({ party, view, name }: { party: UParty; view: UnoView; name: NameOf }) {
+function Table({ party, view, name, motion }: { party: UParty; view: UnoView; name: NameOf; motion: Motion }) {
   const myTurn = view.you !== null && view.turn === view.you && view.stage === 'play'
   const canDraw = myTurn && view.drawn === null
   const last = [...view.log].reverse().find((e) => e.type === 'play')
+  // 牌堆的張數也等牌飛出去才減
+  const { attach, under, lag, hidden, landing } = motion
+  const inFlight = lag.reduce((a, b) => a + b, 0) + hidden.length + landing.length
   return (
     <div className={`uno-felt tint-${COLOR_KEYS[view.color]}`} aria-live="polite">
       <div className="uno-felt-cards">
@@ -347,18 +377,42 @@ function Table({ party, view, name }: { party: UParty; view: UnoView; name: Name
           disabled={!canDraw}
           aria-label={view.pending > 0 ? `抽 ${view.pending} 張` : '抽一張'}
         >
-          <span className="uno-pile-back" aria-hidden>
+          <span
+            className="uno-pile-back"
+            aria-hidden
+            ref={(el) => attach.pile(el)}
+          >
             UNO
           </span>
-          <span className="uno-pile-count">剩 {view.pile} 張</span>
+          <span className="uno-pile-count">剩 {view.pile + inFlight} 張</span>
         </button>
-        <CardFace card={view.top} big />
+        <span className="uno-discard">
+          {under !== null && (
+            <span key="under" className="uno-discard-under" aria-hidden>
+              <CardFace card={under} big />
+            </span>
+          )}
+          <span
+            key="top"
+            className="uno-discard-top"
+            ref={(el) => attach.top(el)}
+          >
+            <CardFace card={view.top} big />
+          </span>
+        </span>
       </div>
       <div className="uno-felt-info">
         <span className={`uno-color-dot ${COLOR_KEYS[view.color]}`} aria-hidden />
         <span>現在是{COLOR_NAMES[view.color]}色</span>
-        <span className="uno-dir">{view.clockwise ? '↻ 順時針' : '↺ 逆時針'}</span>
-        {view.pending > 0 && <span className="uno-pending">累積 +{view.pending}</span>}
+        {/* key 換了就重播一次動畫 */}
+        <span key={`dir-${view.clockwise}`} className="uno-dir">
+          {view.clockwise ? '↻ 順時針' : '↺ 逆時針'}
+        </span>
+        {view.pending > 0 && (
+          <span key={`pending-${view.pending}`} className="uno-pending">
+            累積 +{view.pending}
+          </span>
+        )}
       </div>
       {last && <p>{name(last.seat)} 出的</p>}
     </div>
@@ -371,12 +425,14 @@ function Hand({
   me,
   hand,
   myTurn,
+  motion,
 }: {
   party: UParty
   view: UnoView
   me: number
   hand: Card[]
   myTurn: boolean
+  motion: Motion
 }) {
   // 剩兩張時先按「UNO!」，出牌時一起送
   const [armed, setArmed] = useState(false)
@@ -395,8 +451,10 @@ function Hand({
     party.act({ type: 'play', card, color, uno })
   }
 
-  function tap(card: Card) {
+  function tap(card: Card, el: HTMLElement) {
     if (!myTurn || waiting || !view.playable.includes(card)) return
+    // 記下這張的位置，出牌動畫從這裡飛到桌上
+    attach.playFrom(el.getBoundingClientRect())
     if (isWild(card)) setPicking(card)
     else play(card)
   }
@@ -413,23 +471,31 @@ function Hand({
   }
 
   const mySeat = view.seats[me]
+  // 還沒發到的新牌先不畫；正在飛過來的先佔位置、看不見
+  const { attach, hidden, landing } = motion
+  const shown = hand.filter((c) => !hidden.includes(c))
   return (
-    <section className={`uno-hand-area${myTurn ? ' my-turn' : ''}`} aria-label="你的手牌">
+    <section
+      className={`uno-hand-area${myTurn ? ' my-turn' : ''}`}
+      aria-label="你的手牌"
+      ref={(el) => attach.handArea(el)}
+    >
       <div className="uno-me">
         <strong>你</strong>
-        <span>{hand.length} 張</span>
+        <span>{shown.length} 張</span>
         <span>{mySeat.total} 分</span>
         {mySeat.uno && hand.length === 1 && <span className="uno-said">UNO!</span>}
       </div>
-      <div className="uno-hand">
-        {hand.map((card) => {
+      <div className="uno-hand" ref={(el) => attach.hand(el)}>
+        {shown.map((card) => {
           const ok = myTurn && view.playable.includes(card)
           return (
             <button
               key={card}
               type="button"
-              className={`uno-card ${colorClass(card)}${ok ? ' ok' : myTurn ? ' dim' : ''}${card === view.drawn ? ' drawn' : ''}${card === choosing ? ' picked' : ''}`}
-              onClick={() => tap(card)}
+              data-card={card}
+              className={`uno-card ${colorClass(card)}${ok ? ' ok' : myTurn ? ' dim' : ''}${card === view.drawn ? ' drawn' : ''}${card === choosing ? ' picked' : ''}${landing.includes(card) ? ' incoming' : ''}`}
+              onClick={(e) => tap(card, e.currentTarget)}
               aria-disabled={!ok}
               aria-label={`${cardLabel(card)}${ok ? '（可以出）' : ''}`}
             >

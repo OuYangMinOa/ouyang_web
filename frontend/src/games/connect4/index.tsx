@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type KeyboardEvent } from 'react'
 import { OnlinePanel } from '../shared/OnlinePanel'
 import { load, save } from '../shared/storage'
+import { TakebackButton, TakebackNotice } from '../shared/TakebackControls'
 import { GameLayout, Segmented, StatusLine, Toolbar, type Option } from '../shared/ui'
 import { useRoom } from '../shared/useRoom'
 import type { Level } from './ai'
@@ -77,7 +78,7 @@ export default function Connect4() {
   let canPlay = false
   if (mode === 'ai') canPlay = !result && game.toMove === human
   else if (mode === 'local') canPlay = !result
-  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === game.toMove
+  else canPlay = !result && room.connected && room.peerOnline && myOnlineColor === game.toMove && !online.takeback.pending
 
   // 預覽（落子確認）只在同一個局面有效，局面一變就自動失效
   const positionKey = `${mode}:${online.round}:${game.moves.length}`
@@ -158,7 +159,9 @@ export default function Connect4() {
     if (window.confirm('確定要認輸嗎？')) room.send({ type: 'resign' })
   }
 
-  // 狀態列
+  // 狀態列：觀戰的人和同一台輪流下一樣，只說哪一色
+  const watching = mode === 'online' && room.spectator
+  const neutral = mode === 'local' || watching
   let status: string
   let tone: 'ok' | 'danger' | 'accent' | undefined
   let chip: Disc | null = null
@@ -168,18 +171,18 @@ export default function Connect4() {
     const who = result.winner
     chip = who
     if (who === null) status = '棋盤下滿了，和局'
-    else if (mode === 'local') status = `${discName(who)}獲勝！`
+    else if (neutral) status = `${discName(who)}獲勝！`
     else if (mine(who)) status = result.reason === 'resign' ? '對手認輸，你贏了！' : '你贏了！'
     else if (mode === 'ai') status = '電腦獲勝'
     else status = result.reason === 'resign' ? '你認輸了' : '對手獲勝'
-    tone = who === null ? undefined : mode === 'local' || mine(who) ? 'ok' : 'danger'
+    tone = who === null ? undefined : neutral || mine(who) ? 'ok' : 'danger'
   } else if (mode === 'online' && !room.code) {
     status = '建立或加入房間開始對戰'
   } else if (mode === 'online' && room.error) {
     status = room.error
     tone = 'danger'
   } else if (mode === 'online' && (!room.connected || !room.peerOnline)) {
-    status = room.connected ? '等待對手…' : '連線中…'
+    status = !room.connected ? '連線中…' : watching ? '等待對局的人連線…' : '等待對手…'
   } else if (thinking) {
     status = '電腦思考中…'
     tone = 'accent'
@@ -188,8 +191,11 @@ export default function Connect4() {
     status = '再點一次同一欄確認落子'
     tone = 'accent'
     chip = game.toMove
-  } else if (mode === 'local') {
+  } else if (neutral) {
     status = `輪到${discName(game.toMove)}`
+    chip = game.toMove
+  } else if (mode === 'online' && online.takeback.pending) {
+    status = '悔棋請求中，暫停落子'
     chip = game.toMove
   } else if (mine(game.toMove)) {
     status = `輪到你（${discName(game.toMove)}）`
@@ -255,12 +261,20 @@ export default function Connect4() {
     </>
   )
 
+  const takebackProps = {
+    takeback: online.takeback,
+    seat: room.seat,
+    active: !result && room.connected && room.peerOnline,
+    send: room.send,
+  }
+
   return (
     <GameLayout side={side}>
       <StatusLine tone={tone}>
         {chip !== null && <Chip disc={chip} />}
         {status}
       </StatusLine>
+      {mode === 'online' && <TakebackNotice {...takebackProps} />}
       <div className="board-box c4-box">
         <Connect4Board
           board={game.board}
@@ -277,19 +291,23 @@ export default function Connect4() {
       <Toolbar>
         {mode === 'online' ? (
           room.code &&
+          !room.spectator &&
           (result ? (
             <button type="button" onClick={() => room.send({ type: 'restart' })} disabled={!room.connected}>
               再來一局
             </button>
           ) : (
-            <button
-              type="button"
-              className="danger"
-              onClick={resign}
-              disabled={!room.connected || myOnlineColor === null}
-            >
-              認輸
-            </button>
+            <>
+              <TakebackButton {...takebackProps} />
+              <button
+                type="button"
+                className="danger"
+                onClick={resign}
+                disabled={!room.connected || myOnlineColor === null}
+              >
+                認輸
+              </button>
+            </>
           ))
         ) : (
           <>

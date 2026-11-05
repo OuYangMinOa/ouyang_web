@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { OnlinePanel } from '../shared/OnlinePanel'
 import { load, save } from '../shared/storage'
 import { GameLayout, Overlay, Segmented, StatusLine, Toolbar } from '../shared/ui'
+import { TakebackButton, TakebackNotice } from '../shared/TakebackControls'
 import { useRoom } from '../shared/useRoom'
 import { chooseMove, type Level } from './ai'
 import type { AiRequest, AiResponse } from './ai.worker'
@@ -85,7 +86,11 @@ export default function Chess() {
 
   const ready = mode !== 'online' || (room.connected && room.peerOnline)
   const aiTurn = mode === 'ai' && !game.result && game.turn !== human
-  const canMove = !game.result && ready && (me === null || game.turn === me) && (mode !== 'online' || me !== null)
+  const canMove =
+    !game.result &&
+    ready &&
+    (me === null || game.turn === me) &&
+    (mode !== 'online' || (me !== null && !online.takeback.pending))
   const pendingPromo = promo && promo.game === game ? promo : null
   const selected = canMove && selection && selection.game === game ? selection.sq : null
 
@@ -210,6 +215,8 @@ export default function Chess() {
   }
 
   // ---- 狀態列 ----
+  /** 觀戰：沒有自己的顏色（me 是 null），只能看 */
+  const watching = mode === 'online' && room.spectator
   const inCheck = game.pos.inCheck()
   let status: string
   let tone: 'ok' | 'danger' | 'accent' | undefined
@@ -222,9 +229,10 @@ export default function Chess() {
     status = room.error
     tone = 'danger'
   } else if (mode === 'online' && !room.connected) status = '連線中…'
-  else if (mode === 'online' && !room.peerOnline) status = '等待對手…'
+  else if (mode === 'online' && !room.peerOnline) status = watching ? '等待對局的人連線…' : '等待對手…'
   else {
     if (aiTurn) status = '電腦思考中…'
+    else if (mode === 'online' && online.takeback.pending) status = '悔棋請求中，暫停走棋'
     else if (me === null) status = `輪到${colorName(game.turn)}`
     else if (game.turn === me) status = `輪到你（${colorName(me)}）`
     else status = '等待對手走棋…'
@@ -236,7 +244,13 @@ export default function Chess() {
 
   const last = game.lastMove
   const flipped = (me === BLACK) !== flip
-  const canRestart = mode !== 'online' || room.connected
+  const canRestart = mode !== 'online' || (room.connected && !watching)
+  const takebackProps = {
+    takeback: online.takeback,
+    seat: room.seat,
+    active: !game.result && room.connected && room.peerOnline,
+    send: room.send,
+  }
 
   return (
     <GameLayout
@@ -290,6 +304,7 @@ export default function Chess() {
       }
     >
       <StatusLine tone={tone}>{status}</StatusLine>
+      {mode === 'online' && <TakebackNotice {...takebackProps} />}
       <div className="board-box">
         <ChessBoard
           board={game.pos.board}
@@ -327,9 +342,11 @@ export default function Chess() {
             <strong className="chess-result">{outcome.title}</strong>
             <span>{outcome.detail}</span>
             <div className="game-toolbar">
-              <button type="button" onClick={restart} disabled={!canRestart}>
-                再來一局
-              </button>
+              {!watching && (
+                <button type="button" onClick={restart} disabled={!canRestart}>
+                  再來一局
+                </button>
+              )}
               <button type="button" className="secondary" onClick={() => setDismissed(game)}>
                 看棋盤
               </button>
@@ -348,12 +365,15 @@ export default function Chess() {
             </button>
           </>
         )}
-        {mode === 'online' && room.code && !game.result && (
-          <button type="button" className="danger" onClick={resign} disabled={me === null || !room.connected}>
-            認輸
-          </button>
+        {mode === 'online' && room.code && !watching && !game.result && (
+          <>
+            <TakebackButton {...takebackProps} />
+            <button type="button" className="danger" onClick={resign} disabled={me === null || !room.connected}>
+              認輸
+            </button>
+          </>
         )}
-        {mode === 'online' && game.result && (
+        {mode === 'online' && !watching && game.result && (
           <button type="button" onClick={restart} disabled={!canRestart}>
             再來一局
           </button>

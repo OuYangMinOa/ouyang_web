@@ -5,7 +5,8 @@ import { GAME_CATEGORIES, GAMES, type GameInfo } from '../registry'
 import { ChatBox, PartyNotice } from '../shared/Party'
 import { loadPartyName, MAX_NAME } from '../shared/useParty'
 import { useInvite } from '../shared/share'
-import { includes, playingPath, useLobby, type Lobby, type LobbyPlayer } from './useLobby'
+import { Segmented } from '../shared/ui'
+import { playingPath, useLobby, watchingNow, type Lobby, type LobbyPlayer } from './useLobby'
 import '../games.css'
 import './lobby.css'
 
@@ -123,7 +124,7 @@ function nameOf(players: LobbyPlayer[], pid: number): string {
   return players.find((p) => p.pid === pid)?.name ?? '（已離開）'
 }
 
-/** 現在在玩的那一間：自己有份就可以回去（被換頁、重新整理後） */
+/** 現在在玩的那一間：被換頁、重新整理後可以回去，上場的人「進去玩」、觀戰的人「進去觀戰」 */
 function NowPlaying({ lobby }: { lobby: Lobby }) {
   const navigate = useNavigate()
   const { playing, state } = lobby
@@ -135,7 +136,16 @@ function NowPlaying({ lobby }: { lobby: Lobby }) {
     )
   }
   const game = GAMES.find((g) => g.id === playing.game)
-  const mine = includes(playing, lobby.you)
+  const watching = watchingNow(lobby)
+  let who: string
+  if (playing.players) {
+    who = playing.players.map((pid) => nameOf(state.players, pid)).join(' 對 ')
+  } else {
+    const watchers = state.players.filter((p) => p.watch).map((p) => p.name)
+    who = watchers.length > 0 ? `大家一起，${watchers.join('、')} 觀戰` : '大家一起'
+  }
+  let hint = ''
+  if (watching) hint = playing.players ? '，你這局沒有上場，可以進去觀戰' : '，你選了觀戰'
   return (
     <section className="lobby-now" aria-label="現在在玩">
       <span className="lobby-now-icon" aria-hidden="true">
@@ -144,17 +154,13 @@ function NowPlaying({ lobby }: { lobby: Lobby }) {
       <span className="lobby-now-body">
         <strong>正在玩{game?.name ?? playing.game}</strong>
         <span className="muted">
-          {playing.players
-            ? playing.players.map((pid) => nameOf(state.players, pid)).join(' 對 ')
-            : '大家一起'}
-          {!mine && '，你這局沒有上場，可以在這裡聊天等下一局'}
+          {who}
+          {hint}
         </span>
       </span>
-      {mine && (
-        <button type="button" onClick={() => navigate(playingPath(playing))}>
-          進去玩
-        </button>
-      )}
+      <button type="button" onClick={() => navigate(playingPath(playing))}>
+        {watching ? '進去觀戰' : '進去玩'}
+      </button>
     </section>
   )
 }
@@ -203,16 +209,21 @@ function GamePicker({ lobby }: { lobby: Lobby }) {
   )
 }
 
-/** 選好遊戲之後：兩人的棋類要挑誰上場，其他直接開始。黏在畫面底部，清單很長時也不用捲下去找 */
+/**
+ * 選好遊戲之後：兩人的棋類要從上場的人裡挑兩個，其他直接開始（選了觀戰的人跟過去看）。
+ * 黏在畫面底部，清單很長時也不用捲下去找
+ */
 function StartPanel({ lobby, game, onCancel }: { lobby: Lobby; game: GameInfo; onCancel: () => void }) {
   const online = lobby.state?.players.filter((p) => p.online) ?? []
+  const players = online.filter((p) => !p.watch)
+  const watchers = online.length - players.length
   const [seats, setSeats] = useState<[number | null, number | null]>([null, null])
   const duel = game.lobby?.kind === 'duel'
 
-  // 沒挑的座位、挑的人已經離線的座位，預設是房主和下一個人
-  const isOnline = (pid: number | null) => pid !== null && online.some((p) => p.pid === pid)
-  const first = isOnline(seats[0]) ? seats[0] : (lobby.you ?? null)
-  const second = isOnline(seats[1]) ? seats[1] : (online.find((p) => p.pid !== first)?.pid ?? null)
+  // 沒挑的座位、挑的人已經離線或改成觀戰的座位，預設是房主（沒選觀戰的話）和下一個人
+  const canSit = (pid: number | null) => pid !== null && players.some((p) => p.pid === pid)
+  const first = canSit(seats[0]) ? seats[0] : canSit(lobby.you) ? lobby.you : (players[0]?.pid ?? null)
+  const second = canSit(seats[1]) ? seats[1] : (players.find((p) => p.pid !== first)?.pid ?? null)
   const ready = lobby.connected && (!duel || (first !== null && second !== null && first !== second))
 
   function start() {
@@ -245,7 +256,7 @@ function StartPanel({ lobby, game, onCancel }: { lobby: Lobby; game: GameInfo; o
                   setSeats((prev) => (i === 0 ? [pid, prev[1]] : [prev[0], pid]))
                 }}
               >
-                {online.map((p) => (
+                {players.map((p) => (
                   <option key={p.pid} value={p.pid}>
                     {p.name}
                   </option>
@@ -255,8 +266,19 @@ function StartPanel({ lobby, game, onCancel }: { lobby: Lobby; game: GameInfo; o
           ))}
         </div>
       )}
-      {duel && online.length < 2 && <p className="muted">還要再一個人才能開，按上面的「邀請朋友」。</p>}
-      {duel && online.length >= 2 && first === second && <p className="error">請挑兩個不同的人。</p>}
+      {duel && players.length < 2 && (
+        <p className="muted">
+          {online.length < 2 ? '還要再一個人才能開，按上面的「邀請朋友」。' : '要上場的人不到兩個，請有人改成「上場」。'}
+        </p>
+      )}
+      {duel && players.length >= 2 && first === second && <p className="error">請挑兩個不同的人。</p>}
+      {duel && players.length >= 2 && online.length > 2 && <p className="muted">其他人會跟過去觀戰。</p>}
+      {!duel && watchers > 0 && (
+        <p className="muted">
+          {players.length} 人上場、{watchers} 人觀戰
+          {players.length === 0 && '。大家都選了觀戰，到了那邊要有人改成上場才能開始'}
+        </p>
+      )}
       {lobby.playing && <p className="muted">開始後，正在玩的人也會一起換過來。</p>}
       <button type="button" className="party-start" onClick={start} disabled={!ready}>
         開始玩
@@ -277,6 +299,7 @@ function Roster({ lobby }: { lobby: Lobby }) {
             <span className="party-roster-name">{p.name}</span>
             {p.pid === state.host && <span className="chip subtle">房主</span>}
             {p.pid === me.pid && <span className="chip subtle">你</span>}
+            {p.watch && <span className="chip subtle">觀戰</span>}
             {!p.online && <span className="chip subtle">離線</span>}
             {isHost && p.pid !== me.pid && (
               <button
@@ -294,6 +317,17 @@ function Roster({ lobby }: { lobby: Lobby }) {
           </li>
         ))}
       </ul>
+      <Segmented
+        label="我要"
+        value={me.watch ? 'watch' : 'play'}
+        options={[
+          { value: 'play', label: '上場' },
+          { value: 'watch', label: '觀戰' },
+        ]}
+        onChange={(v) => lobby.watch(v === 'watch')}
+        disabled={!lobby.connected}
+      />
+      {me.watch && <p className="muted lobby-watch-hint">一樣跟著大家過去，只是不上場、在旁邊看。正在玩的話下一局生效。</p>}
       <Rename lobby={lobby} />
     </section>
   )

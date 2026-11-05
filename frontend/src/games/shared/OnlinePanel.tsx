@@ -65,7 +65,10 @@ export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: 
   let status: string
   if (room.error) status = room.error
   else if (!room.connected) status = '連線中…'
-  else if (!room.peerOnline) status = room.seat === 0 ? '等待對手加入…' : '對手離線，等待重新連線…'
+  else if (room.spectator) {
+    const away = seatNames.filter((_, i) => !room.online[i])
+    status = away.length ? `觀戰中，${away.join('、')}離線` : '觀戰中'
+  } else if (!room.peerOnline) status = room.seat === 0 ? '等待對手加入…' : '對手離線，等待重新連線…'
   else status = '對手已連線'
 
   return (
@@ -81,6 +84,12 @@ export function OnlinePanel<T>({ room, seatNames }: { room: Room<T>; seatNames: 
       {room.seat !== null && opponent !== null && (
         <p className="muted">
           你是 <strong>{seatNames[room.seat]}</strong>，對手是 {seatNames[opponent]}
+        </p>
+      )}
+      {room.spectator && <p className="muted">你在觀戰，看得到每一步，但不能下。</p>}
+      {room.connected && room.watchers > 0 && (
+        <p className="muted">
+          <span aria-hidden="true">👀</span> {room.watchers} 人觀戰中
         </p>
       )}
       <div className="game-toolbar">

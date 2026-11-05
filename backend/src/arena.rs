@@ -5,6 +5,9 @@
 //! 徽章、名次，以及補位的電腦玩家。每個人自己的盤面在用戶端模擬，伺服器只收「送出多少攻擊」
 //! 「盤面長怎樣」「我輸了」，再負責選目標與轉送。
 //!
+//! 每個人可以自己選「觀戰」（`watch`）：開局時不上場，看其他人的盤面。記在 `watchers`（用 key 認人），
+//! 遊戲室開房時會先把選了觀戰的人放進來，之後再改也會轉過來。
+//!
 //! 對局是即時的，房間只放在記憶體：伺服器重啟或換版時，進行中的對局會中斷。
 //! 每個房間有一個計時器（`TICK`）推進倒數、電腦玩家與目標，並把這段時間的變化合併成一則廣播，
 //! 人再多也不會每個事件都廣播一次。協定見 `frontend/src/games/shared/useArena.ts`。
@@ -176,6 +179,8 @@ struct Arena<R: Rules> {
     public: bool,
     /// 遊戲室開的房間：照遊戲室的順序決定房主（見 `host`），其他房間是空的
     hosts: Vec<String>,
+    /// 選了觀戰的人（key），開局時不上場
+    watchers: HashSet<String>,
     /// 開房間的時間
     opened: Instant,
     /// 從表裡移除後設為 true，剛好拿到這個房間的人要當作找不到
@@ -224,6 +229,7 @@ impl<R: Rules> Arena<R> {
         Self {
             public,
             hosts: Vec::new(),
+            watchers: HashSet::new(),
             opened: now,
             closed: false,
             phase: Phase::Lobby,
@@ -247,6 +253,15 @@ impl<R: Rules> Arena<R> {
 
     fn online_humans(&self) -> usize {
         self.players.iter().filter(|p| p.conn.is_some()).count()
+    }
+
+    fn watching(&self, p: &Player<R::Bot>) -> bool {
+        p.key.as_ref().is_some_and(|k| self.watchers.contains(k))
+    }
+
+    /// 開局時會上場的人：連著線、沒選觀戰
+    fn ready_humans(&self) -> usize {
+        self.players.iter().filter(|p| p.conn.is_some() && !self.watching(p)).count()
     }
 
     /// 房主：還連著的人裡，排在 `hosts`（遊戲室的順序）最前面的；都不在裡面就是最早進來的
@@ -359,6 +374,7 @@ impl<R: Rules> Arena<R> {
                     "target": p.target,
                     "strategy": p.strategy,
                     "manual": p.manual.is_some(),
+                    "watching": self.watching(p),
                 })
             })
             .collect();
@@ -375,8 +391,10 @@ impl<R: Rules> Arena<R> {
         }))
     }
 
+    /// 至少要一個人上場（只剩電腦時一局會馬上結束），加上電腦至少兩個
     fn can_start(&self) -> bool {
-        matches!(self.phase, Phase::Lobby | Phase::Results) && self.online_humans() + self.bots >= 2
+        let humans = self.ready_humans();
+        matches!(self.phase, Phase::Lobby | Phase::Results) && humans >= 1 && humans + self.bots >= 2
     }
 
     fn start(&mut self, now: Instant) {
@@ -384,7 +402,7 @@ impl<R: Rules> Arena<R> {
             return;
         }
         self.players.retain(|p| p.conn.is_some());
-        let count = self.bots.min(MAX_PLAYERS - self.players.len());
+        let count = self.bots.min(MAX_PLAYERS - self.ready_humans());
         // 大部分是弱的，前期就會陸續出局；強的只有幾個（至少一個），撐到後面
         let mut strong = count.div_ceil(STRONG_BOTS_PER);
         for n in 1..=count {
@@ -403,10 +421,18 @@ impl<R: Rules> Arena<R> {
             bot.bot = Some(R::Bot::new(skill, next_move));
             self.players.push(bot);
         }
+        let watchers = &self.watchers;
         for p in &mut self.players {
+            p.place = None;
+            if p.key.as_ref().is_some_and(|k| watchers.contains(k)) {
+                // 觀戰的人沒有盤面，其他人的小盤面裡也不會有他
+                p.in_round = false;
+                p.alive = false;
+                p.board = R::empty_board();
+                continue;
+            }
             p.in_round = true;
             p.alive = true;
-            p.place = None;
             p.badges = 0;
             p.kos = 0;
             p.manual = None;
@@ -433,7 +459,7 @@ impl<R: Rules> Arena<R> {
         match self.phase {
             // 公開房間打完一局也一樣，人夠就自動開下一局
             Phase::Lobby | Phase::Results if self.public => {
-                if self.online_humans() >= 2 {
+                if self.ready_humans() >= 2 {
                     match self.deadline {
                         None => {
                             self.deadline = Some(now + AUTO_START);
@@ -649,6 +675,13 @@ impl<R: Rules> Arena<R> {
         self.empty_since.is_some_and(|t| now.duration_since(t) >= EMPTY_TTL)
     }
 
+    fn set_watch(&mut self, key: String, watch: bool) {
+        let changed = if watch { self.watchers.insert(key) } else { self.watchers.remove(&key) };
+        if changed {
+            self.dirty = true;
+        }
+    }
+
     /// 給系統管理看的房間狀態（game_monitor.rs）
     fn info(&self, code: String, now: Instant) -> RoomInfo {
         let in_game = matches!(self.phase, Phase::Countdown | Phase::Playing);
@@ -658,7 +691,9 @@ impl<R: Rules> Arena<R> {
             .iter()
             .filter_map(|p| {
                 let conn = p.conn.as_ref().map(|c| (c.ip.as_str(), c.since));
-                let status = if in_game && !p.in_round {
+                let status = if !p.in_round && self.watching(p) {
+                    "觀戰".to_owned()
+                } else if in_game && !p.in_round {
                     "等下一局".to_owned()
                 } else if in_game && p.alive {
                     "存活".to_owned()
@@ -712,6 +747,12 @@ impl<R: Rules> Arena<R> {
                 self.dirty = true;
             }
             ClientMessage::Start if self.host() == Some(pid) => self.start(now),
+            // 下一局開局時才生效，這局在場上的人照樣打完
+            ClientMessage::Watch { watch } => {
+                if let Some(key) = self.players[i].key.clone() {
+                    self.set_watch(key, watch);
+                }
+            }
             ClientMessage::Strategy { strategy } => {
                 let p = &mut self.players[i];
                 p.strategy = strategy;
@@ -781,6 +822,10 @@ enum ClientMessage {
         count: usize,
     },
     Start,
+    /// 選觀戰（true）或上場（false）
+    Watch {
+        watch: bool,
+    },
     Strategy {
         strategy: Strategy,
     },
@@ -801,8 +846,13 @@ enum ClientMessage {
 
 impl<R: Rules> Arenas<R> {
     /// 建立房間；`public` 是快速配對：有還沒開局的公開房間就加入人最多的那間。
-    /// `hosts` 是遊戲室替大家開房時的房主順序，自己開的是空的
-    pub(crate) fn open(self: &Arc<Self>, public: bool, hosts: Vec<String>) -> Result<String, AppError> {
+    /// `hosts` 是遊戲室替大家開房時的房主順序，`watchers` 是遊戲室裡選了觀戰的人，自己開的房間兩個都是空的
+    pub(crate) fn open(
+        self: &Arc<Self>,
+        public: bool,
+        hosts: Vec<String>,
+        watchers: Vec<String>,
+    ) -> Result<String, AppError> {
         let mut live = self.live.lock().unwrap();
         if public && R::PUBLIC {
             let best = live
@@ -828,6 +878,7 @@ impl<R: Rules> Arenas<R> {
         };
         let mut arena = Arena::<R>::new(public && R::PUBLIC, Instant::now());
         arena.hosts = hosts;
+        arena.watchers = watchers.into_iter().collect();
         let arena = Arc::new(Mutex::new(arena));
         live.insert(code.clone(), arena.clone());
         tokio::spawn(run(self.clone(), code.clone(), arena));
@@ -836,6 +887,15 @@ impl<R: Rules> Arenas<R> {
 
     fn get(&self, code: &str) -> Option<Arc<Mutex<Arena<R>>>> {
         self.live.lock().unwrap().get(code).cloned()
+    }
+
+    /// 遊戲室裡有人改選觀戰／上場：轉給遊戲室開的這間房間（`key` 不一定已經連進來），下一個 tick 廣播
+    pub(crate) fn set_watch(&self, code: &str, key: &str, watch: bool) {
+        let Some(arena) = self.get(code) else { return };
+        let mut arena = arena.lock().unwrap();
+        if !arena.closed {
+            arena.set_watch(key.to_owned(), watch);
+        }
     }
 
     /// 給系統管理看：所有開著的房間
@@ -877,7 +937,7 @@ pub async fn create_arena<R: Rules>(
     State(state): State<AppState>,
     Json(input): Json<NewArena>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    let code = R::arenas(&state).open(input.public, Vec::new())?;
+    let code = R::arenas(&state).open(input.public, Vec::new(), Vec::new())?;
     Ok((StatusCode::CREATED, Json(json!({ "code": code }))))
 }
 
@@ -1080,6 +1140,46 @@ mod tests {
         assert_eq!(arena.host(), Some(b));
         let a = join(&mut arena, "guest:a", 3);
         assert_eq!(arena.host(), Some(a));
+    }
+
+    #[test]
+    fn watchers_sit_out() {
+        let now = Instant::now();
+        let mut arena = Arena::<Tetris>::new(false, now);
+        arena.bots = 0;
+        // 遊戲室開房時就選了觀戰的房主
+        arena.watchers = HashSet::from(["guest:a".to_owned()]);
+        let join = |arena: &mut Arena<Tetris>, key: &str, id| {
+            let (tx, _) = mpsc::unbounded_channel();
+            arena.join(key, key.to_owned(), Conn { id, tx, ip: "local".into(), since: now }, now).unwrap()
+        };
+        let a = join(&mut arena, "guest:a", 1);
+        let b = join(&mut arena, "guest:b", 2);
+        // 只有一個人上場、沒有電腦：不能開
+        assert!(!arena.can_start());
+        arena.handle(a, ClientMessage::Bots { count: 3 }, now);
+        assert!(arena.can_start());
+        arena.handle(a, ClientMessage::Start, now);
+        assert!(arena.phase == Phase::Countdown);
+        let ia = arena.index(a).unwrap();
+        let ib = arena.index(b).unwrap();
+        assert!(!arena.players[ia].in_round && !arena.players[ia].alive);
+        assert!(arena.players[ib].in_round && arena.players[ib].alive);
+        // 觀戰的人不佔名額：上場的是 B 和三個電腦
+        assert_eq!(arena.alive().len(), 4);
+        let state: Value = serde_json::from_str(&arena.state_text(now)).unwrap();
+        assert_eq!(state["players"][ia]["watching"], true);
+        // 觀戰的人送的出局不理
+        arena.phase = Phase::Playing;
+        arena.handle(a, ClientMessage::Topout, now);
+        assert_eq!(arena.alive().len(), 4);
+
+        // 所有人都觀戰就不能開
+        arena.phase = Phase::Results;
+        arena.handle(b, ClientMessage::Watch { watch: true }, now);
+        assert!(!arena.can_start());
+        arena.handle(a, ClientMessage::Watch { watch: false }, now);
+        assert!(arena.can_start());
     }
 
     #[test]

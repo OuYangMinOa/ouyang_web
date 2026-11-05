@@ -388,3 +388,65 @@ button.lobby-start-close:hover {
   flex-basis: 100%;
   margin: 0;
 }
+
+/* ---- 上場／觀戰 ---- */
+
+.lobby-watch-hint {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* ---- 遊戲頁的遊戲室聊天（棋類、大逃殺）：標題列的「聊天」打開，浮在畫面右下角 ---- */
+
+.lobby-chat-badge {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.lobby-chat-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.22);
+}
+.lobby-chat-panel .party-chat h3 {
+  margin: 0;
+  padding-right: 44px;
+  font-size: 16px;
+  line-height: 40px;
+}
+.lobby-chat-panel .party-chat-log {
+  height: min(300px, 40dvh);
+}
+.lobby-chat-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+/* 手機：貼著畫面底部，左右撐滿 */
+@media (max-width: 480px) {
+  .lobby-chat-panel {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+  }
+}
