@@ -13,6 +13,7 @@ pub mod games;
 pub mod honeypot;
 pub mod invoice;
 pub mod justone;
+pub mod liarsdice;
 pub mod lobby;
 pub mod minesrace;
 pub mod monitor;
@@ -87,6 +88,7 @@ pub struct AppState {
     pub antique: Arc<party::Parties<antique::Antique>>,
     pub uno: Arc<party::Parties<uno::Uno>>,
     pub justone: Arc<party::Parties<justone::JustOne>>,
+    pub liarsdice: Arc<party::Parties<liarsdice::LiarsDice>>,
     pub telephone: Arc<party::Parties<telephone::Telephone>>,
     pub poker: Arc<party::Parties<poker::Poker>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
@@ -135,6 +137,7 @@ impl AppState {
             antique: Arc::default(),
             uno: Arc::default(),
             justone: Arc::default(),
+            liarsdice: Arc::default(),
             telephone: Arc::default(),
             poker: Arc::default(),
             lobbies: Arc::default(),
@@ -232,6 +235,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/uno/party/{code}/ws", get(party::connect::<uno::Uno>))
         .route("/games/justone/party", post(party::create::<justone::JustOne>))
         .route("/games/justone/party/{code}/ws", get(party::connect::<justone::JustOne>))
+        .route("/games/liarsdice/party", post(party::create::<liarsdice::LiarsDice>))
+        .route("/games/liarsdice/party/{code}/ws", get(party::connect::<liarsdice::LiarsDice>))
         .route("/games/telephone/party", post(party::create::<telephone::Telephone>))
         .route("/games/telephone/party/{code}/ws", get(party::connect::<telephone::Telephone>))
         .route("/games/poker/party", post(party::create::<poker::Poker>))

@@ -113,6 +113,17 @@ export const GAMES: GameInfo[] = [
     music: () => import('./justone/song'),
   },
   {
+    id: 'liarsdice',
+    name: '吹牛骰子',
+    icon: '🎲',
+    blurb: '每人五顆骰子蓋在骰盅裡，輪流喊「場上有幾個幾點」，一個比一個大，不信就開！一點萬用、散骰重搖，淘汰制或計分制。2～10 人，可以加電腦。',
+    tags: ['多人', '線上', '電腦'],
+    category: '派對',
+    component: lazyPage(() => import('./liarsdice')),
+    lobby: { kind: 'party', players: '2～10 人，可以加電腦' },
+    music: () => import('./liarsdice/song'),
+  },
+  {
     id: 'telephone',
     name: '傳話畫畫',
     icon: '📞',
