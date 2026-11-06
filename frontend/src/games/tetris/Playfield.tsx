@@ -122,7 +122,7 @@ export function Playfield({ game, running, keys, handling, sound, hooks, overlay
     resize()
     const refresh = () => (palette = readPalette())
     const mo = new MutationObserver(refresh)
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-style'] })
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     mq.addEventListener('change', refresh)
 

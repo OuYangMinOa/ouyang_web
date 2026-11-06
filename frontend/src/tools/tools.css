@@ -72,3 +72,19 @@
 .tool-back:hover {
   background: var(--surface);
 }
+
+/* ---- 塗鴉風格（<html data-style="doodle">）：工具卡片用筆畫框、歪一點，滑過時擺正 ---- */
+:root[data-style='doodle'] .tool-card {
+  border: 2px solid var(--pen);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  rotate: -0.5deg;
+}
+:root[data-style='doodle'] .tools-grid > li:nth-child(even) > .tool-card {
+  rotate: 0.4deg;
+}
+:root[data-style='doodle'] .tools-grid > li > .tool-card:is(:hover, :focus-visible) {
+  rotate: 0deg;
+  border-color: var(--accent);
+  box-shadow: 4px 6px 0 var(--pen-shadow);
+}

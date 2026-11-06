@@ -39,11 +39,14 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import ToolPage from './tools/ToolPage'
 import ToolsHub from './tools/ToolsHub'
-import { getThemePreference, setThemePreference, type ThemePreference } from './theme'
+import Appearance from './components/Appearance'
+import DoodleDefs from './components/DoodleDefs'
 import { lazyPage } from './lazyPage'
 import QuakeAlert from './weather/QuakeAlert'
 import { QuakeFeedProvider } from './weather/quakeFeed'
 import './App.css'
+// 塗鴉風格的形狀要壓過 App.css 的基本樣式，一定要排在它後面
+import './doodle.css'
 
 // 天氣與環境的頁面帶著 Leaflet 地圖，進到那一頁才下載
 const WeatherHub = lazyPage(() => import('./weather/WeatherHub'))
@@ -76,30 +79,6 @@ function Lazy({ page: Page }: { page: ComponentType }) {
 }
 
 type Health = { status: string; env: string; version: string; db: boolean }
-
-const THEMES: { value: ThemePreference; icon: string; label: string }[] = [
-  { value: 'system', icon: '◐', label: '跟隨系統' },
-  { value: 'light', icon: '☀', label: '亮色' },
-  { value: 'dark', icon: '☾', label: '深色' },
-]
-
-/** 依序切換：跟隨系統 → 亮色 → 深色 */
-function ThemeToggle() {
-  const [preference, setPreference] = useState(getThemePreference)
-  const current = THEMES.find((t) => t.value === preference) ?? THEMES[0]
-
-  function cycle() {
-    const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length].value
-    setThemePreference(next)
-    setPreference(next)
-  }
-
-  return (
-    <button type="button" className="theme-toggle" onClick={cycle} title={`主題：${current.label}（點擊切換）`}>
-      <span aria-hidden="true">{current.icon}</span> <span className="theme-label">{current.label}</span>
-    </button>
-  )
-}
 
 /** 右上角的帳號選單：版本、我的帳號、登出 */
 function UserMenu({ user }: { user: User }) {
@@ -165,7 +144,7 @@ function Header() {
       {app && <AppMenu app={app} />}
       <div className="header-end">
         <FeedbackButton />
-        <ThemeToggle />
+        <Appearance />
         {user ? (
           <UserMenu user={user} />
         ) : (
@@ -349,6 +328,7 @@ function App() {
           </QuakeFeedProvider>
         </NavPinsProvider>
       </AuthProvider>
+      <DoodleDefs />
     </BrowserRouter>
   )
 }

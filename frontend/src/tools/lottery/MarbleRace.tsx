@@ -209,7 +209,7 @@ export default function MarbleRace({ pool, count, onBusy, onDone }: DrawProps) {
       draw()
     }
     const mo = new MutationObserver(repaint)
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-style'] })
     const mq = matchMedia('(prefers-color-scheme: dark)')
     mq.addEventListener('change', repaint)
     return () => {

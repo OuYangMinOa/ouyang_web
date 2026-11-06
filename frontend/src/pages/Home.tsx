@@ -3,8 +3,10 @@ import { Link } from 'react-router'
 import { api, errorMessage } from '../api'
 import { appPath, visibleApps } from '../apps/registry'
 import { useAuth } from '../auth'
+import DoodleSun from '../components/DoodleSun'
 import SunStage from '../components/SunStage'
 import { GAMES } from '../games/registry'
+import { useAppearance } from '../theme'
 import { TOOLS } from '../tools/registry'
 import TyphoonHome from '../weather/TyphoonHome'
 import './Home.css'
@@ -22,6 +24,8 @@ const PROFILE = [
 ]
 
 function Intro() {
+  // 塗鴉風格換成手畫的太陽，不載入 three.js
+  const { style } = useAppearance()
   return (
     <section className="home-intro">
       <div className="home-wrap home-intro-grid">
@@ -40,7 +44,7 @@ function Intro() {
             ))}
           </dl>
         </div>
-        <SunStage />
+        {style === 'doodle' ? <DoodleSun /> : <SunStage />}
       </div>
     </section>
   )
