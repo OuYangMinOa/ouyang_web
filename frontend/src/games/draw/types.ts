@@ -61,6 +61,22 @@ export type DrawOptions = {
   drawSecs: number
   /** 提示裡顯示詞的分類 */
   category: boolean
+  /** 只出這些分類的詞；空的是「綜合」（主題以外的所有分類） */
+  categories: string[]
+}
+
+/** 題庫裡的分類（GET /api/games/draw/categories，不用登入） */
+export type CategoryInfo = {
+  name: string
+  /** 幾個詞（內建的加上投稿通過的） */
+  words: number
+  /** 主題（例如英雄聯盟）：「綜合」不含，要選了才會出 */
+  theme: boolean
+}
+
+/** 答案連同別名，例如「影忍至尊（劫）」（別名也算猜對） */
+export function wordLabel(word: string, alts: readonly string[] | null | undefined): string {
+  return alts?.length ? `${word}（${alts.join('、')}）` : word
 }
 
 export type DrawSeat = {
@@ -82,10 +98,12 @@ export type DrawView = {
   drawer: number
   you: number | null
   options: DrawOptions
-  /** 選題時只有畫的人有 */
-  choices: { word: string; category: string; level: Level }[] | null
+  /** 選題時只有畫的人有；`alts` 是也算猜對的其他寫法 */
+  choices: { word: string; alts: string[]; category: string; level: Level }[] | null
   /** 答案：畫的人、猜中的人，以及公布之後所有人 */
   word: string | null
+  /** 答案的別名（也算猜對），跟 `word` 一起給 */
+  alts: string[] | null
   level: Level | null
   /** 作畫時的提示：每個字揭露了就是那個字，沒有就是 null */
   hint: { chars: (string | null)[]; category: string | null } | null
@@ -94,7 +112,7 @@ export type DrawView = {
   ending: 'all' | 'timeout' | 'left' | null
   canvas: CanvasSnapshot
   seats: DrawSeat[]
-  /** 畫完的每一棒 */
+  /** 畫完的每一棒（`word` 已經接上別名） */
   done: { drawer: number; word: string; guessed: number }[]
 }
 

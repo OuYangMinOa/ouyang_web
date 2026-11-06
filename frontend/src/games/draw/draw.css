@@ -400,6 +400,44 @@
   margin: 0;
 }
 
+/* 題目：綜合、主題、自選分類，都是可以複選的按鈕，窄螢幕換行 */
+.dg-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dg-topics button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+.dg-topics button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.dg-topics button small {
+  font-size: 12px;
+  opacity: 0.75;
+}
+.dg-topics button.dg-topics-more {
+  border-style: dashed;
+  color: var(--text);
+}
+.dg-topics-summary {
+  font-size: 14px;
+}
+
+/* 別名：例如「影忍至尊」也可以猜「劫」 */
+.dg-alts {
+  font-size: 14px;
+  color: var(--text);
+}
+
 /* ---- 投稿題目（開房間的頁面） ---- */
 
 .dg-entry {
