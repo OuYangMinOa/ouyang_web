@@ -574,10 +574,12 @@
 
 :root[data-style='doodle'],
 [data-preview^='doodle'] {
-  /* 內文用圓體「粉圓」（筆畫粗細一致，讀久不累），標題用手寫字「芫荽」；選了塗鴉才載入（theme.ts、index.html）。
-     兩套字都只有一種粗細，用 --serif 的標題要寫 font-weight: 400，不然會被瀏覽器硬加粗 */
+  /* 全站統一用圓體「粉圓」（筆畫粗細一致，讀久不累），標題、內文都是；
+     只有首頁的名字和左上角的站名當 logo，用手寫字「芫荽」（--hand）。選了塗鴉才載入（theme.ts、index.html）。
+     芫荽只有一種粗細，用 --hand 的地方要寫 font-weight: 400，不然會被瀏覽器硬加粗、筆畫糊在一起 */
   --sans: 'Huninn', 'Noto Sans TC', system-ui, sans-serif;
-  --serif: 'Iansui', 'Noto Serif TC', serif;
+  --serif: var(--sans);
+  --hand: 'Iansui', 'Huninn', 'Noto Sans TC', sans-serif;
   --line: var(--pen);
   --stroke: 2px;
   /* 不規則的圓角：大的數值會被等比縮小，邊線就會微微彎曲，像手畫的框 */

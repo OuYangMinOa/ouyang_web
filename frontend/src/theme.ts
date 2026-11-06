@@ -9,7 +9,7 @@ export type StylePreference = 'ink' | 'doodle'
 
 const THEME_KEY = 'theme'
 const STYLE_KEY = 'style'
-// 塗鴉用的字（內文是圓體「粉圓」，標題是手寫字「芫荽」），選了塗鴉才載入；index.html 用同一個 id
+// 塗鴉用的字（全站是圓體「粉圓」，名字和站名是手寫字「芫荽」），選了塗鴉才載入；index.html 用同一個 id
 const DOODLE_FONT_ID = 'doodle-font'
 const DOODLE_FONT_URL = 'https://fonts.googleapis.com/css2?family=Huninn&family=Iansui&display=swap'
 

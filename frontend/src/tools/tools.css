@@ -88,9 +88,3 @@
   border-color: var(--accent);
   box-shadow: 4px 6px 0 var(--pen-shadow);
 }
-/* 工具名稱用手寫的芫荽（只有一種粗細，不加粗） */
-:root[data-style='doodle'] .tool-card-body strong {
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: 19px;
-}

@@ -41,15 +41,10 @@
   overflow: hidden;
 }
 
-/* ---- 字：內文是粉圓，標題換成手寫的芫荽。芫荽只有一種粗細，不寫 400 會被瀏覽器硬加粗、筆畫糊在一起 ---- */
+/* ---- 字：全站都是粉圓（index.css 的 --sans、--serif），站名當 logo 用手寫的芫荽 ---- */
 
-:where(:root[data-style='doodle']) h1,
-:where(:root[data-style='doodle']) h2,
-:where(:root[data-style='doodle']) h3 {
-  font-family: var(--serif);
-  font-weight: 400;
-}
 :where(:root[data-style='doodle']) .brand {
+  font-family: var(--hand);
   font-weight: 400;
   font-size: 22px;
 }

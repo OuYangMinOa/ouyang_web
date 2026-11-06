@@ -379,15 +379,14 @@ a.home-item:hover .home-item-go {
 /* 名字底下用螢光筆畫一道 */
 :root[data-style='doodle'] .home-name {
   width: fit-content;
+  /* 名字當 logo，用手寫的芫荽（只有一種粗細，不加粗） */
+  font-family: var(--hand);
   font-weight: 400;
   letter-spacing: 0.04em;
   background-image: var(--marker-bg);
   background-repeat: no-repeat;
   background-size: 100% 0.4em;
   background-position: 0 86%;
-}
-:root[data-style='doodle'] .home-head h2 {
-  font-weight: 400;
 }
 /* 標題底下的波浪線 */
 :root[data-style='doodle'] .home-head h2::after {
@@ -409,11 +408,6 @@ a.home-item:hover .home-item-go {
 }
 :root[data-style='doodle'] .home-items {
   border-top: 2px solid var(--pen);
-}
-:root[data-style='doodle'] .home-item-name {
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: 18px;
 }
 /* 作品前面的字用筆圈起來 */
 :root[data-style='doodle'] .home-item-glyph {
