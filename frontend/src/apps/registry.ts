@@ -179,6 +179,17 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'chat',
+    name: '聊天室',
+    icon: '💬',
+    glyph: '聊',
+    blurb: '登入的人一起聊天，看得到誰開著聊天室。開啟通知後，聊天室開著但視窗在背景時，有新訊息會跳出 Windows 的通知。',
+    tag: '即時 · 通知',
+    live: true,
+    loginOnly: true,
+    nav: [{ items: [{ to: '/chat', label: '聊天室', icon: '💬' }] }],
+  },
+  {
     id: 'links',
     name: '短網址',
     icon: '🔗',

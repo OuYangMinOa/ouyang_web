@@ -151,7 +151,9 @@ name = "backend"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "aws-lc-rs",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "futures-util",
  "getrandom 0.4.3",

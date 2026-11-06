@@ -1043,6 +1043,54 @@ PUT    /api/admin/ai/usage/users/{id}    {"daily_requests","daily_tokens","block
 `POST /api/ai/calendar/parse`（`ai_calendar.rs`），用 `response_format` 的 JSON schema 要模型回事項的欄位，
 後端檢查日期、把農曆日期換成國曆，回傳草稿打開新增事項的視窗，使用者按儲存才走原本的 `POST /api/calendar/events`。
 
+## 聊天室
+
+`/chat`：登入的人共用的一間聊天室（`loginOnly`）。後端 `backend/src/chat.rs`，前端 `frontend/src/chat/`。
+
+```
+GET /api/chat/ws                      升級成 WebSocket（要登入，沒登入會收到 unauthorized 後關閉）
+GET /api/chat/messages?before=<id>    更早的 50 則 {messages, more}，舊的在前
+
+client → server  {type:"send", text, nonce}         最多 2000 字；nonce 是用戶端替每則產生的編號
+                 {type:"state", active, endpoint}    這個視窗有沒有人在看、這個瀏覽器的推播 endpoint（沒開通知是 null）
+                 {type:"delete", id}                 刪自己的訊息，管理員可以刪任何人的
+server → client  {type:"welcome", you, messages, more}   最近 50 則
+                 {type:"message", message:{id, user_id, username, text, nonce, created_at}}
+                 {type:"deleted", id}
+                 {type:"presence", users:[{id, username, active}]}
+                 {type:"error", code, message, nonce?}   送訊息失敗時帶著那則的 nonce
+```
+
+- 訊息存在 `chat_messages`；`(user_id, nonce)` 是唯一的。斷線時不知道送到了沒，重連後用同一個 nonce 重送，伺服器不會存成兩則，
+  只把已經存好的那則回給送的人。重連時拿最近 50 則補上漏掉的（斷線期間被刪掉的也會消失）。
+- 右邊的「線上」列出有視窗開著聊天室的人：視窗看得到而且在前景是「在看」，切到背景、縮小、切到別的程式是「離開視窗」。
+- 每條連線 10 秒內最多送 15 則；每 25 秒 ping 一次時順便檢查 session，登出、被停用之後連線會被關掉。
+- 連線只記在記憶體，每個容器各自算：換版的幾秒內新舊容器各有一部分人，這段時間另一邊說的話要等重連才看得到，也不會推播。
+
+### 通知（Web Push）
+
+聊天室右邊的「🔔 通知」按「開啟通知」後，**聊天室開著、但沒在看的時候**有新訊息會跳出系統通知（Windows 的通知中心）。
+後端 `backend/src/webpush.rs`，service worker 是 `frontend/public/push-sw.js`（範圍是整站，但沒有 fetch handler，不影響其他頁面）。
+
+```
+GET    /api/push/key             {"key"}  VAPID 公鑰（base64url）
+POST   /api/push/subscriptions   PushSubscription.toJSON()  登記這個瀏覽器；同一個瀏覽器換帳號登入會改成新帳號的
+DELETE /api/push/subscriptions   {"endpoint"}
+POST   /api/push/test            {"endpoint"}  馬上推一則測試通知給這個瀏覽器
+```
+
+- **推給誰**（`Chat::push_targets`）：有視窗開著聊天室、但每個視窗都沒在看的人，只推到那些視窗所在的瀏覽器（連線時回報的 endpoint，
+  而且必須是這個帳號自己的訂閱）。正在看的人、完全沒開聊天室的人、送出訊息的人自己都不推。
+  Chrome 的「記憶體節省」把背景分頁凍結或丟掉時連線會斷，就當作沒開。
+- 還沒看的訊息會合成一則通知「聊天室（3 則新訊息）」，顯示最後 4 則；點通知回到聊天室的視窗。
+  回到聊天室時會收掉還留在通知中心的聊天通知，分頁標題前面的未讀數也會清掉。
+- **VAPID**（RFC 8292）：第一次用到時產生 P-256 金鑰，存在 `site_settings` 的 `push_vapid_key`，每次推播帶 ES256 簽的 JWT，
+  `sub` 是 `https://<APP_HOST>`（compose 把 `APP_HOST` 傳進容器）。換掉金鑰的話舊訂閱全部失效，前端發現公鑰不一樣會自己重新訂閱。
+- 內容用 aes128gcm 加密（RFC 8291），只有那個瀏覽器解得開；加密和簽章用 rustls 本來就帶的 aws-lc-rs，單元測試比對 RFC 8291 的範例。
+- 伺服器只 POST 到瀏覽器推播服務的網域（`fcm.googleapis.com`、`*.notify.windows.com`、`*.push.services.mozilla.com`、`*.push.apple.com`，
+  只收 https、不跟著轉址），不能被拿來打任意網址。推播服務回 404／410 代表訂閱失效，直接刪掉；每個帳號最多 20 個瀏覽器。
+- Chrome 的無痕視窗不支援 Push；iPhone 要先用 Safari「加入主畫面」，從主畫面打開才收得到。
+
 ## 部署
 
 | 環境 | 觸發 | Image tag | 網址 |
