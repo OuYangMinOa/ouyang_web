@@ -24,7 +24,11 @@ RUN cargo install cargo-chef --locked
 WORKDIR /app
 
 FROM chef AS planner
-COPY backend/ ./
+# 只給 manifest 和 src：recipe 會列出所有 target，tests/ 底下每個檔案都算一個，
+# 多一個測試檔 recipe 就變、下面 cook 那層快取失效，相依套件全部重編（build 從約 90 秒變 250～300 秒）。
+# release build 不編測試，planner 看不到 tests/ 也沒差。之後如果加了 build.rs，要記得一起 COPY 進來
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/src ./src
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
