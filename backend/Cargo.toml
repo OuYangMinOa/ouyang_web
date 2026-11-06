@@ -5,7 +5,10 @@ edition = "2024"
 
 [dependencies]
 argon2 = "0.6.0"
+# Web Push 的 VAPID 簽章和訊息加密（webpush.rs）；rustls 本來就用它，不會多編一套
+aws-lc-rs = { version = "1.19.0", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
 axum = { version = "0.8.9", features = ["ws"] }
+base64 = "0.22.1"
 chrono = { version = "0.4.45", default-features = false, features = ["now"] }
 futures-util = "0.3.34"
 getrandom = "0.4.3"

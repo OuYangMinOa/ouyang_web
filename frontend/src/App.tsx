@@ -59,6 +59,7 @@ const ThreadsPaste = lazyPage(() => import('./threads/PastePage'))
 // AI 助手帶著 Markdown 的套件，進到那一頁才下載
 const AiChatPage = lazyPage(() => import('./ai/chat/ChatPage'))
 const AiToolsPage = lazyPage(() => import('./ai/chat/ToolsPage'))
+const ChatPage = lazyPage(() => import('./chat/ChatPage'))
 const AdminAiTools = lazyPage(() => import('./pages/admin/AiTools'))
 const AdminAiUsage = lazyPage(() => import('./pages/admin/AiUsage'))
 const AdminDrawWords = lazyPage(() => import('./pages/admin/DrawWords'))
@@ -296,6 +297,16 @@ function App() {
                   {/* 哪個對話放在 ?c=：換對話不用換頁，第一次送出時建立對話，正在串流的回答不會中斷 */}
                   <Route index element={<Lazy page={AiChatPage} />} />
                   <Route path="tools" element={<Lazy page={AiToolsPage} />} />
+                </Route>
+                <Route
+                  path="/chat"
+                  element={
+                    <RequireAuth>
+                      <AppLayout />
+                    </RequireAuth>
+                  }
+                >
+                  <Route index element={<Lazy page={ChatPage} />} />
                 </Route>
                 <Route path="/bcs" element={<Lazy page={DataMatrixPage} />} />
                 <Route path="/login" element={<Login />} />
