@@ -423,14 +423,6 @@ path.tc-point.tc-level-none {
 .typhoon-home {
   background: linear-gradient(to bottom, color-mix(in srgb, var(--danger) 6%, transparent), transparent 60%);
 }
-.typhoon-home .kicker span {
-  color: var(--danger);
-}
-.typhoon-home-title {
-  margin: 0 0 24px;
-  font: 900 clamp(30px, 4vw, 48px) / 1.1 var(--serif);
-  color: var(--text-h);
-}
 .typhoon-home-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
