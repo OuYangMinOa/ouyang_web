@@ -1,8 +1,6 @@
-mod common;
-
+use crate::common::{Reply, TestApp, app};
 use axum::http::StatusCode;
 use backend::auth::upsert_admin;
-use common::{Reply, TestApp, app};
 use serde_json::{Value, json};
 
 async fn login(app: &TestApp, name: &str) -> String {

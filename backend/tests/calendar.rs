@@ -1,8 +1,6 @@
-mod common;
-
+use crate::common::{TestApp, app};
 use axum::http::StatusCode;
 use backend::auth::upsert_admin;
-use common::{TestApp, app};
 use serde_json::{Value, json};
 
 /// 建好兩個帳號並登入，回傳 (app, alice 的 cookie, bob 的 cookie)

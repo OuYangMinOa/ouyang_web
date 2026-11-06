@@ -1,11 +1,9 @@
 //! 大老二（bigtwo.rs）的 WebSocket 整合測試：一個真人加三個電腦，真的打幾手
 
-mod common;
-
 use std::time::Duration;
 
+use crate::common::{TestApp, app};
 use axum::http::StatusCode;
-use common::{TestApp, app};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpStream;

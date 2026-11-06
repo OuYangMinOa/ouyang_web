@@ -1,8 +1,6 @@
-mod common;
-
+use crate::common::{TestApp, app};
 use axum::http::StatusCode;
 use backend::{auth::upsert_admin, draw};
-use common::{TestApp, app};
 use serde_json::{Value, json};
 
 const PASSWORD: &str = "password123";
