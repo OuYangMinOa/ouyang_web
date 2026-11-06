@@ -450,3 +450,10 @@ button.lobby-start-close:hover {
     width: calc(100vw - 16px);
   }
 }
+
+/* ---- 塗鴉風格（<html data-style="doodle">）：「和朋友一起玩」用筆畫框 ---- */
+:root[data-style='doodle'] .lobby-entry {
+  border: 2px solid var(--pen);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}

@@ -1,4 +1,4 @@
-/* 首頁「墨與陽」：3D 粒子太陽 + 傾斜卡片 + 便條留言牆。顏色全部來自 index.css 的主題變數。 */
+/* 首頁：名字與 3D 粒子太陽、作品目錄、便條留言牆。顏色全部來自 index.css 的主題變數。 */
 
 /* 首頁要滿版，其他頁面維持 App.css 的置中寬度 */
 main:has(.home) {
@@ -11,238 +11,65 @@ main:has(.home) {
 }
 
 .home-wrap {
-  width: min(1120px, 100% - 32px);
+  width: min(1080px, 100% - 32px);
   margin: 0 auto;
 }
 
-.kicker {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 20px;
-  font: 500 12px/1 var(--mono);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.kicker span {
-  color: var(--accent);
-}
-.kicker span::after {
-  content: '';
-  display: inline-block;
-  width: 28px;
-  height: 1px;
-  margin-left: 10px;
-  vertical-align: middle;
-  background: currentColor;
-}
+/* ---- 開頭：名字、簡介、太陽 ---- */
 
-/* ---- 01 Hero ---- */
-
-.hero {
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  align-items: center;
-  min-height: calc(100svh - 70px);
-}
-
-/* 太陽後面的光暈 */
-.hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  background: radial-gradient(55% 60% at 74% 50%, var(--glow), transparent 70%);
-}
-
-/* 紙張顆粒 */
-.hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: var(--grain-opacity);
-  filter: var(--grain-filter);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-.hero-grid {
+.home-intro-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  gap: 24px;
-  padding: 40px 0;
+  gap: 40px;
+  padding: 40px 0 24px;
 }
 
-.hero-copy {
-  position: relative;
-  z-index: 1;
-}
-
-.hero-title {
+.home-name {
   margin: 0;
-  font: 900 clamp(44px, 6.2vw, 88px) / 1.1 var(--serif);
-  letter-spacing: -0.01em;
+  font: 900 clamp(48px, 6vw, 72px) / 1.15 var(--serif);
+  letter-spacing: 0.06em;
   color: var(--text-h);
 }
-.hero-title .line {
-  display: block;
-  perspective: 600px;
-}
-.hero-title em {
-  position: relative;
-  display: inline-block;
-  font-style: normal;
-  color: var(--accent);
-}
-/* 「動」底下一筆刷痕 */
-.hero-title em::after {
-  content: '';
-  position: absolute;
-  left: -6%;
-  right: -6%;
-  bottom: 0.08em;
-  height: 0.16em;
-  z-index: -1;
-  border-radius: 0.1em;
-  background: var(--accent);
-  opacity: 0.22;
-  transform: scaleX(0);
-  transform-origin: left;
-  animation: brush 0.7s 1.3s cubic-bezier(0.7, 0, 0.2, 1) forwards;
+
+.home-lead {
+  max-width: 28em;
+  margin: 20px 0 0;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
-.rise {
-  display: inline-block;
-  opacity: 0;
-  transform: translateY(0.45em) rotateX(-75deg);
-  transform-origin: 50% 100%;
-  animation: rise 0.8s calc(0.2s + var(--i) * 55ms) cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
-/* 印章 */
-.seal {
-  position: absolute;
-  top: 6px;
-  right: 4%;
-  padding: 10px 7px;
-  writing-mode: vertical-rl;
-  font: 900 17px/1 var(--serif);
-  letter-spacing: 0.12em;
-  color: var(--bg);
-  background: var(--accent);
-  border-radius: 5px;
-  box-shadow:
-    inset 0 0 0 2px var(--accent),
-    inset 0 0 0 3.5px var(--bg);
-  opacity: 0;
-  transform: rotate(-8deg);
-  animation: stamp 0.45s 1.15s cubic-bezier(0.3, 1.6, 0.5, 1) forwards;
-}
-
-.hero-lead {
+.home-profile {
   max-width: 30em;
   margin: 28px 0 0;
-  font-size: 17px;
-  animation: fade-up 0.8s 0.85s both;
+  border-top: 1px solid var(--border);
 }
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
+.home-profile > div {
+  display: grid;
+  grid-template-columns: 3em minmax(0, 1fr);
   gap: 12px;
-  margin-top: 32px;
-  animation: fade-up 0.8s 1s both;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
 }
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 46px;
-  padding: 0 24px;
-  border-radius: 999px;
-  font-weight: 500;
-  text-decoration: none;
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s,
-    background 0.2s;
+.home-profile dt {
+  font-size: 14px;
+  line-height: 1.7;
 }
-.btn:hover {
-  transform: translateY(-2px);
-}
-.btn.primary {
-  background: var(--text-h);
-  color: var(--bg);
-}
-.btn.primary:hover {
-  box-shadow: 0 14px 30px -12px var(--accent);
-}
-.btn.ghost {
-  border: 1px solid var(--border);
+.home-profile dd {
+  margin: 0;
   color: var(--text-h);
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  backdrop-filter: blur(6px);
-}
-.btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
-.hero-hint {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 28px 0 0;
-  font: 12px var(--mono);
-  animation: fade-up 0.8s 1.15s both;
-}
-
-.pulse {
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: pulse 2s infinite;
-}
-
-/* 3D 舞台 */
+/* 3D 太陽 */
 .sun-stage {
   position: relative;
-  height: min(76svh, 700px);
-  min-height: 380px;
-  perspective: 900px;
-}
-
-/* 繞著太陽的軌道環 */
-.sun-stage::before,
-.sun-stage::after {
-  content: '';
-  position: absolute;
-  inset: 16% 4%;
-  border-radius: 50%;
-  border: 1px dashed var(--border);
-  transform: rotateX(74deg) rotateZ(0deg);
-  animation: orbit 60s linear infinite;
-  pointer-events: none;
-}
-.sun-stage::after {
-  inset: 6% -6%;
-  border-style: solid;
-  opacity: 0.6;
-  animation-duration: 90s;
-  animation-direction: reverse;
+  height: min(62svh, 500px);
+  min-height: 320px;
 }
 
 .sun-canvas {
   position: absolute;
   inset: 0;
-  z-index: 1;
   cursor: grab;
   /* 手機上垂直滑動照常捲動頁面，水平拖曳才撥粒子 */
   touch-action: pan-y;
@@ -266,271 +93,53 @@ main:has(.home) {
   inset: 0;
   display: grid;
   place-items: center;
-  font: 900 min(56vw, 340px) / 1 var(--serif);
+  font: 900 min(56vw, 300px) / 1 var(--serif);
   color: var(--accent);
-  text-shadow: 0 0 60px var(--glow);
 }
 
 .sun-caption {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 4px;
-  z-index: 2;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font: 11px var(--mono);
-  letter-spacing: 0.16em;
+  font-size: 13px;
   pointer-events: none;
 }
 .sun-toggle {
   pointer-events: auto;
-  min-height: 36px;
-  padding: 0 16px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  backdrop-filter: blur(6px);
-  color: var(--text-h);
-  font: 13px var(--sans);
-  letter-spacing: 0;
 }
 
 /* ---- 共用段落 ---- */
 
 .home-section {
-  padding: clamp(64px, 10vw, 120px) 0;
+  padding: clamp(40px, 6vw, 72px) 0;
   border-top: 1px solid var(--border);
 }
 
-.section-head {
-  margin-bottom: 40px;
-}
-.section-head h2 {
-  margin: 0;
-  font: 900 clamp(34px, 4.6vw, 56px) / 1.1 var(--serif);
-  color: var(--text-h);
-}
-
-.reveal {
-  opacity: 0;
-  transform: translateY(28px);
-  transition:
-    opacity 0.8s,
-    transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.reveal.in {
-  opacity: 1;
-  transform: none;
-}
-
-/* ---- 02 關於我 ---- */
-
-.about {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: clamp(32px, 6vw, 80px);
-  align-items: start;
-}
-
-.about-intro > p {
-  margin: 0 0 20px;
-  font-size: 17px;
-  line-height: 1.8;
-}
-.about-intro > .about-name {
+.home-head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 16px;
-  font: 900 clamp(28px, 3.4vw, 40px) / 1.2 var(--serif);
-  color: var(--text-h);
-}
-.about-name span {
-  font: 500 13px var(--mono);
-  letter-spacing: 0.12em;
-  color: var(--accent);
-}
-
-.about-skills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.about-label {
-  margin: 0 0 8px;
-  font: 500 12px var(--mono);
-  letter-spacing: 0.12em;
-  color: var(--accent);
-}
-
-.about-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: about;
-}
-.about-list li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 16px;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--border);
-  counter-increment: about;
-}
-.about-list li::before {
-  content: counter(about, decimal-leading-zero);
-  grid-row: span 2;
-  font: 500 12px/2 var(--mono);
-  color: var(--accent);
-}
-.about-list strong {
-  font: 900 20px/1.4 var(--serif);
-  color: var(--text-h);
-}
-
-/* ---- 03 作品：3D 傾斜卡片 ---- */
-
-.works {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-.works > .reveal:nth-child(2) {
-  transition-delay: 0.08s;
-}
-.works > .reveal:nth-child(3) {
-  transition-delay: 0.16s;
-}
-.works > .reveal:nth-child(4) {
-  transition-delay: 0.24s;
-}
-
-.tilt {
-  height: 100%;
-  perspective: 1000px;
-}
-
-.tilt-body {
-  position: relative;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  height: 100%;
-  min-height: 250px;
-  padding: 28px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--surface);
-  transform-style: preserve-3d;
-  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
-  transition:
-    transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.3s;
-}
-.tilt:hover .tilt-body {
-  transition:
-    transform 0.1s linear,
-    box-shadow 0.3s;
-  box-shadow: 0 34px 60px -34px rgb(0 0 0 / 0.45);
-}
-
-.depth-1 {
-  transform: translateZ(18px);
-}
-.depth-2 {
-  transform: translateZ(36px);
-}
-.depth-3 {
-  transform: translateZ(70px);
-}
-
-.tilt-glare {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgb(255 255 255 / 0.32), transparent 55%);
-  mix-blend-mode: soft-light;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-.tilt:hover .tilt-glare {
-  opacity: 1;
-}
-
-.work-glyph {
-  position: absolute;
-  top: 14px;
-  right: 18px;
-  font: 900 104px/1 var(--serif);
-  color: transparent;
-  -webkit-text-stroke: 1.5px var(--accent);
-  opacity: 0.5;
-  transition:
-    opacity 0.3s,
-    color 0.3s;
-  pointer-events: none;
-}
-.tilt:hover .work-glyph {
-  opacity: 1;
-  color: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.work-index {
-  font: 500 12px var(--mono);
-  letter-spacing: 0.12em;
-  color: var(--accent);
-}
-
-.work h3 {
-  margin: 4px 0 0;
-  padding-right: 96px;
-  font: 900 26px/1.25 var(--serif);
-  color: var(--text-h);
-}
-
-.work p {
-  flex: 1;
-  /* 讓開右上角的大字 */
-  margin: 0 112px 0 0;
-}
-
-.work-foot {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
+  gap: 4px 24px;
+  margin-bottom: 20px;
 }
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font: 500 12px var(--mono);
+.home-head h2 {
+  margin: 0;
+  font: 600 clamp(24px, 3vw, 30px) / 1.3 var(--serif);
   color: var(--text-h);
 }
-.tag.live::before {
-  content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+.home-head p {
+  margin: 0;
+  font-size: 14px;
 }
 
-.work-link {
+.home-link {
   display: inline-flex;
   align-items: center;
   min-height: 40px;
@@ -538,25 +147,99 @@ main:has(.home) {
   color: var(--accent);
   text-decoration: none;
 }
-.work-link:hover {
+.home-link:hover {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
 
-.work.soon .tilt-body {
-  border-style: dashed;
-  background: transparent;
-}
-.work.soon .work-glyph {
-  animation: wobble 3.2s ease-in-out infinite;
+/* ---- 作品目錄 ---- */
+
+.home-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--text-h);
 }
 
-/* ---- 04 留言牆：便條紙 ---- */
+.home-item {
+  display: grid;
+  grid-template-columns: 40px 8.5em minmax(0, 1fr) auto 20px;
+  grid-template-areas: 'glyph name desc tag go';
+  align-items: baseline;
+  column-gap: 20px;
+  padding: 16px 12px;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+}
+a.home-item {
+  transition: background 0.15s;
+}
+a.home-item:hover {
+  background: var(--surface);
+}
+a.home-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.home-item-glyph {
+  grid-area: glyph;
+  font: 600 26px/1 var(--serif);
+  text-align: center;
+  color: var(--accent);
+}
+.home-item-name {
+  grid-area: name;
+  font-weight: 700;
+  color: var(--text-h);
+}
+.home-item-desc {
+  grid-area: desc;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.home-item-tag {
+  grid-area: tag;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.home-item-tag.live::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.home-item-go {
+  grid-area: go;
+  color: var(--text);
+  transition:
+    transform 0.15s,
+    color 0.15s;
+}
+a.home-item:hover .home-item-go {
+  color: var(--accent);
+  transform: translateX(4px);
+}
+
+/* ---- 留言牆：便條紙 ---- */
 
 .note-form {
   display: flex;
   gap: 10px;
   max-width: 640px;
+}
+.note-form button {
+  flex-shrink: 0;
 }
 
 .notes-empty {
@@ -568,7 +251,7 @@ main:has(.home) {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   align-items: start;
   gap: 26px 20px;
-  margin: 40px 0 0;
+  margin: 36px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -577,13 +260,10 @@ main:has(.home) {
   position: relative;
   padding: 20px 18px 14px;
   border: 1px solid var(--border);
-  border-radius: 4px 14px 4px 14px;
+  border-radius: 4px;
   background: var(--surface);
-  box-shadow: 0 14px 26px -20px rgb(0 0 0 / 0.5);
+  box-shadow: 0 10px 20px -18px rgb(0 0 0 / 0.5);
   transform: rotate(var(--tilt));
-  transition:
-    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.35s;
 }
 /* 紙膠帶 */
 .note::before {
@@ -597,10 +277,6 @@ main:has(.home) {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   transform: translateX(-50%) rotate(-3deg);
 }
-.note:hover {
-  transform: rotate(0deg) translateY(-4px) scale(1.02);
-  box-shadow: 0 22px 34px -22px rgb(0 0 0 / 0.55);
-}
 .note p {
   margin: 0 0 12px;
   color: var(--text-h);
@@ -608,216 +284,231 @@ main:has(.home) {
   overflow-wrap: anywhere;
 }
 .note time {
-  font: 11px var(--mono);
+  font-size: 12px;
 }
 .note.fresh {
-  animation: drop 0.6s cubic-bezier(0.2, 0.8, 0.3, 1.25);
+  animation: drop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.2);
 }
 
-/* ---- 05 狀態列 ---- */
-
-.status {
-  padding: 36px 0 56px;
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) rotate(-6deg);
+  }
 }
-.status-row {
+
+/* ---- 頁尾 ---- */
+
+.home-foot {
+  padding: 24px 0 40px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.home-foot-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   justify-content: space-between;
-  gap: 12px 24px;
+  gap: 8px 24px;
 }
-.status .kicker {
-  margin: 0;
-}
-.status-line {
-  display: flex;
+.home-foot-status {
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 10px;
-  margin: 0;
-  font: 12px var(--mono);
+  gap: 8px;
 }
 .dot {
-  width: 8px;
-  height: 8px;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+  background: var(--border);
 }
 .dot.ok {
   background: var(--ok);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
 }
 .dot.bad {
   background: var(--danger);
 }
-.sep {
-  opacity: 0.4;
+
+/* ---- 塗鴉風格（<html data-style="doodle">） ---- */
+
+/* 手畫的笑臉太陽（components/DoodleSun.tsx），取代 3D 粒子太陽 */
+.doodle-sun {
+  position: absolute;
+  inset: 0 0 36px;
+  width: 100%;
+  height: calc(100% - 36px);
+  overflow: visible;
+}
+.doodle-sun-rays {
+  fill: none;
+  stroke: var(--sun-line);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transform-box: view-box;
+  transform-origin: 120px 120px;
+  animation: doodle-sun-spin 80s linear infinite;
+}
+.doodle-sun-disc {
+  fill: var(--sun-fill);
+  stroke: var(--sun-line);
+  stroke-width: 4;
+}
+.doodle-sun-loop {
+  fill: none;
+  stroke: var(--sun-line);
+  stroke-width: 2;
+  opacity: 0.55;
+}
+.doodle-sun-face {
+  fill: none;
+  stroke: var(--text-h);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.doodle-sun-cheek {
+  fill: var(--danger);
+  opacity: 0.3;
+}
+@keyframes doodle-sun-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* ---- 動畫 ---- */
+/* 名字底下用螢光筆畫一道 */
+:root[data-style='doodle'] .home-name {
+  width: fit-content;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  background-image: var(--marker-bg);
+  background-repeat: no-repeat;
+  background-size: 100% 0.4em;
+  background-position: 0 86%;
+}
+:root[data-style='doodle'] .home-head h2 {
+  font-weight: 400;
+}
+/* 標題底下的波浪線 */
+:root[data-style='doodle'] .home-head h2::after {
+  content: '';
+  display: block;
+  width: 4.5em;
+  height: 10px;
+  margin-top: 2px;
+  background: var(--accent);
+  -webkit-mask: var(--squiggle) 0 0 / 100% 100% no-repeat;
+  mask: var(--squiggle) 0 0 / 100% 100% no-repeat;
+}
+:root[data-style='doodle'] .home-profile {
+  border-top-style: dashed;
+}
+:root[data-style='doodle'] .home-profile > div,
+:root[data-style='doodle'] .home-item {
+  border-bottom-style: dashed;
+}
+:root[data-style='doodle'] .home-items {
+  border-top: 2px solid var(--pen);
+}
+:root[data-style='doodle'] .home-item-name {
+  font-weight: 400;
+  font-size: 18px;
+}
+/* 作品前面的字用筆圈起來 */
+:root[data-style='doodle'] .home-item-glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-round);
+  font-size: 19px;
+  font-weight: 400;
+}
 
-@keyframes rise {
-  to {
-    opacity: 1;
-    transform: none;
-  }
+/* 便條紙：黃色便利貼（深色是黑板上淡淡的黃），框線抖一點，紙膠帶換成螢光筆的顏色 */
+:root[data-style='doodle'] .note {
+  border-color: transparent;
+  border-radius: var(--radius-card);
+  background: var(--sticky);
+  box-shadow: none;
 }
-@keyframes brush {
-  to {
-    transform: scaleX(1);
-  }
+:root[data-style='doodle'] .note::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 2px solid var(--pen);
+  border-radius: inherit;
+  box-shadow: var(--shadow-card);
+  filter: url(#doodle-rough);
+  pointer-events: none;
 }
-@keyframes stamp {
-  from {
-    opacity: 0;
-    transform: scale(1.9) rotate(-24deg);
-    filter: blur(3px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) rotate(-8deg);
-    filter: none;
-  }
-}
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-}
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 11px transparent;
-  }
-}
-@keyframes orbit {
-  to {
-    transform: rotateX(74deg) rotateZ(360deg);
-  }
-}
-@keyframes wobble {
-  50% {
-    transform: translateZ(70px) rotate(-8deg) translateY(-4px);
-  }
-}
-@keyframes drop {
-  from {
-    opacity: 0;
-    transform: translateY(-36px) rotate(-14deg) scale(1.08);
-  }
+:root[data-style='doodle'] .note::before {
+  z-index: 1;
+  background: var(--marker);
+  opacity: 0.85;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise,
-  .hero-lead,
-  .hero-actions,
-  .hero-hint,
-  .note.fresh,
-  .work.soon .work-glyph,
-  .pulse,
-  .sun-stage::before,
-  .sun-stage::after {
+  .note.fresh {
     animation: none;
-    opacity: 1;
-    transform: none;
   }
-  .sun-stage::before,
-  .sun-stage::after {
-    transform: rotateX(74deg);
-  }
-  .sun-stage::after {
-    opacity: 0.6;
-  }
-  .hero-title em::after {
-    animation: none;
-    transform: none;
-  }
-  .seal {
-    animation: none;
-    opacity: 1;
-  }
-  .reveal {
-    opacity: 1;
-    transform: none;
+  .home-item-go {
     transition: none;
+  }
+  .doodle-sun-rays {
+    animation: none;
   }
 }
 
 /* ---- 手機 ---- */
 
 @media (max-width: 760px) {
-  .hero {
-    min-height: 0;
-  }
-
-  /* 太陽放上面，文字接在下面 */
-  .hero-grid {
+  .home-intro-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    padding: 8px 0 48px;
+    gap: 8px;
+    padding: 32px 0 16px;
   }
-  .sun-stage {
-    order: -1;
-    height: 50svh;
-    min-height: 300px;
-    max-height: 460px;
+  .home-name {
+    font-size: clamp(40px, 12vw, 56px);
   }
-  .hero::before {
-    background: radial-gradient(80% 40% at 50% 24%, var(--glow), transparent 70%);
-  }
-
-  .hero-copy {
-    padding-top: 28px;
-  }
-  .hero-title {
-    font-size: clamp(38px, 11vw, 56px);
-  }
-  .seal {
-    top: 62px;
-    right: 0;
-    font-size: 14px;
-  }
-  .hero-lead {
+  .home-lead {
     font-size: 16px;
   }
-  .hero-actions .btn {
-    flex: 1 1 140px;
-    justify-content: center;
-  }
-
-  .about {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .works {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .tilt-body {
+  .sun-stage {
+    height: 300px;
     min-height: 0;
-    padding: 22px;
   }
-  .work-glyph {
-    font-size: 84px;
+}
+
+@media (max-width: 640px) {
+  /* 目錄改成兩行：名字和標籤一行，說明接在下面 */
+  .home-item {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'glyph name tag'
+      'glyph desc desc';
+    align-items: start;
+    column-gap: 12px;
+    row-gap: 2px;
+    padding: 14px 4px;
   }
-  .work h3 {
+  .home-item-glyph {
     font-size: 22px;
-    padding-right: 80px;
+    line-height: 1.4;
   }
-  .work p {
-    margin-right: 56px;
+  .home-item-tag {
+    line-height: 1.7;
+  }
+  .home-item-go {
+    display: none;
+  }
+  .home-item-desc {
+    font-size: 14px;
   }
 
-  .note-form button {
-    flex-shrink: 0;
-  }
   .notes {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .status-row {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }

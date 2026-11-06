@@ -18,6 +18,7 @@ use backend::{
     monitor::{self, Monitor},
     router,
     weather::{self, Weather},
+    webpush::WebPush,
     youtube::{self, YouTube},
 };
 use sqlx::{
@@ -62,6 +63,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = AppState::new(pool.clone(), app_env.clone(), commit.clone());
     state.site_catalog = static_dir.join("site-catalog.json");
     state.cookie_secure = env::var("COOKIE_SECURE").is_ok_and(|v| v == "true");
+    // VAPID 的 sub 填這個環境的網址，推播服務有問題時知道是誰送的
+    if let Ok(host) = env::var("APP_HOST")
+        && !host.is_empty()
+    {
+        state.push = Arc::new(WebPush::new(format!("https://{host}")));
+    }
     state.honeypot = Arc::new(Honeypot::from_env());
     if let Ok(dir) = env::var("MUSIC_DIR") {
         state.music_dir = dir.into();

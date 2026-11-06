@@ -1,0 +1,343 @@
+/* ---- 聊天室：左邊是訊息、右邊是通知設定和線上名單，整頁剛好一個畫面高，只有訊息會捲動 ---- */
+
+.app-content:has(> .chat-page) {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.chat-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 20px;
+  height: calc(100dvh - var(--site-top-h, 65px) - 32px);
+  min-height: 420px;
+}
+
+.chat-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+.chat-title {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-h);
+}
+.chat-status {
+  color: var(--warn);
+}
+.chat-panel-toggle {
+  display: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.chat-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+}
+.chat-banner a {
+  color: var(--accent);
+}
+
+/* ---- 訊息 ---- */
+
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 4px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.chat-older {
+  align-self: center;
+  margin-bottom: 8px;
+}
+.chat-empty {
+  margin: auto 0;
+  text-align: center;
+}
+.chat-day {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+.chat-day::before,
+.chat-day::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: min(640px, 85%);
+  margin-top: 10px;
+}
+.chat-msg.continued {
+  margin-top: 2px;
+}
+.chat-msg.mine {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.chat-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 4px 2px;
+  font-size: 12px;
+  color: var(--text);
+}
+.chat-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.chat-line {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+}
+.chat-msg.mine .chat-line {
+  flex-direction: row-reverse;
+}
+.chat-bubble {
+  min-width: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-h);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-msg.mine .chat-bubble {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+.chat-bubble a {
+  color: var(--accent);
+}
+.chat-delete {
+  flex-shrink: 0;
+  width: 32px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0;
+}
+.chat-line:hover .chat-delete,
+.chat-delete:focus-visible {
+  opacity: 1;
+}
+/* 手機沒有滑鼠移上去，一直淡淡地顯示 */
+@media (hover: none) {
+  .chat-delete {
+    opacity: 0.45;
+  }
+}
+
+.chat-msg.pending .chat-bubble {
+  opacity: 0.6;
+}
+.chat-msg.failed .chat-bubble {
+  border-color: var(--danger);
+  opacity: 1;
+}
+.chat-pending-state {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0 12px;
+  font-size: 12px;
+}
+.chat-pending-state .error {
+  font-size: 12px;
+}
+.chat-pending-state button.link {
+  min-height: 32px;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.chat-new-below {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+
+/* ---- 輸入 ---- */
+
+.chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.chat-composer textarea {
+  resize: none;
+  line-height: 1.5;
+  max-height: 168px;
+}
+.chat-composer button {
+  flex-shrink: 0;
+}
+.chat-count {
+  font-size: 13px;
+}
+
+/* ---- 右邊：通知設定和線上名單 ---- */
+
+.chat-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.chat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.chat-card > button {
+  align-self: flex-start;
+}
+.chat-card-title {
+  margin: 0;
+  font-size: 15px;
+}
+.chat-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.chat-card .error,
+.chat-card .success {
+  font-size: 14px;
+}
+.chat-online {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-online li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.chat-online-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-online-state {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.chat-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--text);
+  border-radius: 50%;
+}
+.chat-dot.on {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+/* ---- 窄螢幕：右邊的面板改成按「👥」從右邊滑出來 ---- */
+
+.chat-scrim {
+  display: none;
+}
+@media (max-width: 900px) {
+  .chat-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chat-panel-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+  .chat-side {
+    position: fixed;
+    top: var(--site-top-h, 65px);
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    width: min(300px, 85vw);
+    box-sizing: border-box;
+    padding: 16px;
+    border-left: 1px solid var(--border);
+    background: var(--bg);
+    box-shadow: var(--shadow);
+    transform: translateX(105%);
+    visibility: hidden;
+  }
+  .panel-open .chat-side {
+    transform: none;
+    visibility: visible;
+  }
+  .chat-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    padding: 0;
+    border-radius: 0;
+    background: var(--scrim);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .chat-side {
+    transition:
+      transform 0.2s ease,
+      visibility 0.2s;
+  }
+}
+@media (max-width: 600px) {
+  .chat-msg {
+    max-width: 92%;
+  }
+}

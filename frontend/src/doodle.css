@@ -1,0 +1,200 @@
+/* 風格「塗鴉」的形狀：顏色和字型在 index.css，這裡只換全站共用元件的線條、圓角、陰影和紙張。
+   各頁面自己的塗鴉樣式放在該頁的 CSS 裡（例如 pages/Home.css）。
+
+   權重的規則：每條都跟 App.css 裡對應的那條一樣重（前面的 :where() 不算權重），
+   App.css 沒有的新屬性（陰影、按下去的位移）整條包在 :where() 裡、權重是 0。
+   所以各頁面能蓋過基本樣式的地方（棋盤格子、工具列按鈕…），塗鴉時一樣蓋得過去。
+   這個檔案要在 App.css 後面載入。 */
+
+/* ---- 紙張：方格筆記本／黑板，背景固定不跟著捲，頁首和側邊欄的格子才對得齊 ---- */
+
+:root[data-style='doodle'] {
+  background-image: var(--paper);
+  background-size: var(--paper-size);
+  background-attachment: fixed;
+  /* 頁首底下那條手畫的線、標題底下的波浪線 */
+  --hand-line: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 6' preserveAspectRatio='none'%3E%3Cpath d='M2 3.4 C 80 2.2, 170 4.6, 270 3 S 430 1.6, 520 3.8 S 588 2.6, 598 3.2' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --squiggle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 10'%3E%3Cpath d='M2 6 Q 12 0 22 5 T 42 5 T 62 6 T 82 5 T 102 6 T 118 4' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+:where(:root[data-style='doodle']) body {
+  background: transparent;
+  /* 手寫字看起來比黑體小一點 */
+  font-size: 17px;
+  text-shadow: var(--chalk);
+}
+:where(:root[data-style='doodle']) .site-top,
+:where(:root[data-style='doodle']) .app-sidebar {
+  background-image: var(--paper);
+  background-size: var(--paper-size);
+  background-attachment: fixed;
+}
+:where(:root[data-style='doodle']) ::selection {
+  background: var(--marker);
+  color: var(--text-h);
+}
+
+/* 讓框線抖動的 SVG 濾鏡（components/DoodleDefs.tsx），不佔版面 */
+.doodle-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ---- 字：手寫字只有一種粗細，標題不要用假粗體 ---- */
+
+:where(:root[data-style='doodle']) h1,
+:where(:root[data-style='doodle']) h2,
+:where(:root[data-style='doodle']) h3 {
+  font-weight: 400;
+}
+:where(:root[data-style='doodle']) .brand {
+  font-weight: 400;
+  font-size: 22px;
+}
+:where(:root[data-style='doodle']) .text-link {
+  color: var(--text-h);
+}
+:where(:root[data-style='doodle'] .text-link) {
+  text-decoration: underline wavy var(--accent) 1.5px;
+  text-underline-offset: 5px;
+}
+
+/* ---- 頁首：底線換成一條手畫的線 ---- */
+
+:where(:root[data-style='doodle']) .site-header {
+  border-bottom-color: transparent;
+}
+:where(:root[data-style='doodle'] .site-header)::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 6px;
+  background: var(--pen);
+  pointer-events: none;
+  -webkit-mask: var(--hand-line) 0 0 / 100% 100% no-repeat;
+  mask: var(--hand-line) 0 0 / 100% 100% no-repeat;
+}
+
+/* ---- 按鈕：沒有 class 的是主要按鈕，secondary／danger 是次要；各頁面自己有 class 的按鈕不動 ---- */
+
+:where(:root[data-style='doodle']) button:where(:not([class])) {
+  border: 2px solid var(--pen);
+}
+:where(:root[data-style='doodle']) button.secondary,
+:where(:root[data-style='doodle']) button.danger {
+  border-width: 2px;
+  border-color: var(--pen);
+}
+:where(:root[data-style='doodle']) button:where(:not([class]), .secondary, .danger) {
+  border-radius: var(--radius-ctl);
+}
+:where(:root[data-style='doodle'] button:is(:not([class]), .secondary, .danger)) {
+  box-shadow: var(--shadow-ctl);
+  text-shadow: none;
+  transition:
+    translate 0.12s,
+    box-shadow 0.12s;
+}
+@media (hover: hover) {
+  :where(:root[data-style='doodle'] button:is(:not([class]), .secondary, .danger):enabled:hover) {
+    translate: -1px -1px;
+    box-shadow: 3px 4px 0 var(--pen-shadow);
+  }
+}
+/* 按下去：陰影收起來，像按鈕被壓進紙裡 */
+:where(:root[data-style='doodle'] button:is(:not([class]), .secondary, .danger):enabled:active) {
+  translate: 2px 3px;
+  box-shadow: none;
+}
+
+/* 頁首的圓角按鈕（切換 APP、回報、帳號） */
+:where(:root[data-style='doodle']) button.menu-button {
+  border-width: 2px;
+  border-color: var(--pen);
+  border-radius: var(--radius-ctl);
+}
+:where(:root[data-style='doodle']) .fb-button {
+  border-width: 2px;
+  border-color: var(--pen);
+  border-radius: var(--radius-ctl);
+}
+:where(:root[data-style='doodle']) .avatar {
+  border-radius: var(--radius-round);
+}
+:where(:root[data-style='doodle'] .avatar) {
+  box-shadow: 0 0 0 2px var(--pen);
+}
+
+/* ---- 輸入框 ---- */
+
+:where(:root[data-style='doodle']) input:not([type='checkbox']),
+:where(:root[data-style='doodle']) select,
+:where(:root[data-style='doodle']) textarea {
+  border-width: 2px;
+  border-color: var(--pen);
+  border-radius: var(--radius-ctl);
+}
+:where(:root[data-style='doodle']) input:focus-visible,
+:where(:root[data-style='doodle']) select:focus-visible,
+:where(:root[data-style='doodle']) textarea:focus-visible,
+:where(:root[data-style='doodle']) button:focus-visible {
+  outline-style: dashed;
+  outline-offset: 2px;
+}
+
+/* ---- 卡片、選單、標籤 ---- */
+
+:where(:root[data-style='doodle']) .card {
+  border: 2px solid var(--pen);
+  border-radius: var(--radius-card);
+}
+:where(:root[data-style='doodle'] .card) {
+  box-shadow: var(--shadow-card);
+}
+
+:where(:root[data-style='doodle']) .menu-panel {
+  border: 2px solid var(--pen);
+  border-radius: var(--radius-card);
+}
+:where(:root[data-style='doodle']) .menu-item {
+  border-radius: var(--radius-ctl);
+}
+
+:where(:root[data-style='doodle']) .badge {
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius-ctl);
+}
+:where(:root[data-style='doodle']) .chip {
+  border-radius: var(--radius-ctl);
+}
+
+/* ---- 表格：鉛筆畫的虛線分隔 ---- */
+
+:where(:root[data-style='doodle']) th,
+:where(:root[data-style='doodle']) td {
+  border-bottom-style: dashed;
+}
+
+/* ---- 平板與手機 ---- */
+
+@media (max-width: 900px) {
+  /* 選單從頁首底下展開，上面兩個角貼齊頁首 */
+  :where(:root[data-style='doodle']) .menu-panel,
+  :where(:root[data-style='doodle']) .menu-panel.end {
+    border-radius: 0 0 20px 9px / 0 0 7px 18px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 窄螢幕上表格的每一列是一張卡片 */
+  :where(:root[data-style='doodle']) table.responsive tr {
+    border: 2px solid var(--pen);
+    border-radius: var(--radius-card);
+  }
+  :where(:root[data-style='doodle'] table.responsive tr) {
+    box-shadow: var(--shadow-card);
+  }
+}

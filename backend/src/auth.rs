@@ -59,6 +59,17 @@ impl CurrentUser {
     pub fn has(&self, permission: &str) -> bool {
         self.permissions.iter().any(|p| p == permission)
     }
+
+    /// 長時間開著的連線（WebSocket）定時檢查：登出、被停用、改密碼登出其他裝置或過期之後就是 false
+    pub async fn still_signed_in(&self, pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+        sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM sessions s JOIN users u ON u.id = s.user_id
+             WHERE s.token_hash = ? AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now') AND NOT u.disabled)",
+        )
+        .bind(&self.session)
+        .fetch_one(pool)
+        .await
+    }
 }
 
 impl FromRequestParts<AppState> for CurrentUser {

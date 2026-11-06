@@ -1,0 +1,424 @@
+/* 頁首右上角的「外觀」按鈕和對話框（components/Appearance.tsx）。
+   框線、圓角、陰影用 index.css 的 --line、--stroke、--radius-* 變數，墨與陽和塗鴉會自動長得不一樣 */
+
+.appearance-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 2px 12px;
+  border: var(--stroke) solid var(--line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.appearance-button:hover {
+  background: var(--surface);
+  color: var(--text-h);
+}
+
+/* ---- 對話框 ---- */
+
+.appearance-dialog {
+  --pop-tilt: 0deg;
+  width: min(560px, 100vw - 32px);
+  max-width: none;
+  max-height: none;
+  box-sizing: border-box;
+  padding: 0;
+  /* 塗鴉的框線畫在 ::before，會超出一點點 */
+  overflow: visible;
+  border: var(--stroke) solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.appearance-dialog::backdrop {
+  background: var(--scrim);
+}
+.appearance-dialog[open] {
+  animation: appearance-pop 0.2s ease-out;
+}
+@keyframes appearance-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97) rotate(var(--pop-tilt));
+  }
+}
+
+.appearance-body {
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
+
+.appearance-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 6px;
+}
+.appearance-head h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+.appearance-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: var(--stroke) solid transparent;
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+}
+.appearance-close:hover {
+  border-color: var(--line);
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.appearance-section {
+  padding: 12px 20px;
+}
+.appearance-section h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+/* 選項裡真正的 radio 藏起來（還是可以用鍵盤選），外框標出選到哪個 */
+.appearance-dialog input[type='radio'] {
+  position: absolute;
+  flex: none;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- 風格：兩張縮圖卡 ---- */
+
+.appearance-styles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.appearance-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: var(--stroke) solid var(--border);
+  border-radius: var(--radius-card);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.appearance-option:hover {
+  border-color: var(--line);
+}
+.appearance-option:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.appearance-option:has(input:focus-visible),
+.appearance-themes label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.appearance-option-text strong {
+  display: block;
+  font-weight: 500;
+  color: var(--text-h);
+}
+.appearance-option-text small {
+  display: block;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.appearance-check {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border-radius: var(--radius-round);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14px;
+  font-weight: 700;
+  text-shadow: none;
+}
+.appearance-option:has(input:checked) .appearance-check {
+  display: grid;
+}
+
+/* 縮圖：自己帶著那個風格＋深淺的變數，只用變數畫，所以永遠是那個風格的樣子 */
+.appearance-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  aspect-ratio: 4 / 3;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  overflow: hidden;
+  border: var(--stroke) solid var(--line);
+  border-radius: var(--radius-card);
+  background-color: var(--bg);
+  background-image: var(--paper);
+  background-size: var(--paper-size-sm);
+  color: var(--text);
+  font: 11px/1.2 var(--sans);
+  text-shadow: var(--chalk);
+}
+.thumb-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 5px;
+  border-bottom: var(--stroke) solid var(--line);
+  color: var(--text-h);
+}
+.thumb-bar b {
+  margin-right: auto;
+  font: 600 11px var(--serif);
+}
+.thumb-bar i {
+  width: 16px;
+  height: 9px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+}
+.thumb-title {
+  font: 900 17px/1.15 var(--serif);
+  color: var(--text-h);
+}
+.thumb-mark {
+  background-image: var(--marker-bg);
+  background-repeat: no-repeat;
+  background-size: 100% 55%;
+  background-position: 0 88%;
+}
+.thumb-cards {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.thumb-cards span {
+  border: var(--stroke) solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.thumb-button {
+  align-self: flex-start;
+  padding: 1px 10px;
+  border-radius: var(--radius-ctl);
+  background: var(--accent);
+  color: var(--on-accent);
+  text-shadow: none;
+}
+[data-preview^='ink'] .thumb-mark {
+  color: var(--accent);
+}
+[data-preview^='doodle'] .thumb-bar b,
+[data-preview^='doodle'] .thumb-title {
+  font-weight: 400;
+}
+[data-preview^='doodle'] .thumb-cards span:first-child {
+  rotate: -0.7deg;
+}
+[data-preview^='doodle'] .thumb-cards span:last-child {
+  rotate: 0.7deg;
+}
+[data-preview^='doodle'] .thumb-button {
+  border: 2px solid var(--pen);
+  box-shadow: var(--shadow-ctl);
+}
+
+/* ---- 深淺：三段式選擇 ---- */
+
+.appearance-themes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: var(--stroke) solid var(--line);
+  border-radius: var(--radius-pill);
+}
+.appearance-themes label {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 4px 8px;
+  border: var(--stroke) solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: 15px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+.appearance-themes label:hover {
+  color: var(--text-h);
+}
+.appearance-themes label:has(input:checked) {
+  background: var(--accent);
+  color: var(--on-accent);
+  text-shadow: none;
+}
+.appearance-theme-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.appearance-hint {
+  margin: 10px 2px 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.appearance-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 20px 20px;
+}
+
+/* ---- 塗鴉：框線抖一點、標題底下畫波浪線、選到的深淺用螢光筆塗 ---- */
+
+:root[data-style='doodle'] .appearance-dialog {
+  --pop-tilt: -1.5deg;
+  border-color: transparent;
+  box-shadow: none;
+}
+:root[data-style='doodle'] .appearance-dialog::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--pen);
+  border-radius: inherit;
+  box-shadow: var(--shadow);
+  filter: url(#doodle-rough);
+  pointer-events: none;
+}
+:root[data-style='doodle'] .appearance-head h2::after {
+  content: '';
+  display: block;
+  width: 4.5em;
+  height: 10px;
+  margin-top: 2px;
+  background: var(--accent);
+  -webkit-mask: var(--squiggle) 0 0 / 100% 100% no-repeat;
+  mask: var(--squiggle) 0 0 / 100% 100% no-repeat;
+}
+:root[data-style='doodle'] .appearance-check {
+  border: 2px solid var(--pen);
+}
+:root[data-style='doodle'] .appearance-themes label:has(input:checked) {
+  border-color: var(--pen);
+  background: var(--marker);
+  color: var(--text-h);
+}
+:root[data-style='doodle'] .appearance-option:has(input:focus-visible),
+:root[data-style='doodle'] .appearance-themes label:has(input:focus-visible) {
+  outline-style: dashed;
+}
+
+/* ---- 平板與手機 ---- */
+
+@media (max-width: 900px) {
+  /* 只留圖示；文字仍給螢幕閱讀器讀 */
+  .appearance-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .appearance-button {
+    padding: 0;
+  }
+}
+
+/* 手機：改成從畫面下面滑上來的面板 */
+@media (max-width: 560px) {
+  .appearance-dialog {
+    width: 100%;
+    margin: auto 0 0;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+  .appearance-dialog[open] {
+    animation-name: appearance-sheet;
+  }
+  :root[data-style='doodle'] .appearance-dialog::before {
+    border-bottom-width: 0;
+    box-shadow: none;
+  }
+  .appearance-body {
+    max-height: 88dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .appearance-head,
+  .appearance-section,
+  .appearance-foot {
+    padding-inline: 16px;
+  }
+  .appearance-styles {
+    gap: 12px;
+  }
+  .appearance-thumb {
+    aspect-ratio: 1;
+  }
+  .appearance-foot button {
+    flex: 1;
+  }
+}
+@keyframes appearance-sheet {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+}
+@media (max-width: 400px) {
+  .appearance-themes label {
+    flex-direction: column;
+    gap: 0;
+    min-height: 50px;
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appearance-dialog[open] {
+    animation: none;
+  }
+}

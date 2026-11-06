@@ -805,3 +805,22 @@
   font-weight: 600;
   color: var(--accent);
 }
+
+/* ---- 塗鴉風格（<html data-style="doodle">）：遊戲卡片用筆畫框、歪一點，滑過時擺正 ---- */
+:root[data-style='doodle'] .game-card {
+  border: 2px solid var(--pen);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  rotate: -0.5deg;
+}
+:root[data-style='doodle'] .games-grid > li:nth-child(even) > .game-card {
+  rotate: 0.4deg;
+}
+:root[data-style='doodle'] .games-grid > li > .game-card:is(:hover, :focus-visible) {
+  rotate: 0deg;
+  border-color: var(--accent);
+  box-shadow: 4px 6px 0 var(--pen-shadow);
+}
+:root[data-style='doodle'] .game-card-icon {
+  border-radius: var(--radius-round);
+}

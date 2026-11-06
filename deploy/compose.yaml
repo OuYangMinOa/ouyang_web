@@ -9,6 +9,8 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
       # prod 和 staging 都走 HTTPS，<env>.env 設了 COOKIE_SECURE=true，登入 cookie 只會走 HTTPS
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # 這個環境的網址，Web Push 的 VAPID 簽章裡要寫是哪個網站送的（見 webpush.rs）
+      APP_HOST: ${APP_HOST:?APP_HOST is required}
       MUSIC_DIR: /music
       # 地震速報經過主機上的 relay（systemd 的 wb-relay，:8080），和歐陽小俠共用 wolfx 的連線
       EEW_RELAY_URL: ${EEW_RELAY_URL:-ws://host.docker.internal:8080/relay}

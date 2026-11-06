@@ -11,6 +11,7 @@ pub mod arena;
 pub mod auth;
 pub mod bigtwo;
 pub mod calendar;
+pub mod chat;
 pub mod chinesecheckers;
 pub mod contact;
 pub mod draw;
@@ -44,6 +45,7 @@ pub mod undercover;
 pub mod uno;
 pub mod visits;
 pub mod weather;
+pub mod webpush;
 pub mod werewolf;
 pub mod youtube;
 
@@ -139,6 +141,10 @@ pub struct AppState {
     pub mcp: Arc<mcp::Mcp>,
     /// 前端 build 時產生的本站功能清單（frontend/scripts/site-catalog.mjs），AI 助手的 site_search 查這份
     pub site_catalog: PathBuf,
+    /// 聊天室裡有人連線中的視窗（訊息存在資料庫，見 chat.rs）
+    pub chat: Arc<chat::Chat>,
+    /// Web Push：VAPID 金鑰和送推播用的 HTTP client（見 webpush.rs）
+    pub push: Arc<webpush::WebPush>,
 }
 
 impl AppState {
@@ -183,6 +189,8 @@ impl AppState {
             ai_running: Arc::default(),
             mcp: Arc::default(),
             site_catalog: PathBuf::from("../frontend/dist/site-catalog.json"),
+            chat: Arc::default(),
+            push: Arc::default(),
         }
     }
 }
@@ -328,6 +336,11 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/links/{id}/stats", get(short_links::stats))
         .route("/nav/pins", get(nav_pins::list))
         .route("/nav/pins/{app}", put(nav_pins::set))
+        .route("/chat/ws", get(chat::connect))
+        .route("/chat/messages", get(chat::history))
+        .route("/push/key", get(webpush::public_key))
+        .route("/push/subscriptions", post(webpush::subscribe).delete(webpush::unsubscribe))
+        .route("/push/test", post(webpush::test))
         .fallback(api_not_found);
 
     // 打包時已經把較大的檔案另存一份 .gz（Dockerfile），瀏覽器支援 gzip 就直接送那份
