@@ -68,6 +68,8 @@ jobs:
         if: steps.reuse.outputs.image == ''
         with:
           workspaces: backend
+          # 固定 key，不帶 job 名稱：下面的 warm-cache 存的快取這裡才讀得到
+          shared-key: backend-test
           # PR 只讀 dev/main 存好的快取，不另存一份（每份約 400 MB，Actions 快取整個 repo 只有 10 GB）
           save-if: ${{ github.event_name != 'pull_request' }}
       - name: Backend tests
@@ -90,6 +92,32 @@ jobs:
           npm ci
           npm run lint
           npm run build
+
+  # push main 沿用 staging 映像時 test 不會編譯，main 的 Rust 快取就一直停在舊的。
+  # dev→main 的 PR 只讀得到 main（目標分支）的快取、讀不到 dev 的，Cargo.lock 一變就要重編上百個套件（多 2 分鐘）。
+  # 這裡只編譯不跑測試，把快取存回 main；跟 build、deploy 並行，不會拖慢 prod 部署。
+  warm-cache:
+    needs: test
+    if: github.event_name == 'push' && github.ref_name == 'main' && needs.test.outputs.tested_image != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: rust
+        name: Rust version from Dockerfile
+        run: |
+          version=$(sed -n 's/^FROM rust:\([0-9.]*\)-.*/\1/p' Dockerfile)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          shared-key: backend-test
+      - name: Build tests
+        working-directory: backend
+        run: cargo test --locked --no-run
 
   build:
     needs: test

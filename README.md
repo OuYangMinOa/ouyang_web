@@ -1147,7 +1147,12 @@ CI 的快取：
 - Docker 層快取存在 GHCR 的 `buildcache-staging` / `buildcache-prod`，先讀自己環境的，沒有再讀另一個環境的。
   沒放在 Actions 快取：整個 repo 只有 10 GB，Docker 層快取一份就要好幾 GB，超過上限時 GitHub 會一直清掉舊快取。
 - Rust 和 npm 的快取在 Actions 快取。Rust 快取只在 push 到 `dev` / `main` 時存，PR 只讀。
-  main 大多沿用 staging 映像、不跑測試，它的 Rust 快取 7 天沒用到會被 GitHub 清掉；之後要在 main 照常測試時會從頭編，比較久。
+  PR 只讀得到目標分支（和預設分支 main）的快取，所以 dev→main 的 PR 讀的是 main 的，讀不到 dev 的。
+  push main 沿用 staging 映像、不跑測試時，`warm-cache` job 會另外編一次測試（不跑）把 Rust 快取存回 main，
+  跟 build、deploy 並行，不會拖慢 prod 部署；沒有它的話 Cargo.lock 一變，dev→main 的 PR 就要重編上百個套件。
+- Dockerfile 的 cargo-chef planner 只複製 `Cargo.toml`、`Cargo.lock`、`src/`：recipe 會列出所有 target，
+  `tests/` 底下多一個檔案，相依套件那層快取就會失效、全部重編（build 從約 90 秒變 250～300 秒）。
+  之後如果加了 `build.rs`，planner 那段要一起複製進去。
 - Rust 版本固定在 `Dockerfile` 的 `FROM rust:<版本>-bookworm@sha256:…`，CI 的 `cargo test` 也從這一行讀版本。
   不用 `rust:1-bookworm` 這種會變的 tag：它一更新 Docker 快取就全部失效，整條 Rust 重編約 4 分鐘。
   升級時版本和 digest 一起改（`docker buildx imagetools inspect rust:<版本>-bookworm` 查 digest）。
