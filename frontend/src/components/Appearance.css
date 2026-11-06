@@ -244,8 +244,10 @@
 [data-preview^='ink'] .thumb-mark {
   color: var(--accent);
 }
+/* 縮圖裡的站名和名字跟真的一樣用手寫的芫荽 */
 [data-preview^='doodle'] .thumb-bar b,
 [data-preview^='doodle'] .thumb-title {
+  font-family: var(--hand);
   font-weight: 400;
 }
 [data-preview^='doodle'] .thumb-cards span:first-child {

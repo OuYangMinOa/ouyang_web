@@ -65,6 +65,8 @@ export function drawMinis(
   ctx.clearRect(0, 0, w, layout.height)
   const cs = size / shape.cols
   const skip = shape.hidden * shape.cols
+  // 名次的數字跟頁面用同一套字（塗鴉風格是粉圓）
+  const font = getComputedStyle(ctx.canvas).fontFamily
   minis.forEach((m, i) => {
     const x = (i % cols) * (size + gap)
     const y = Math.floor(i / cols) * (size * 2 + gap)
@@ -93,7 +95,7 @@ export function drawMinis(
       ctx.fillRect(x, y, size, size * 2)
       if (m.place !== null && size >= 18) {
         ctx.fillStyle = c.text
-        ctx.font = `600 ${Math.round(size * 0.42)}px system-ui, sans-serif`
+        ctx.font = `600 ${Math.round(size * 0.42)}px ${font}`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(String(m.place), x + size / 2, y + size)

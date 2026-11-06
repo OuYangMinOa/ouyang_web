@@ -117,7 +117,9 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 - 色票在 `index.css`：塗鴉只換基本色（`--bg`、`--text`、`--accent`…）、字型和形狀變數，遊戲棋盤這類專用色沿用墨與陽的亮色／深色。
 - 塗鴉的形狀在 `doodle.css`：歪歪的圓角、筆畫框線、錯開的實心陰影、頁首手畫的底線。權重跟 `App.css` 的基本樣式一樣，各頁面能蓋過基本樣式的地方，塗鴉時一樣蓋得過去。
 - 便條紙、外觀對話框和首頁太陽的框線會微微抖動：SVG 濾鏡 `#doodle-rough`（`components/DoodleDefs.tsx`），只套在框線上，字不會跟著抖。
-- 手寫字是 Google Fonts 的「芫荽」（Iansui），只有選了塗鴉才載入，也是依用到的字分片下載。
+- 字型都來自 Google Fonts，只有選了塗鴉才載入，也是依用到的字分片下載：
+  - 全站的標題和內文統一用圓體「粉圓」（Huninn），筆畫粗細一致、讀久不累。`--sans` 和 `--serif` 都指向它，頁面不用另外處理。
+  - 只有首頁的名字和左上角的站名當 logo，用手寫字「芫荽」（Iansui，變數 `--hand`）。芫荽只有一種粗細，用的地方要寫 `font-weight: 400`，不然瀏覽器會硬加粗，筆畫會糊在一起。
 - 首頁的 3D 粒子太陽在塗鴉風格換成手畫的笑臉太陽（`components/DoodleSun.tsx`），不載入 three.js。
 - 外觀設定裡的縮圖用 `data-preview="<風格>-<深淺>"` 把那一組變數套在縮圖上，所以不管目前選哪個，縮圖都畫得出另一種的樣子。
 
