@@ -2,6 +2,8 @@
 name = "backend"
 version = "0.1.0"
 edition = "2024"
+# 整合測試只編成一個執行檔（tests/main.rs），見下面的 [[test]]
+autotests = false
 
 [dependencies]
 argon2 = "0.6.0"
@@ -27,6 +29,12 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 # 主機監控讀磁碟用量（statvfs）
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.191"
+
+# tests/ 底下的檔案都是 tests/main.rs 的模組：每個檔案各一個執行檔的話，每個都要連結一次整個後端，
+# 而且 cargo 一次只跑一個執行檔。新增測試檔要在 tests/main.rs 加 mod
+[[test]]
+name = "integration"
+path = "tests/main.rs"
 
 [dev-dependencies]
 http-body-util = "0.1.5"

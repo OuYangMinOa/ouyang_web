@@ -29,6 +29,10 @@ cd backend && cargo test
 cd frontend && npm run lint && npm run build
 ```
 
+後端的整合測試（`backend/tests/`）全部編成同一個執行檔 `integration`：每個檔案各一個執行檔的話，每個都要連結一次整個後端，
+cargo 也一次只跑一個，CI 上光這兩項就多一分鐘以上。新增測試檔要在 `tests/main.rs` 加一行 `mod`，漏了的話 `every_test_file_is_listed` 會失敗。
+只跑某個檔案：`cargo test --test integration bigtwo::`。
+
 資料庫 migration 放在 `backend/migrations/`，服務啟動時自動執行。
 
 ## 登入與權限

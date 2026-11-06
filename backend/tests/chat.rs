@@ -1,10 +1,9 @@
 //! 聊天室（chat.rs）和 Web Push（webpush.rs）：訊息即時送到每個人、存進資料庫，
 //! 以及只推播給「有視窗開著聊天室、但沒在看」的人。推播送到測試裡的假推播服務，解密後檢查內容和 VAPID 簽章。
 
-mod common;
-
 use std::{path::Path, sync::Arc, time::Duration};
 
+use crate::common::{TestApp, app};
 use aws_lc_rs::{
     agreement::{ECDH_P256, PrivateKey},
     signature::{ECDSA_P256_SHA256_FIXED, UnparsedPublicKey},
@@ -18,7 +17,6 @@ use axum::{
 };
 use backend::{auth::upsert_admin, router, webpush::WebPush};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use common::{TestApp, app};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::{net::TcpStream, sync::mpsc};

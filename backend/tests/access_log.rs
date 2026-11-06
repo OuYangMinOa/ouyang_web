@@ -1,12 +1,10 @@
-mod common;
-
+use crate::common::{TestApp, app};
 use axum::{
     Router,
     body::Body,
     http::{Request, StatusCode, header},
 };
 use backend::{auth::upsert_admin, router};
-use common::{TestApp, app};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 

@@ -1,12 +1,10 @@
 //! 系統管理的遊戲狀態（game_monitor.rs）：三種房間和單人排行榜都看得到，訪客的 id 不外流
 
-mod common;
-
 use std::time::Duration;
 
+use crate::common::{TestApp, app};
 use axum::http::StatusCode;
 use backend::auth::upsert_admin;
-use common::{TestApp, app};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio::net::TcpStream;

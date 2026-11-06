@@ -1,11 +1,9 @@
 //! 遊戲室（lobby.rs）的 WebSocket 整合測試：房主選遊戲後，大家拿到的房間真的開好了，房主和座位也照遊戲室排
 
-mod common;
-
 use std::time::Duration;
 
+use crate::common::{TestApp, app};
 use axum::http::StatusCode;
-use common::{TestApp, app};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpStream;

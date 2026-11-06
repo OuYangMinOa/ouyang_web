@@ -1,8 +1,6 @@
-mod common;
-
+use crate::common::{TestApp, app};
 use axum::http::StatusCode;
 use backend::auth::upsert_admin;
-use common::{TestApp, app};
 use serde_json::{Value, json};
 
 const ADMIN_PASSWORD: &str = "correct horse battery";
