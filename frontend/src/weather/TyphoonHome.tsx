@@ -29,12 +29,9 @@ export default function TyphoonHome() {
   return (
     <section className="home-section typhoon-home" aria-labelledby="typhoon-home-title">
       <div className="home-wrap">
-        <p className="kicker">
-          <span>⚠</span> TYPHOON WATCH
-        </p>
-        <h2 id="typhoon-home-title" className="typhoon-home-title">
-          颱風動態
-        </h2>
+        <header className="home-head">
+          <h2 id="typhoon-home-title">颱風動態</h2>
+        </header>
         <div className="typhoon-home-grid">
           <ul className="typhoon-home-list">
             {storms.map((storm) => {
@@ -64,7 +61,7 @@ export default function TyphoonHome() {
               )
             })}
             <li>
-              <Link className="work-link" to="/weather/typhoon">
+              <Link className="home-link" to="/weather/typhoon">
                 看完整路徑與 AI 預報 →
               </Link>
             </li>

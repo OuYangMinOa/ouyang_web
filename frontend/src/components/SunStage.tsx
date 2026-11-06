@@ -48,7 +48,7 @@ export default function SunStage() {
         <span>{glyph ? `${ROMAN[glyph]} · ${glyph}` : 'SUN · 太陽'}</span>
         <button
           type="button"
-          className="sun-toggle"
+          className="sun-toggle secondary"
           onClick={() => sceneRef.current?.toggle()}
           disabled={status !== 'ready'}
         >
