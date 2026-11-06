@@ -1,4 +1,6 @@
-import { useId, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import Icon from '../../music/Icon'
+import type { MusicControl } from './music'
 
 export type Option<T> = { value: T; label: ReactNode; disabled?: boolean }
 
@@ -72,12 +74,80 @@ export function Overlay({ children }: { children: ReactNode }) {
   return <div className="game-overlay">{children}</div>
 }
 
-/** 背景音樂開關（也可以按快捷鍵，預設是 M） */
-export function MusicButton({ music }: { music: { enabled: boolean; toggle: () => void } }) {
+/** 音量面板的寬度（要和 games.css 的 `.music-volume-panel` 一樣），打開時看靠哪邊對齊放得下 */
+const VOLUME_PANEL_W = 220
+
+/**
+ * 背景音樂：左邊是開關（也可以按快捷鍵，預設是 M），右邊點開調音量；開關和音量所有遊戲共用（見 `useMusic`）。
+ * 音量面板浮在按鈕下面，點外面或按 Esc 收起來。
+ */
+export function MusicButton({ music }: { music: MusicControl }) {
+  const [open, setOpen] = useState(false)
+  const [alignLeft, setAlignLeft] = useState(false)
+  const wrap = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const panelId = useId()
+  const sliderId = useId()
+  useEffect(() => {
+    if (!open) return
+    const outside = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      trigger.current?.focus()
+    }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [open])
+  const togglePanel = () => {
+    // 預設和按鈕右邊對齊往左長；按鈕太靠左、往左會超出畫面時改成左邊對齊
+    const rect = wrap.current?.getBoundingClientRect()
+    setAlignLeft(!!rect && rect.right < VOLUME_PANEL_W + 8)
+    setOpen((o) => !o)
+  }
   return (
-    <button type="button" className="secondary" onClick={music.toggle} aria-pressed={music.enabled}>
-      {music.enabled ? '♪ 音樂：開' : '♪ 音樂：關'}
-    </button>
+    <div className="music-control" ref={wrap}>
+      <button type="button" className="secondary" onClick={music.toggle} aria-pressed={music.enabled}>
+        ♪ <span className="music-label">音樂：</span>
+        {music.enabled ? '開' : '關'}
+      </button>
+      <button
+        ref={trigger}
+        type="button"
+        className="secondary music-volume-toggle"
+        onClick={togglePanel}
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label="調整音樂音量"
+        title="調整音樂音量"
+      >
+        <Icon name={music.enabled ? 'volume' : 'mute'} />
+      </button>
+      {open && (
+        <div id={panelId} className={`music-volume-panel${alignLeft ? ' align-left' : ''}`}>
+          <div className="music-volume-head">
+            <label htmlFor={sliderId}>音樂音量</label>
+            <output htmlFor={sliderId}>{music.volume}%</output>
+          </div>
+          <input
+            id={sliderId}
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={music.volume}
+            onChange={(e) => music.setVolume(Number(e.target.value))}
+          />
+          <p className="muted">所有小遊戲共用</p>
+        </div>
+      )}
+    </div>
   )
 }
 

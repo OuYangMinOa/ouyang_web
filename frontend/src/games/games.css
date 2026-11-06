@@ -238,6 +238,70 @@
   flex: 1 1 auto;
 }
 
+/* 背景音樂：開關 + 音量按鈕，音量面板浮在下面（shared/ui.tsx 的 MusicButton） */
+.music-control {
+  position: relative;
+  display: flex;
+  gap: 4px;
+}
+.game-toolbar > .music-control {
+  flex: 1 1 auto;
+}
+.game-toolbar > .music-control > button:first-child {
+  flex: 1 1 auto;
+}
+button.music-volume-toggle {
+  display: inline-grid;
+  place-items: center;
+  min-width: 40px;
+  padding: 0 8px;
+}
+.music-volume-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+.music-volume-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  width: 220px;
+  padding: 10px 14px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+.music-volume-panel.align-left {
+  right: auto;
+  left: 0;
+}
+.music-volume-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.music-volume-head label {
+  color: var(--text-h);
+}
+.music-volume-head output {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.music-volume-panel input[type='range'] {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.music-volume-panel .muted {
+  margin: 0;
+  font-size: 0.85em;
+}
+
 /* 線上悔棋的請求與結果（shared/Takeback.tsx） */
 .takeback-notice {
   display: flex;
@@ -325,6 +389,15 @@
   }
   .game-head .game-title-music {
     margin-left: auto;
+  }
+  /* 標題列擠：開關只寫「♪ 開」，「音樂：」只留給螢幕報讀，四個字的遊戲名稱才放得下 */
+  .game-head .music-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

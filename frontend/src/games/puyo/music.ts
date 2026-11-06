@@ -41,7 +41,7 @@ const SONG: Song = {
   maxBpm: 180,
 }
 
-/** 在遊戲進行中（`playing`）播放背景音樂；開關記在 localStorage，所有遊戲共用 */
+/** 在遊戲進行中（`playing`）播放背景音樂；開關和音量記在 localStorage，所有遊戲共用 */
 export function useMusic(playing: boolean, level: number) {
   return useSongMusic('puyo', SONG, playing, level)
 }
