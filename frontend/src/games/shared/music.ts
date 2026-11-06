@@ -453,6 +453,9 @@ export type DrumStyle = keyof typeof DRUM_STYLES
 
 export class Music {
   private ctx: BaseAudioContext | null = null
+  /** 最後的總音量（使用者調的），旋律、回音、鼓都從這裡出去 */
+  private output: GainNode | null = null
+  private volume = 1
   private master: GainNode | null = null
   private drumBus: GainNode | null = null
   private noise: AudioBuffer | null = null
@@ -517,6 +520,12 @@ export class Music {
     this.bpm = tempo(this.song, level)
   }
 
+  /** 總音量的倍率（1 是原本的大小）；播放中改會在幾十毫秒內滑過去，不會喀一聲 */
+  setVolume(volume: number) {
+    this.volume = volume
+    if (this.ctx && this.output) this.output.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.03)
+  }
+
   /** 要在使用者操作（點擊、按鍵）之後呼叫，瀏覽器才允許出聲 */
   play() {
     if (this.timer) return
@@ -546,6 +555,7 @@ export class Music {
     this.pause()
     if (this.ctx instanceof AudioContext) void this.ctx.close().catch(() => {})
     this.ctx = null
+    this.output = null
     this.master = null
     this.drumBus = null
   }
@@ -554,6 +564,9 @@ export class Music {
   connect(ctx: BaseAudioContext) {
     this.ctx = ctx
     const mix = this.mix
+    this.output = ctx.createGain()
+    this.output.gain.value = this.volume
+    this.output.connect(ctx.destination)
     this.master = ctx.createGain()
     this.master.gain.value = mix.volume
     const lowpass = ctx.createBiquadFilter()
@@ -565,12 +578,12 @@ export class Music {
     feedback.gain.value = mix.echoFeedback
     const wet = ctx.createGain()
     wet.gain.value = mix.echoMix
-    this.master.connect(lowpass).connect(ctx.destination)
+    this.master.connect(lowpass).connect(this.output)
     lowpass.connect(echo).connect(feedback).connect(echo)
-    echo.connect(wet).connect(ctx.destination)
+    echo.connect(wet).connect(this.output)
     this.drumBus = ctx.createGain()
     this.drumBus.gain.value = mix.volume * mix.drums
-    this.drumBus.connect(ctx.destination)
+    this.drumBus.connect(this.output)
     // 一秒的白雜訊，小鼓、沙鈴、鈸都從這裡濾出來
     this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
     const data = this.noise.getChannelData(0)
@@ -753,26 +766,56 @@ export class Music {
   }
 }
 
+/** 音量 0～100，100 是每首曲子原本的大小 */
+const DEFAULT_VOLUME = 100
+
+function cleanVolume(raw: unknown): number {
+  return typeof raw === 'number' && Number.isFinite(raw) ? Math.round(Math.min(Math.max(raw, 0), 100)) : DEFAULT_VOLUME
+}
+
+/** 耳朵聽大小聲是對數的，滑桿線性對到增益的話一半的位置還是很大聲，所以取平方：50% 大約是 -12 dB */
+function gainOf(volume: number): number {
+  return (volume / 100) ** 2
+}
+
 /**
- * 在遊戲進行中（`playing`）播放背景音樂。開關記在 localStorage 的 `music`，所有遊戲共用，
- * 在一個遊戲關掉，換到別的遊戲也是關的；還沒存過就沿用以前各遊戲自己記的 `<game>:music`
+ * 在遊戲進行中（`playing`）播放背景音樂。開關和音量都記在 localStorage（`music`、`musicVolume`），所有遊戲共用，
+ * 在一個遊戲調小聲，換到別的遊戲也是小聲的；開關還沒存過就沿用以前各遊戲自己記的 `<game>:music`。
+ * 開關和音量分開記，關掉再打開會回到原本的音量；音量拉到 0 也算關。
  */
 export function useMusic(game: string, song: Song, playing: boolean, level: number) {
-  const [enabled, setEnabled] = useState(() => load<boolean | null>('music', null) ?? load<boolean>(`${game}:music`, true))
+  const [on, setOn] = useState(() => load<boolean | null>('music', null) ?? load<boolean>(`${game}:music`, true))
+  const [volume, setVolumeState] = useState(() => cleanVolume(load<unknown>('musicVolume', null)))
   const [music] = useState(() => new Music(song))
+  const enabled = on && volume > 0
   useEffect(() => () => music.dispose(), [music])
   useEffect(() => music.setLevel(level), [music, level])
+  useEffect(() => music.setVolume(gainOf(volume)), [music, volume])
   useEffect(() => {
     if (playing && enabled) music.play()
     else music.pause()
   }, [music, playing, enabled])
   const toggle = useCallback(() => {
-    setEnabled((on) => {
-      save('music', !on)
-      return !on
-    })
+    const next = !enabled
+    setOn(next)
+    save('music', next)
+    // 是拉到 0 才沒聲音的，打開時給回預設音量
+    if (next && volume === 0) {
+      setVolumeState(DEFAULT_VOLUME)
+      save('musicVolume', DEFAULT_VOLUME)
+    }
+  }, [enabled, volume])
+  /** 拖滑桿；關著的時候拖也會順便打開 */
+  const setVolume = useCallback((value: number) => {
+    const next = cleanVolume(value)
+    setVolumeState(next)
+    save('musicVolume', next)
+    if (next > 0) {
+      setOn(true)
+      save('music', true)
+    }
   }, [])
-  return { enabled, toggle }
+  return { enabled, toggle, volume, setVolume }
 }
 
 export type MusicControl = ReturnType<typeof useMusic>
