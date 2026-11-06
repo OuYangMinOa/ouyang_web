@@ -16,7 +16,7 @@
 //!
 //! 隱藏資訊：猜的人和觀戰的人在公布前拿不到題目和被刪掉的提示。桌遊規則本來就不能交談，
 //! 所以公布前出題的人在聊天室說的話只有出題的人看得到，猜的人和觀戰的人都看不到（題目、提示不會從聊天室漏出去）。
-//! 題目用你畫我猜的詞庫（`draw_words.txt`）裡簡單和普通的詞。沒有電腦玩家。
+//! 題目用你畫我猜的內建詞庫（`draw_words.txt`）裡簡單和普通的詞，不含主題詞庫（例如英雄聯盟）。沒有電腦玩家。
 
 use std::{sync::Arc, time::Duration};
 
@@ -319,7 +319,9 @@ impl JustOne {
 
     fn pick_word(&mut self, ctx: &mut Ctx) -> &'static str {
         let pool = |used: &[usize]| -> Vec<usize> {
-            (0..WORDS.len()).filter(|&i| WORDS[i].level != Level::Hard && !used.contains(&i)).collect()
+            (0..WORDS.len())
+                .filter(|&i| WORDS[i].level != Level::Hard && !draw::is_theme(&WORDS[i].category) && !used.contains(&i))
+                .collect()
         };
         let mut fresh = pool(&self.used);
         if fresh.is_empty() {
