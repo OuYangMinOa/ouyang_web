@@ -2,7 +2,7 @@
 // 點通知就回到對應的頁面。沒有 fetch handler、不攔任何請求，所以範圍是整站也不會影響其他頁面。
 //
 // 推播內容是 JSON：{title, body, from?, tag?, url?}。同一個 tag 的通知合成一則，
-// 聊天室連續好幾則時顯示「聊天室（3 則新訊息）」和最後幾則的內容。
+// 聊天室連續好幾則時顯示「聊天室（3 則新訊息）」和最後幾則的內容；每間私人房間的 tag 不同，各自一則。
 
 const MAX_LINES = 4
 
@@ -48,7 +48,11 @@ self.addEventListener('notificationclick', (event) => {
     (async () => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
       const open = windows.find((client) => new URL(client.url).pathname.startsWith(target.pathname))
-      if (open) return open.focus()
+      if (open) {
+        // 已經開著（例如聊天室正在看別間）：叫那個頁面自己換過去，不用重新載入
+        if (open.url !== target.href) open.postMessage({ type: 'open', url: target.href })
+        return open.focus()
+      }
       return self.clients.openWindow(target.href)
     })(),
   )

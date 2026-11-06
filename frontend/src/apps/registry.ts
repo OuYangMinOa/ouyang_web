@@ -183,8 +183,9 @@ export const APPS: AppInfo[] = [
     name: '聊天室',
     icon: '💬',
     glyph: '聊',
-    blurb: '登入的人一起聊天，看得到誰開著聊天室。開啟通知後，聊天室開著但視窗在背景時，有新訊息會跳出 Windows 的通知。',
-    tag: '即時 · 通知',
+    blurb:
+      '登入的人一起聊天，看得到誰開著聊天室；也可以開私人房間，有代碼的人才進得來，其他人看不到。開啟通知後，聊天室開著但視窗在背景時，有新訊息會跳出 Windows 的通知。',
+    tag: '即時 · 私人房間 · 通知',
     live: true,
     loginOnly: true,
     nav: [{ items: [{ to: '/chat', label: '聊天室', icon: '💬' }] }],

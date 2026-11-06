@@ -83,6 +83,15 @@ impl Client {
         (client, welcome)
     }
 
+    /// 連上時要看私人房間 `room`，讀掉 welcome
+    async fn join_room(addr: &str, cookie: &str, room: i64) -> (Self, Value) {
+        let mut request = format!("ws://{addr}/api/chat/ws?room={room}").into_client_request().unwrap();
+        request.headers_mut().insert("cookie", cookie.parse().unwrap());
+        let mut client = Self(connect_async(request).await.unwrap().0);
+        let welcome = client.until(|m| m["type"] == "welcome").await;
+        (client, welcome)
+    }
+
     async fn next(&mut self) -> Value {
         loop {
             let message = tokio::time::timeout(Duration::from_secs(5), self.0.next())
@@ -114,6 +123,17 @@ impl Client {
     async fn say(&mut self, text: &str, nonce: &str) -> Value {
         self.send(json!({ "type": "send", "text": text, "nonce": nonce })).await;
         self.until(|m| m["type"] == "message" && m["message"]["nonce"] == nonce).await["message"].clone()
+    }
+
+    /// 在私人房間 `room` 說話
+    async fn say_in(&mut self, room: i64, text: &str, nonce: &str) -> Value {
+        self.send(json!({ "type": "send", "room": room, "text": text, "nonce": nonce })).await;
+        self.until(|m| m["type"] == "message" && m["message"]["nonce"] == nonce).await["message"].clone()
+    }
+
+    /// 下一則訊息（略過 presence 之類的）
+    async fn next_message(&mut self) -> Value {
+        self.until(|m| m["type"] == "message").await["message"].clone()
     }
 
     /// 回報視窗狀態，等到 `watcher` 看到在線名單反映出來（伺服器處理完了）
@@ -502,4 +522,290 @@ async fn subscriptions_must_point_at_a_push_service() {
     let key = app.get("/api/push/key", Some(&alice)).await.body["key"].clone();
     assert_eq!(URL_SAFE_NO_PAD.decode(key.as_str().unwrap()).unwrap().len(), 65);
     assert_eq!(app.get("/api/push/key", Some(&bob)).await.body["key"], key);
+}
+
+// ---- 私人房間 ----
+
+async fn create_room(app: &TestApp, cookie: &str, name: &str) -> Value {
+    let reply = app.call("POST", "/api/chat/rooms", Some(cookie), Some(json!({ "name": name }))).await;
+    assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.body);
+    reply.body
+}
+
+async fn join_room(app: &TestApp, cookie: &str, code: &str) -> crate::common::Reply {
+    app.call("POST", "/api/chat/rooms/join", Some(cookie), Some(json!({ "code": code }))).await
+}
+
+async fn rooms(app: &TestApp, cookie: &str) -> Vec<Value> {
+    let reply = app.get("/api/chat/rooms", Some(cookie)).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    reply.body["rooms"].as_array().unwrap().clone()
+}
+
+fn member_names(room: &Value) -> Vec<String> {
+    room["members"].as_array().unwrap().iter().map(|m| m["username"].as_str().unwrap().to_owned()).collect()
+}
+
+fn texts(messages: &Value) -> Vec<String> {
+    messages.as_array().unwrap().iter().map(|m| m["text"].as_str().unwrap().to_owned()).collect()
+}
+
+#[tokio::test]
+async fn private_rooms_are_invisible_to_everyone_else() {
+    let (app, addr) = serve().await;
+    let (admin, alice, bob) = users(&app).await;
+    let room = create_room(&app, &alice, "  小  團體 ").await;
+    assert_eq!(room["name"], "小 團體");
+    assert_eq!(member_names(&room), ["alice"]);
+    let id = room["id"].as_i64().unwrap();
+    let code = room["code"].as_str().unwrap().to_owned();
+    assert_eq!(code.len(), 8);
+    assert!(code.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()), "{code}");
+
+    // 不在房間裡的人（管理員也一樣）：列表沒有、讀不到、動不了，跟不存在一樣是 404
+    for cookie in [&bob, &admin] {
+        assert_eq!(rooms(&app, cookie).await, Vec::<Value>::new());
+        let history = app.get(&format!("/api/chat/messages?room={id}"), Some(cookie)).await;
+        assert_eq!(history.status, StatusCode::NOT_FOUND);
+        let body = Some(json!({ "name": "x" }));
+        let rename = app.call("PATCH", &format!("/api/chat/rooms/{id}"), Some(cookie), body).await;
+        assert_eq!(rename.status, StatusCode::NOT_FOUND);
+        let delete = app.call("DELETE", &format!("/api/chat/rooms/{id}"), Some(cookie), None).await;
+        assert_eq!(delete.status, StatusCode::NOT_FOUND);
+    }
+
+    let (mut a, _) = Client::join(&addr, &alice).await;
+    let (mut b, _) = Client::join(&addr, &bob).await;
+    let (mut root, _) = Client::join(&addr, &admin).await;
+
+    let secret = a.say_in(id, "秘密", "s1").await;
+    assert_eq!(secret["room"], id);
+    // 接著在大廳說的話大家都收得到；bob、admin 收到的第一則就是這則，表示房間裡那則沒有送給他們
+    a.say("大家好", "p1").await;
+    for client in [&mut b, &mut root] {
+        let got = client.next_message().await;
+        assert_eq!(got["text"], "大家好");
+        assert_eq!(got["room"], Value::Null);
+    }
+    // 大廳的歷史裡也沒有房間的訊息
+    assert_eq!(texts(&app.get("/api/chat/messages", Some(&bob)).await.body["messages"]), ["大家好"]);
+
+    // 送進房間、打開房間、刪房間的訊息：都當作沒有這間
+    b.send(json!({ "type": "send", "room": id, "text": "偷看", "nonce": "b1" })).await;
+    let error = b.until(|m| m["type"] == "error").await;
+    assert_eq!(error["code"], "room_not_found");
+    assert_eq!(error["nonce"], "b1");
+    b.send(json!({ "type": "open", "room": id })).await;
+    let error = b.until(|m| m["type"] == "error").await;
+    assert_eq!(error["code"], "room_not_found");
+    assert_eq!(error["room"], id);
+    root.send(json!({ "type": "delete", "id": secret["id"] })).await;
+    assert_eq!(root.until(|m| m["type"] == "error").await["code"], "not_found", "管理員也刪不到看不到的房間");
+    // 帶著房間連線：換成大廳
+    let (_, welcome) = Client::join_room(&addr, &bob, id).await;
+    assert_eq!(welcome["room"], Value::Null);
+    assert_eq!(texts(&welcome["messages"]), ["大家好"]);
+
+    // 用代碼加入：大小寫、空白、- 都不管
+    let typed = format!(" {}-{} ", code[..4].to_lowercase(), &code[4..]);
+    let joined = join_room(&app, &bob, &typed).await;
+    assert_eq!(joined.status, StatusCode::OK, "{}", joined.body);
+    assert_eq!(joined.body["id"], id);
+    assert_eq!(member_names(&joined.body), ["alice", "bob"]);
+    assert_eq!(joined.body["unread"], 0, "加入前的訊息不算未讀");
+    a.until(|m| m["type"] == "rooms").await;
+    b.until(|m| m["type"] == "rooms").await;
+    // 再輸入一次一樣的代碼：還是成員，不會重複
+    assert_eq!(member_names(&join_room(&app, &bob, &code).await.body), ["alice", "bob"]);
+
+    // 加入後看得到之前的訊息
+    let history = app.get(&format!("/api/chat/messages?room={id}"), Some(&bob)).await;
+    assert_eq!(texts(&history.body["messages"]), ["秘密"]);
+    let (_, welcome) = Client::join_room(&addr, &bob, id).await;
+    assert_eq!(welcome["room"], id);
+    assert_eq!(texts(&welcome["messages"]), ["秘密"]);
+    b.send(json!({ "type": "open", "room": id })).await;
+    let history = b.until(|m| m["type"] == "history").await;
+    assert_eq!(history["room"], id);
+    assert_eq!(texts(&history["messages"]), ["秘密"]);
+
+    // bob 在房間說話：alice 收到，admin 還是收不到
+    b.say_in(id, "我來了", "b2").await;
+    assert_eq!(a.next_message().await["text"], "我來了");
+    a.say("大廳還在", "p2").await;
+    assert_eq!(root.next_message().await["text"], "大廳還在");
+}
+
+#[tokio::test]
+async fn wrong_codes_are_limited() {
+    let (app, _) = serve().await;
+    let (admin, alice, bob) = users(&app).await;
+    let code = create_room(&app, &alice, "房間").await["code"].as_str().unwrap().to_owned();
+    for wrong in ["", "ABC", "XXXXXXXX", "XXXXXXXXX"] {
+        let reply = join_room(&app, &bob, wrong).await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{wrong}");
+    }
+    for _ in 0..6 {
+        assert_eq!(join_room(&app, &bob, "YYYYYYYY").await.status, StatusCode::BAD_REQUEST);
+    }
+    // 錯了 10 次：連對的代碼也要等一下
+    assert_eq!(join_room(&app, &bob, &code).await.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(rooms(&app, &bob).await, Vec::<Value>::new());
+    // 別人不受影響
+    assert_eq!(join_room(&app, &admin, &code).await.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn owner_manages_the_room() {
+    let (app, addr) = serve().await;
+    let (admin, alice, bob) = users(&app).await;
+    let room = create_room(&app, &alice, "讀書會").await;
+    let id = room["id"].as_i64().unwrap();
+    let old_code = room["code"].as_str().unwrap().to_owned();
+    join_room(&app, &bob, &old_code).await;
+    let joined = join_room(&app, &admin, &old_code).await.body;
+    assert_eq!(member_names(&joined), ["alice", "bob", "admin"]);
+    let id_of = |name: &str| {
+        joined["members"].as_array().unwrap().iter().find(|m| m["username"] == name).unwrap()["id"].clone()
+    };
+    let (alice_id, bob_id, admin_id) = (id_of("alice"), id_of("bob"), id_of("admin"));
+    assert_eq!(joined["owner_id"], alice_id);
+
+    let (mut a, _) = Client::join(&addr, &alice).await;
+    let (mut b, _) = Client::join(&addr, &bob).await;
+
+    // 不是房主：不能改名、換代碼、刪房間、移出別人
+    let room_url = format!("/api/chat/rooms/{id}");
+    for (method, path, body) in [
+        ("PATCH", room_url.clone(), Some(json!({ "name": "改掉" }))),
+        ("POST", format!("{room_url}/code"), None),
+        ("DELETE", room_url.clone(), None),
+        ("DELETE", format!("{room_url}/members/{admin_id}"), None),
+    ] {
+        assert_eq!(app.call(method, &path, Some(&bob), body).await.status, StatusCode::FORBIDDEN, "{method} {path}");
+    }
+
+    // 房主可以刪別人的訊息，一般成員不行
+    let from_bob = b.say_in(id, "bob 的話", "b1").await;
+    let from_alice = a.say_in(id, "alice 的話", "a1").await;
+    b.send(json!({ "type": "delete", "id": from_alice["id"] })).await;
+    assert_eq!(b.until(|m| m["type"] == "error").await["code"], "not_found");
+    a.send(json!({ "type": "delete", "id": from_bob["id"] })).await;
+    let deleted = b.until(|m| m["type"] == "deleted").await;
+    assert_eq!(deleted["id"], from_bob["id"]);
+    assert_eq!(deleted["room"], id);
+
+    // 改名：大家都收到 rooms
+    let renamed = app.call("PATCH", &room_url, Some(&alice), Some(json!({ "name": "讀書會 2" }))).await;
+    assert_eq!(renamed.body["name"], "讀書會 2");
+    b.until(|m| m["type"] == "rooms").await;
+
+    // 移出 bob：bob 收到 rooms、列表裡沒有了、代碼換了，舊代碼進不來、也送不進去
+    let kicked = app.call("DELETE", &format!("{room_url}/members/{bob_id}"), Some(&alice), None).await;
+    assert_eq!(kicked.status, StatusCode::NO_CONTENT);
+    b.until(|m| m["type"] == "rooms").await;
+    assert_eq!(rooms(&app, &bob).await, Vec::<Value>::new());
+    let after = rooms(&app, &alice).await;
+    assert_eq!(member_names(&after[0]), ["alice", "admin"]);
+    assert_ne!(after[0]["code"], old_code);
+    assert_eq!(join_room(&app, &bob, &old_code).await.status, StatusCode::BAD_REQUEST);
+    b.send(json!({ "type": "send", "room": id, "text": "還在嗎", "nonce": "b2" })).await;
+    assert_eq!(b.until(|m| m["type"] == "error").await["code"], "room_not_found");
+    // 房間裡的新訊息 bob 收不到
+    a.say_in(id, "bob 走了", "a2").await;
+    a.say("大廳", "a3").await;
+    assert_eq!(b.next_message().await["text"], "大廳");
+
+    // 房主換代碼
+    let fresh = app.call("POST", &format!("{room_url}/code"), Some(&alice), None).await.body;
+    assert_ne!(fresh["code"], after[0]["code"]);
+
+    // 房主離開：交給最早加入的 admin
+    let left = app.call("DELETE", &format!("{room_url}/members/{alice_id}"), Some(&alice), None).await;
+    assert_eq!(left.status, StatusCode::NO_CONTENT);
+    assert_eq!(rooms(&app, &alice).await, Vec::<Value>::new());
+    let rest = rooms(&app, &admin).await;
+    assert_eq!(rest[0]["owner_id"], admin_id);
+    assert_eq!(member_names(&rest[0]), ["admin"]);
+
+    // 最後一個人離開：房間和訊息一起刪掉
+    let left = app.call("DELETE", &format!("{room_url}/members/{admin_id}"), Some(&admin), None).await;
+    assert_eq!(left.status, StatusCode::NO_CONTENT);
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_messages WHERE room_id IS NOT NULL")
+        .fetch_one(&app.state.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_rooms").fetch_one(&app.state.pool).await.unwrap();
+    assert_eq!(count, 0);
+
+    // 房主直接刪房間
+    let other = create_room(&app, &alice, "另一間").await;
+    join_room(&app, &bob, other["code"].as_str().unwrap()).await;
+    let reply = app.call("DELETE", &format!("/api/chat/rooms/{}", other["id"]), Some(&alice), None).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT);
+    assert_eq!(rooms(&app, &bob).await, Vec::<Value>::new());
+}
+
+#[tokio::test]
+async fn unread_counts_follow_what_was_read() {
+    let (app, addr) = serve().await;
+    let (_, alice, bob) = users(&app).await;
+    let room = create_room(&app, &alice, "房間").await;
+    let id = room["id"].as_i64().unwrap();
+    join_room(&app, &bob, room["code"].as_str().unwrap()).await;
+    let (mut a, _) = Client::join(&addr, &alice).await;
+    let (mut b, _) = Client::join(&addr, &bob).await;
+
+    a.say_in(id, "一", "1").await;
+    let second = a.say_in(id, "二", "2").await;
+    a.say_in(id, "三", "3").await;
+    assert_eq!(rooms(&app, &bob).await[0]["unread"], 3);
+    assert_eq!(rooms(&app, &alice).await[0]["unread"], 0, "自己的訊息不算");
+
+    b.send(json!({ "type": "read", "room": id, "id": second["id"] })).await;
+    // 同一條連線依序處理：拿到 history 時 read 已經處理完了
+    b.send(json!({ "type": "open", "room": id })).await;
+    b.until(|m| m["type"] == "history").await;
+    assert_eq!(rooms(&app, &bob).await[0]["unread"], 1);
+    // 往回報不會讓未讀變多
+    b.send(json!({ "type": "read", "room": id, "id": 0 })).await;
+    b.send(json!({ "type": "open", "room": id })).await;
+    b.until(|m| m["type"] == "history").await;
+    assert_eq!(rooms(&app, &bob).await[0]["unread"], 1);
+}
+
+#[tokio::test]
+async fn private_room_pushes_only_reach_members() {
+    let (app, addr) = serve().await;
+    let (push_addr, mut pushes) = push_service().await;
+    let (admin, alice, bob) = users(&app).await;
+    let room = create_room(&app, &alice, "小團體").await;
+    let id = room["id"].as_i64().unwrap();
+    join_room(&app, &bob, room["code"].as_str().unwrap()).await;
+
+    let bob_browser = Browser::subscribe(&app, &bob, format!("http://{push_addr}/push/bob")).await;
+    let admin_browser = Browser::subscribe(&app, &admin, format!("http://{push_addr}/push/admin")).await;
+    let (mut a, _) = Client::join(&addr, &alice).await;
+    let (mut b, _) = Client::join(&addr, &bob).await;
+    let (mut root, _) = Client::join(&addr, &admin).await;
+    b.report(&mut a, "bob", false, Some(&bob_browser.endpoint)).await;
+    root.report(&mut a, "admin", false, Some(&admin_browser.endpoint)).await;
+
+    let sent = a.say_in(id, "今晚見", "1").await;
+    let pushed = next_push(&mut pushes).await;
+    assert_eq!(pushed.path, "/push/bob");
+    let payload = bob_browser.open(&pushed);
+    assert_eq!(payload["title"], "🔒 小團體");
+    assert_eq!(payload["body"], "今晚見");
+    assert_eq!(payload["tag"], format!("chat-room-{id}"));
+    assert_eq!(payload["url"], format!("/chat?room={id}"));
+    assert_eq!(payload["id"], sent["id"]);
+    no_push(&mut pushes).await;
+
+    // 大廳的照樣推給兩個人
+    a.say("大廳", "2").await;
+    let mut paths = vec![next_push(&mut pushes).await.path, next_push(&mut pushes).await.path];
+    paths.sort();
+    assert_eq!(paths, ["/push/admin", "/push/bob"]);
 }

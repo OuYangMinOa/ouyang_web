@@ -1,4 +1,4 @@
-/* ---- 聊天室：左邊是訊息、右邊是通知設定和線上名單，整頁剛好一個畫面高，只有訊息會捲動 ---- */
+/* ---- 聊天室：左邊是訊息、右邊是房間、通知設定和線上名單，整頁剛好一個畫面高，只有訊息會捲動 ---- */
 
 .app-content:has(> .chat-page) {
   padding-top: 16px;
@@ -28,17 +28,37 @@
   min-height: 40px;
 }
 .chat-title {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-size: 20px;
   color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chat-status {
   color: var(--warn);
 }
 .chat-panel-toggle {
   display: none;
-  margin-left: auto;
+  flex-shrink: 0;
+  gap: 6px;
   white-space: nowrap;
+}
+/* 未讀數 */
+.chat-unread {
+  flex-shrink: 0;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  box-sizing: border-box;
 }
 .chat-banner {
   display: flex;
@@ -214,7 +234,7 @@
   font-size: 13px;
 }
 
-/* ---- 右邊：通知設定和線上名單 ---- */
+/* ---- 右邊：房間、通知設定和線上名單 ---- */
 
 .chat-side {
   display: flex;
@@ -285,6 +305,85 @@
 .chat-dot.on {
   border-color: var(--ok);
   background: var(--ok);
+}
+.chat-dot.off {
+  opacity: 0.4;
+}
+.chat-card-sub {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+/* 房間列表 */
+.chat-rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+.chat-room {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  background: transparent;
+  color: var(--text-h);
+  text-align: left;
+}
+.chat-room:hover {
+  background: color-mix(in srgb, var(--text-h) 6%, transparent);
+}
+.chat-room.current {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 600;
+}
+.chat-room-icon {
+  flex-shrink: 0;
+  width: 20px;
+  color: var(--text);
+  text-align: center;
+}
+.chat-room-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-room-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-room-title {
+  overflow-wrap: anywhere;
+}
+
+/* 房間代碼 */
+.chat-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.chat-code-value {
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: 600 18px var(--mono);
+  letter-spacing: 0.08em;
+  user-select: all;
+}
+button.link.chat-kick {
+  flex-shrink: 0;
+  color: var(--danger);
+  font-size: 13px;
 }
 
 /* ---- 窄螢幕：右邊的面板改成按「👥」從右邊滑出來 ---- */

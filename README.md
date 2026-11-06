@@ -1076,27 +1076,58 @@ PUT    /api/admin/ai/usage/users/{id}    {"daily_requests","daily_tokens","block
 
 ## 聊天室
 
-`/chat`：登入的人共用的一間聊天室（`loginOnly`）。後端 `backend/src/chat.rs`，前端 `frontend/src/chat/`。
+`/chat`：登入的人共用的大廳，加上知道代碼才進得來的私人房間（`loginOnly`）。後端 `backend/src/chat.rs`（訊息）、`chat_rooms.rs`（房間），前端 `frontend/src/chat/`。
+正在看哪一間放在網址的 `?room=<id>`（大廳不帶），換房間不用重連。
 
 ```
-GET /api/chat/ws                      升級成 WebSocket（要登入，沒登入會收到 unauthorized 後關閉）
-GET /api/chat/messages?before=<id>    更早的 50 則 {messages, more}，舊的在前
+GET /api/chat/ws?room=<id>                     升級成 WebSocket（要登入，沒登入會收到 unauthorized 後關閉）；room 是一開始要看的那間
+GET /api/chat/messages?room=<id>&before=<id>   更早的 50 則 {room, messages, more}，舊的在前
 
-client → server  {type:"send", text, nonce}         最多 2000 字；nonce 是用戶端替每則產生的編號
+client → server  {type:"send", room, text, nonce}   最多 2000 字；nonce 是用戶端替每則產生的編號；room 不帶是大廳
+                 {type:"open", room}                 換到另一間，回 history
+                 {type:"read", room, id}             私人房間看到哪一則了（未讀數用）
                  {type:"state", active, endpoint}    這個視窗有沒有人在看、這個瀏覽器的推播 endpoint（沒開通知是 null）
-                 {type:"delete", id}                 刪自己的訊息，管理員可以刪任何人的
-server → client  {type:"welcome", you, messages, more}   最近 50 則
-                 {type:"message", message:{id, user_id, username, text, nonce, created_at}}
-                 {type:"deleted", id}
+                 {type:"delete", id}                 刪自己的訊息，管理員、私人房間的房主可以刪任何人的
+server → client  {type:"welcome", you, room, messages, more}   那間最近 50 則；要看的房間不在了就換成大廳
+                 {type:"history", room, messages, more}
+                 {type:"message", message:{id, room, user_id, username, text, nonce, created_at}}
+                 {type:"deleted", id, room}
                  {type:"presence", users:[{id, username, active}]}
-                 {type:"error", code, message, nonce?}   送訊息失敗時帶著那則的 nonce
+                 {type:"rooms"}                                私人房間的列表變了，重新讀 GET /api/chat/rooms
+                 {type:"error", code, message, nonce?, room?}   送訊息失敗時帶著那則的 nonce；room_not_found 帶 room
 ```
 
-- 訊息存在 `chat_messages`；`(user_id, nonce)` 是唯一的。斷線時不知道送到了沒，重連後用同一個 nonce 重送，伺服器不會存成兩則，
-  只把已經存好的那則回給送的人。重連時拿最近 50 則補上漏掉的（斷線期間被刪掉的也會消失）。
-- 右邊的「線上」列出有視窗開著聊天室的人：視窗看得到而且在前景是「在看」，切到背景、縮小、切到別的程式是「離開視窗」。
+- 訊息存在 `chat_messages`（`room_id` 是 NULL 的是大廳）；`(user_id, nonce)` 是唯一的。斷線時不知道送到了沒，重連後用同一個 nonce 重送，伺服器不會存成兩則，
+  只把已經存好的那則回給送的人。重連時拿正在看的那間最近 50 則補上漏掉的（斷線期間被刪掉的也會消失）。
+- 一條連線會收到自己**所有**房間的訊息（大廳加上加入的私人房間），不是正在看的那間就算成未讀，顯示在房間列表上（窄螢幕在「房間」按鈕上）。
+- 右邊的「線上」列出有視窗開著聊天室的人：視窗看得到而且在前景是「在看」，切到背景、縮小、切到別的程式是「離開視窗」。私人房間改成列出成員和各自的狀態。
 - 每條連線 10 秒內最多送 15 則；每 25 秒 ping 一次時順便檢查 session，登出、被停用之後連線會被關掉。
 - 連線只記在記憶體，每個容器各自算：換版的幾秒內新舊容器各有一部分人，這段時間另一邊說的話要等重連才看得到，也不會推播。
+
+### 私人房間
+
+```
+GET    /api/chat/rooms                          我加入的房間 {rooms:[Room]}，依加入的先後
+POST   /api/chat/rooms              {name}      建立，自己是房主 → 201 Room
+POST   /api/chat/rooms/join         {code}      用代碼加入 → Room（已經在裡面也一樣）
+PATCH  /api/chat/rooms/{id}         {name}      改名（房主）
+POST   /api/chat/rooms/{id}/code                換一組代碼（房主）
+DELETE /api/chat/rooms/{id}                     刪掉房間和裡面的訊息（房主）
+DELETE /api/chat/rooms/{id}/members/{user}      房主移出別人；user 是自己就是離開
+
+Room = {id, name, code, owner_id, members:[{id, username}], unread, created_at}
+```
+
+- **看不到**：不是成員的人（管理員也一樣）房間列表裡沒有，用 id 讀歷史、改名、刪除一律 404（跟不存在一樣，不透露房間在不在），
+  WebSocket 送進去、打開都回 `room_not_found`。房間的訊息和推播只送給成員，每則都從資料庫重新讀成員，被移出的人馬上就收不到。
+- **代碼**：8 碼大寫英數字（去掉容易看錯的 0、O、1、I，共 32^8 種），畫面上顯示成 `ABCD-EFGH`，輸入時大小寫、空白、`-` 都不管。
+  成員都看得到代碼、可以轉給別人；同一個人 10 分鐘內輸入錯 10 次就要等（連對的也先不收）。
+- **房主**：建立的人。可以改名、換代碼（舊的馬上失效，已經在裡面的人不受影響）、刪任何人的訊息、移出成員、刪掉整間。
+  移出成員時代碼會跟著換，被移出的人不能用舊代碼再進來。房主離開時交給最早加入的人；最後一個人離開，房間和訊息一起刪掉。
+- 加入後看得到加入前的訊息，但不算未讀。未讀數是「看到哪一則（`chat_room_members.read_id`）之後別人說的話」，
+  正在看那間而且視窗在前景時，用戶端用 `read` 回報看到最新一則。
+- 每個人最多當 20 間的房主、加入 50 間；每間最多 100 人；名稱最多 30 字。
+- 有人加入、離開、被移出、改名、換代碼、刪房間時，相關的人（包括被移出的人）會收到 `rooms`，重新讀列表；正在看的那間不在了就回到大廳並顯示原因。
 
 ### 通知（Web Push）
 
@@ -1110,11 +1141,12 @@ DELETE /api/push/subscriptions   {"endpoint"}
 POST   /api/push/test            {"endpoint"}  馬上推一則測試通知給這個瀏覽器
 ```
 
-- **推給誰**（`Chat::push_targets`）：有視窗開著聊天室、但每個視窗都沒在看的人，只推到那些視窗所在的瀏覽器（連線時回報的 endpoint，
+- **推給誰**（`Chat::push_targets`）：看得到這則（私人房間只有成員）、有視窗開著聊天室、但每個視窗都沒在看的人，只推到那些視窗所在的瀏覽器（連線時回報的 endpoint，
   而且必須是這個帳號自己的訂閱）。正在看的人、完全沒開聊天室的人、送出訊息的人自己都不推。
   Chrome 的「記憶體節省」把背景分頁凍結或丟掉時連線會斷，就當作沒開。
-- 還沒看的訊息會合成一則通知「聊天室（3 則新訊息）」，顯示最後 4 則；點通知回到聊天室的視窗。
-  回到聊天室時會收掉還留在通知中心的聊天通知，分頁標題前面的未讀數也會清掉。
+- 還沒看的訊息會合成一則通知「聊天室（3 則新訊息）」，顯示最後 4 則；私人房間的標題是「🔒 房間名稱」，每間各自合成一則。
+  點通知回到聊天室的視窗，並換到那一間（已經開著的話 service worker 用 `postMessage` 叫頁面自己換，不重新載入）。
+  回到聊天室時會收掉還留在通知中心、正在看的那間的通知，分頁標題前面的未讀數也會清掉。
 - **VAPID**（RFC 8292）：第一次用到時產生 P-256 金鑰，存在 `site_settings` 的 `push_vapid_key`，每次推播帶 ES256 簽的 JWT，
   `sub` 是 `https://<APP_HOST>`（compose 把 `APP_HOST` 傳進容器）。換掉金鑰的話舊訂閱全部失效，前端發現公鑰不一樣會自己重新訂閱。
 - 內容用 aes128gcm 加密（RFC 8291），只有那個瀏覽器解得開；加密和簽章用 rustls 本來就帶的 aws-lc-rs，單元測試比對 RFC 8291 的範例。
