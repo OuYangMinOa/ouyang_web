@@ -12,6 +12,7 @@ pub mod auth;
 pub mod bigtwo;
 pub mod calendar;
 pub mod chat;
+pub mod chat_rooms;
 pub mod chinesecheckers;
 pub mod contact;
 pub mod draw;
@@ -339,6 +340,11 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/nav/pins/{app}", put(nav_pins::set))
         .route("/chat/ws", get(chat::connect))
         .route("/chat/messages", get(chat::history))
+        .route("/chat/rooms", get(chat_rooms::list).post(chat_rooms::create))
+        .route("/chat/rooms/join", post(chat_rooms::join))
+        .route("/chat/rooms/{id}", patch(chat_rooms::rename).delete(chat_rooms::delete))
+        .route("/chat/rooms/{id}/code", post(chat_rooms::new_code))
+        .route("/chat/rooms/{id}/members/{user}", delete(chat_rooms::remove_member))
         .route("/push/key", get(webpush::public_key))
         .route("/push/subscriptions", post(webpush::subscribe).delete(webpush::unsubscribe))
         .route("/push/test", post(webpush::test))
