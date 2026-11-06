@@ -8,7 +8,7 @@ main:has(.app-layout) {
   margin: 0;
 }
 
-/* ---- 頁首：品牌、切換 APP、（手機）APP 選單、主題、帳號 ---- */
+/* ---- 頁首：品牌、切換 APP、（手機）APP 選單、外觀、帳號 ---- */
 
 /* 頁首（和底下的地震速報）固定在畫面上方；高度由 App.tsx 寫進 --site-top-h */
 .site-top {
@@ -346,17 +346,6 @@ button.link {
   padding: 0;
   background: none;
   color: var(--text);
-}
-
-.theme-toggle {
-  min-width: 40px;
-  padding: 2px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  white-space: nowrap;
 }
 
 .stack > button {
@@ -1285,11 +1274,7 @@ time {
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .theme-label {
-    display: none;
-  }
-  .launcher button.menu-button,
-  .theme-toggle {
+  .launcher button.menu-button {
     justify-content: center;
     padding: 0;
   }

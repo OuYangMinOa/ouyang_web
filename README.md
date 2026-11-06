@@ -104,6 +104,23 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 > prod（`https://ouyang.app`）和 staging（`https://test.ouyang.app`）都走 HTTPS，`<env>.env` 設了 `COOKIE_SECURE=true`。
 > cookie 沒有設 Domain，只屬於各自的網址，名稱也依環境分開（`session_<env>`），兩邊的登入互不影響。
 
+## 外觀：風格與深淺
+
+頁首右上角的「🎨 外觀」打開對話框（`frontend/src/components/Appearance.tsx`），選了馬上套用，存在瀏覽器的 localStorage（不跟帳號走），別的分頁也會跟著換。
+
+| | 亮色 | 深色 |
+|---|---|---|
+| **墨與陽**（預設） | 宣紙上的墨，強調色是太陽的橘 | 夜裡的餘燼 |
+| **塗鴉** | 方格筆記本：原子筆藍、螢光筆黃 | 深灰黑板：粉筆白、粉筆黃 |
+
+- 深淺是 `<html data-theme>`、風格是 `<html data-style="doodle">`，`index.html` 在畫面出來前先套上，避免閃一下預設的樣子。
+- 色票在 `index.css`：塗鴉只換基本色（`--bg`、`--text`、`--accent`…）、字型和形狀變數，遊戲棋盤這類專用色沿用墨與陽的亮色／深色。
+- 塗鴉的形狀在 `doodle.css`：歪歪的圓角、筆畫框線、錯開的實心陰影、頁首手畫的底線。權重跟 `App.css` 的基本樣式一樣，各頁面能蓋過基本樣式的地方，塗鴉時一樣蓋得過去。
+- 便條紙、外觀對話框和首頁太陽的框線會微微抖動：SVG 濾鏡 `#doodle-rough`（`components/DoodleDefs.tsx`），只套在框線上，字不會跟著抖。
+- 手寫字是 Google Fonts 的「芫荽」（Iansui），只有選了塗鴉才載入，也是依用到的字分片下載。
+- 首頁的 3D 粒子太陽在塗鴉風格換成手畫的笑臉太陽（`components/DoodleSun.tsx`），不載入 three.js。
+- 外觀設定裡的縮圖用 `data-preview="<風格>-<深淺>"` 把那一組變數套在縮圖上，所以不管目前選哪個，縮圖都畫得出另一種的樣子。
+
 ## 小遊戲線上對戰
 
 > 遊戲頁的盤面大小用 `games.css` 的 `--game-vh`（視窗扣掉頁首和標題列後剩的高度）或 `--board-vh`（再扣掉一行狀態和一排按鈕）來算，

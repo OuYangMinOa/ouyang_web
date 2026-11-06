@@ -330,12 +330,135 @@ a.home-item:hover .home-item-go {
   background: var(--danger);
 }
 
+/* ---- 塗鴉風格（<html data-style="doodle">） ---- */
+
+/* 手畫的笑臉太陽（components/DoodleSun.tsx），取代 3D 粒子太陽 */
+.doodle-sun {
+  position: absolute;
+  inset: 0 0 36px;
+  width: 100%;
+  height: calc(100% - 36px);
+  overflow: visible;
+}
+.doodle-sun-rays {
+  fill: none;
+  stroke: var(--sun-line);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transform-box: view-box;
+  transform-origin: 120px 120px;
+  animation: doodle-sun-spin 80s linear infinite;
+}
+.doodle-sun-disc {
+  fill: var(--sun-fill);
+  stroke: var(--sun-line);
+  stroke-width: 4;
+}
+.doodle-sun-loop {
+  fill: none;
+  stroke: var(--sun-line);
+  stroke-width: 2;
+  opacity: 0.55;
+}
+.doodle-sun-face {
+  fill: none;
+  stroke: var(--text-h);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.doodle-sun-cheek {
+  fill: var(--danger);
+  opacity: 0.3;
+}
+@keyframes doodle-sun-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 名字底下用螢光筆畫一道 */
+:root[data-style='doodle'] .home-name {
+  width: fit-content;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  background-image: var(--marker-bg);
+  background-repeat: no-repeat;
+  background-size: 100% 0.4em;
+  background-position: 0 86%;
+}
+:root[data-style='doodle'] .home-head h2 {
+  font-weight: 400;
+}
+/* 標題底下的波浪線 */
+:root[data-style='doodle'] .home-head h2::after {
+  content: '';
+  display: block;
+  width: 4.5em;
+  height: 10px;
+  margin-top: 2px;
+  background: var(--accent);
+  -webkit-mask: var(--squiggle) 0 0 / 100% 100% no-repeat;
+  mask: var(--squiggle) 0 0 / 100% 100% no-repeat;
+}
+:root[data-style='doodle'] .home-profile {
+  border-top-style: dashed;
+}
+:root[data-style='doodle'] .home-profile > div,
+:root[data-style='doodle'] .home-item {
+  border-bottom-style: dashed;
+}
+:root[data-style='doodle'] .home-items {
+  border-top: 2px solid var(--pen);
+}
+:root[data-style='doodle'] .home-item-name {
+  font-weight: 400;
+  font-size: 18px;
+}
+/* 作品前面的字用筆圈起來 */
+:root[data-style='doodle'] .home-item-glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-round);
+  font-size: 19px;
+  font-weight: 400;
+}
+
+/* 便條紙：黃色便利貼（深色是黑板上淡淡的黃），框線抖一點，紙膠帶換成螢光筆的顏色 */
+:root[data-style='doodle'] .note {
+  border-color: transparent;
+  border-radius: var(--radius-card);
+  background: var(--sticky);
+  box-shadow: none;
+}
+:root[data-style='doodle'] .note::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 2px solid var(--pen);
+  border-radius: inherit;
+  box-shadow: var(--shadow-card);
+  filter: url(#doodle-rough);
+  pointer-events: none;
+}
+:root[data-style='doodle'] .note::before {
+  z-index: 1;
+  background: var(--marker);
+  opacity: 0.85;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .note.fresh {
     animation: none;
   }
   .home-item-go {
     transition: none;
+  }
+  .doodle-sun-rays {
+    animation: none;
   }
 }
 
