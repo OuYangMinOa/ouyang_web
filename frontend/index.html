@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;900&display=swap"
     />
     <!-- 在 React 載入前套用使用者選的深淺和風格，避免先閃一下預設的樣子（邏輯同 src/theme.ts）。
-         塗鴉風格的手寫字（芫荽）只有選了塗鴉才載入 -->
+         塗鴉風格的字（內文粉圓、標題芫荽）只有選了塗鴉才載入 -->
     <script>
       try {
         var root = document.documentElement
@@ -25,7 +25,7 @@
           var font = document.createElement('link')
           font.id = 'doodle-font'
           font.rel = 'stylesheet'
-          font.href = 'https://fonts.googleapis.com/css2?family=Iansui&display=swap'
+          font.href = 'https://fonts.googleapis.com/css2?family=Huninn&family=Iansui&display=swap'
           document.head.appendChild(font)
         }
       } catch (e) {}

@@ -457,3 +457,8 @@ button.lobby-start-close:hover {
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
+:root[data-style='doodle'] .lobby-entry-text strong {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 19px;
+}

@@ -574,8 +574,9 @@
 
 :root[data-style='doodle'],
 [data-preview^='doodle'] {
-  /* 手寫字「芫荽」，選了塗鴉才載入（theme.ts、index.html） */
-  --sans: 'Iansui', 'Noto Sans TC', system-ui, sans-serif;
+  /* 內文用圓體「粉圓」（筆畫粗細一致，讀久不累），標題用手寫字「芫荽」；選了塗鴉才載入（theme.ts、index.html）。
+     兩套字都只有一種粗細，用 --serif 的標題要寫 font-weight: 400，不然會被瀏覽器硬加粗 */
+  --sans: 'Huninn', 'Noto Sans TC', system-ui, sans-serif;
   --serif: 'Iansui', 'Noto Serif TC', serif;
   --line: var(--pen);
   --stroke: 2px;

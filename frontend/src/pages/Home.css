@@ -411,6 +411,7 @@ a.home-item:hover .home-item-go {
   border-top: 2px solid var(--pen);
 }
 :root[data-style='doodle'] .home-item-name {
+  font-family: var(--serif);
   font-weight: 400;
   font-size: 18px;
 }

@@ -18,7 +18,7 @@
 }
 :where(:root[data-style='doodle']) body {
   background: transparent;
-  /* 手寫字看起來比黑體小一點 */
+  /* 塗鴉的字放大一號，圓體讀起來更輕鬆 */
   font-size: 17px;
   text-shadow: var(--chalk);
 }
@@ -41,11 +41,12 @@
   overflow: hidden;
 }
 
-/* ---- 字：手寫字只有一種粗細，標題不要用假粗體 ---- */
+/* ---- 字：內文是粉圓，標題換成手寫的芫荽。芫荽只有一種粗細，不寫 400 會被瀏覽器硬加粗、筆畫糊在一起 ---- */
 
 :where(:root[data-style='doodle']) h1,
 :where(:root[data-style='doodle']) h2,
 :where(:root[data-style='doodle']) h3 {
+  font-family: var(--serif);
   font-weight: 400;
 }
 :where(:root[data-style='doodle']) .brand {
