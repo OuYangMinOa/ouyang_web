@@ -1,10 +1,9 @@
-mod common;
-
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
+use crate::common::{TestApp, app};
 use axum::{
     Json, Router,
     body::Body,
@@ -14,7 +13,6 @@ use axum::{
     routing::{get, post},
 };
 use backend::auth::upsert_admin;
-use common::{TestApp, app};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;

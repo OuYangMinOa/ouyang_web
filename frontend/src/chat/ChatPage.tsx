@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Link } from 'react-router'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { errorMessage, PERMISSIONS } from '../api'
 import { useAuth } from '../auth'
 import {
@@ -11,6 +20,20 @@ import {
   testPush,
   type PushState,
 } from './push'
+import {
+  createRoom,
+  deleteRoom,
+  formatCode,
+  joinRoom,
+  listRooms,
+  MAX_ROOM_NAME,
+  newRoomCode,
+  removeMember,
+  renameRoom,
+  roomKey,
+  type Room,
+  type RoomId,
+} from './rooms'
 import { isWatching, MAX_TEXT, useChat, type ChatMessage, type OnlineUser } from './useChat'
 import './chat.css'
 
@@ -43,6 +66,20 @@ function dayLabel(date: Date) {
     day: 'numeric',
     weekday: 'short',
   })
+}
+
+/** 網址的 ?room=：不是數字就當作大廳 */
+function parseRoom(value: string | null): RoomId {
+  return value && /^\d+$/.test(value) ? Number(value) : null
+}
+
+/** 通知的 tag，跟後端 chat.rs 一樣：每間各自合成一則 */
+function notificationTag(room: RoomId) {
+  return room === null ? 'chat' : `chat-room-${room}`
+}
+
+function countLabel(n: number) {
+  return n > 99 ? '99+' : String(n)
 }
 
 /** 訊息裡的網址變成連結 */
@@ -89,6 +126,7 @@ function useUnreadTitle() {
 export default function ChatPage() {
   const { user, can } = useAuth()
   const isAdmin = can(PERMISSIONS.adminUsers)
+  const navigate = useNavigate()
 
   // ---- 通知 ----
   const [push, setPush] = useState<PushState>(permissionState)
@@ -139,34 +177,154 @@ export default function ChatPage() {
       setPushNote({ ok: true, text: '送出了。沒看到的話，檢查 Windows 的「通知」設定和「專注」模式。' })
     })
 
+  // ---- 房間 ----
+  const [params] = useSearchParams()
+  const room = parseRoom(params.get('room'))
+  /** 正在看的那間；換房間時馬上改，不用等重新 render（列表讀回來時要知道現在在哪間） */
+  const roomRef = useRef(room)
+  useLayoutEffect(() => {
+    roomRef.current = room
+  }, [room])
+
+  const [rooms, setRooms] = useState<Room[] | null>(null)
+  const roomsRef = useRef(rooms)
+  useLayoutEffect(() => {
+    roomsRef.current = rooms
+  }, [rooms])
+  /** 各間的未讀數（key 是 roomKey）：私人房間以伺服器算的為準，大廳只算這次打開後的 */
+  const [unread, setUnread] = useState<Record<string, number>>({})
+  const [roomNotice, setRoomNotice] = useState<string | null>(null)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const roomsSeq = useRef(0)
+
+  const selectRoom = useCallback(
+    (next: RoomId, options: { keepPanel?: boolean; replace?: boolean } = {}) => {
+      roomRef.current = next
+      navigate(next === null ? '/chat' : `/chat?room=${next}`, { replace: options.replace })
+      setUnread((prev) => ({ ...prev, [roomKey(next)]: 0 }))
+      setRoomNotice(null)
+      if (!options.keepPanel) setPanelOpen(false)
+    },
+    [navigate],
+  )
+
+  /** 正在看的房間不在了（被移出、刪掉）：回大廳並說一聲 */
+  const leaveGoneRoom = useCallback(
+    (gone: number) => {
+      const name = roomsRef.current?.find((r) => r.id === gone)?.name
+      selectRoom(null, { keepPanel: true, replace: true })
+      setRoomNotice(
+        name ? `你已經不在「${name}」裡了：房間被刪掉，或你被移出了。` : '找不到這個房間，可能已經被刪掉，或你被移出了。',
+      )
+    },
+    [selectRoom],
+  )
+
+  const refreshRooms = useCallback(async () => {
+    // 比較晚開始讀的為準：中間有變動的話，先讀完的舊列表丟掉
+    const seq = ++roomsSeq.current
+    let list: Room[]
+    try {
+      list = await listRooms()
+    } catch {
+      return
+    }
+    if (seq !== roomsSeq.current) return
+    setRooms(list)
+    const current = roomRef.current
+    setUnread((prev) => {
+      const next: Record<string, number> = { lobby: prev.lobby ?? 0 }
+      for (const r of list) next[roomKey(r.id)] = r.id === current ? 0 : r.unread
+      return next
+    })
+    if (current !== null && !list.some((r) => r.id === current)) leaveGoneRoom(current)
+  }, [leaveGoneRoom])
+
+  // 列表平常是連上聊天室時讀；連不上的話也要有
+  useEffect(() => {
+    void refreshRooms()
+  }, [refreshRooms])
+
+  /** 自己改了房間：畫面先改，再讀一次列表對齊伺服器 */
+  function changeRooms(update: (list: Room[]) => Room[]) {
+    setRooms((prev) => update(prev ?? []))
+    void refreshRooms()
+  }
+  function upsert(updated: Room) {
+    changeRooms((list) =>
+      list.some((r) => r.id === updated.id) ? list.map((r) => (r.id === updated.id ? updated : r)) : [...list, updated],
+    )
+  }
+
+  // 點了通知：service worker 叫已經開著的聊天室換到那一間
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null
+      if (data?.type !== 'open' || typeof data.url !== 'string') return
+      const url = new URL(data.url, location.origin)
+      if (url.pathname === '/chat') navigate(url.pathname + url.search)
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [navigate])
+
   // ---- 訊息 ----
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
   const prependRef = useRef<number | null>(null)
-  const [newBelow, setNewBelow] = useState(false)
+  /** 「有新訊息 ↓」是哪一間的（換了房間就不算） */
+  const [newBelowIn, setNewBelowIn] = useState<string | null>(null)
+  const newBelow = newBelowIn === roomKey(room)
   const { bump: bumpUnread, reset: resetUnread } = useUnreadTitle()
 
   const onIncoming = useCallback(
     (message: ChatMessage) => {
+      const here = message.room === roomRef.current
       if (message.user_id === user?.id) {
         // 自己送的一律捲到底
-        stickRef.current = true
+        if (here) stickRef.current = true
         return
       }
       if (!isWatching()) bumpUnread()
-      if (!stickRef.current) setNewBelow(true)
+      if (here) {
+        if (!stickRef.current) setNewBelowIn(roomKey(message.room))
+      } else {
+        const key = roomKey(message.room)
+        setUnread((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }))
+      }
     },
     [user?.id, bumpUnread],
   )
 
-  const chat = useChat(subscription?.endpoint ?? null, onIncoming)
-  const { messages, pending, watching } = chat
-  // 回到視窗：清掉未讀數和通知中心裡的聊天通知
+  const chat = useChat(room, subscription?.endpoint ?? null, {
+    onIncoming,
+    onRoomsChanged: () => void refreshRooms(),
+    onRoomGone: (gone) => {
+      leaveGoneRoom(gone)
+      void refreshRooms()
+    },
+  })
+  const { messages, pending, watching, markRead } = chat
+
+  // 換房間：捲到最下面
+  useLayoutEffect(() => {
+    stickRef.current = true
+  }, [room])
+
+  // 回到視窗：清掉未讀數和通知中心裡這間的通知
   useEffect(() => {
     if (!watching) return
     resetUnread()
-    clearNotifications('chat').catch(() => {})
-  }, [watching, resetUnread])
+    clearNotifications(notificationTag(room)).catch(() => {})
+  }, [watching, room, resetUnread])
+
+  // 私人房間看到最新一則了：告訴伺服器，下次打開才不會算成未讀
+  const latestId = messages.at(-1)?.id
+  useEffect(() => {
+    if (room === null || !watching || latestId === undefined || chat.status !== 'open') return
+    markRead(room, latestId)
+  }, [room, watching, latestId, chat.status, markRead])
 
   useLayoutEffect(() => {
     const list = scrollRef.current
@@ -184,7 +342,7 @@ export default function ChatPage() {
     const list = scrollRef.current
     if (list) list.scrollTop = list.scrollHeight
     stickRef.current = true
-    setNewBelow(false)
+    setNewBelowIn(null)
   }
 
   const [loadingOlder, setLoadingOlder] = useState(false)
@@ -236,14 +394,49 @@ export default function ChatPage() {
     if (confirm('刪除這則訊息？大家都會看不到。')) chat.remove(message.id)
   }
 
-  const [panelOpen, setPanelOpen] = useState(false)
+  const currentRoom = room === null ? null : (rooms?.find((r) => r.id === room) ?? null)
+  const isOwner = currentRoom !== null && currentRoom.owner_id === user?.id
   const tooLong = input.length > MAX_TEXT
+  const otherUnread = Object.entries(unread)
+    .filter(([key]) => key !== roomKey(room))
+    .reduce((sum, [, n]) => sum + n, 0)
+
+  // ---- 房間的動作（錯誤丟給卡片顯示） ----
+  const roomActions = {
+    create: async (name: string) => {
+      const created = await createRoom(name)
+      upsert(created)
+      // 面板留著，讓房主看到代碼
+      selectRoom(created.id, { keepPanel: true })
+    },
+    join: async (code: string) => {
+      const joined = await joinRoom(code)
+      upsert(joined)
+      selectRoom(joined.id)
+    },
+    rename: async (target: Room, name: string) => upsert(await renameRoom(target.id, name)),
+    newCode: async (target: Room) => upsert(await newRoomCode(target.id)),
+    kick: async (target: Room, member: number) => {
+      await removeMember(target.id, member)
+      void refreshRooms()
+    },
+    leave: async (target: Room) => {
+      if (user) await removeMember(target.id, user.id)
+      selectRoom(null, { keepPanel: true, replace: true })
+      changeRooms((list) => list.filter((r) => r.id !== target.id))
+    },
+    remove: async (target: Room) => {
+      await deleteRoom(target.id)
+      selectRoom(null, { keepPanel: true, replace: true })
+      changeRooms((list) => list.filter((r) => r.id !== target.id))
+    },
+  }
 
   return (
     <div className={`chat-page ${panelOpen ? 'panel-open' : ''}`}>
       <section className="chat-main">
         <header className="chat-head">
-          <h1 className="chat-title">聊天室</h1>
+          <h1 className="chat-title">{room === null ? '大廳' : `🔒 ${currentRoom?.name ?? '私人房間'}`}</h1>
           <ConnectionBadge status={chat.status} />
           <button
             type="button"
@@ -252,14 +445,31 @@ export default function ChatPage() {
             aria-controls="chat-panel"
             onClick={() => setPanelOpen((open) => !open)}
           >
-            👥 {chat.online.length}
-            <span aria-hidden="true">{push === 'on' ? ' · 🔔' : ''}</span>
+            房間
+            {otherUnread > 0 && (
+              <span className="chat-unread" aria-label={`其他房間有 ${otherUnread} 則未讀`}>
+                {countLabel(otherUnread)}
+              </span>
+            )}
+            <span aria-hidden="true">
+              {' '}
+              · 👥 {chat.online.length}
+              {push === 'on' ? ' · 🔔' : ''}
+            </span>
           </button>
         </header>
 
         {chat.status === 'unauthorized' && (
           <p className="chat-banner error">
             登入已經失效，<Link to="/login">請重新登入</Link>。
+          </p>
+        )}
+        {roomNotice && (
+          <p className="chat-banner error" role="alert">
+            {roomNotice}
+            <button type="button" className="link" onClick={() => setRoomNotice(null)}>
+              知道了
+            </button>
           </p>
         )}
         {chat.notice && (
@@ -277,7 +487,7 @@ export default function ChatPage() {
           onScroll={(e) => {
             const el = e.currentTarget
             stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-            if (stickRef.current) setNewBelow(false)
+            if (stickRef.current) setNewBelowIn(null)
           }}
         >
           {chat.more && (
@@ -286,10 +496,15 @@ export default function ChatPage() {
             </button>
           )}
           {olderError && <p className="error chat-empty">{olderError}</p>}
-          {chat.status !== 'connecting' && messages.length === 0 && pending.length === 0 && (
-            <p className="muted chat-empty">還沒有人說話，打個招呼吧。</p>
+          {!chat.loaded && chat.status === 'open' && <p className="muted chat-empty">載入中…</p>}
+          {chat.loaded && messages.length === 0 && pending.length === 0 && (
+            <p className="muted chat-empty">
+              {room === null
+                ? '還沒有人說話，打個招呼吧。'
+                : '這間只有成員看得到。還沒有人說話，把代碼給朋友，他們輸入代碼就能加入。'}
+            </p>
           )}
-          <MessageList messages={messages} me={user?.id ?? null} canDeleteAll={isAdmin} onDelete={remove} />
+          <MessageList messages={messages} me={user?.id ?? null} canDeleteAll={isAdmin || isOwner} onDelete={remove} />
           {pending.map((p) => (
             <div key={p.nonce} className={`chat-msg mine pending ${p.failed ? 'failed' : ''}`}>
               <div className="chat-bubble">{p.text}</div>
@@ -348,6 +563,27 @@ export default function ChatPage() {
 
       {panelOpen && <button type="button" className="chat-scrim" aria-label="關閉" onClick={() => setPanelOpen(false)} />}
       <aside id="chat-panel" className="chat-side">
+        <RoomsCard
+          rooms={rooms}
+          current={room}
+          unread={unread}
+          onSelect={(id) => selectRoom(id)}
+          onCreate={roomActions.create}
+          onJoin={roomActions.join}
+        />
+        {currentRoom && (
+          <RoomCard
+            key={currentRoom.id}
+            room={currentRoom}
+            me={user?.id ?? null}
+            online={chat.online}
+            onRename={(name) => roomActions.rename(currentRoom, name)}
+            onNewCode={() => roomActions.newCode(currentRoom)}
+            onKick={(member) => roomActions.kick(currentRoom, member)}
+            onLeave={() => roomActions.leave(currentRoom)}
+            onDelete={() => roomActions.remove(currentRoom)}
+          />
+        )}
         <NotifyCard
           state={push}
           busy={pushBusy}
@@ -356,7 +592,7 @@ export default function ChatPage() {
           onDisable={turnOff}
           onTest={sendTest}
         />
-        <OnlineList users={chat.online} me={user?.id ?? null} />
+        {room === null && <OnlineList users={chat.online} me={user?.id ?? null} />}
       </aside>
     </div>
   )
@@ -425,6 +661,303 @@ function MessageList({
     previous = message
   }
   return <>{rows}</>
+}
+
+/** 送出表單時的「處理中」和錯誤訊息 */
+function useAction() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function run(action: () => Promise<void>): Promise<boolean> {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+      return true
+    } catch (e) {
+      setError(errorMessage(e))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+  return { busy, error, setError, run }
+}
+
+/** 房間列表：大廳和自己加入的私人房間，加上建立、輸入代碼 */
+function RoomsCard({
+  rooms,
+  current,
+  unread,
+  onSelect,
+  onCreate,
+  onJoin,
+}: {
+  rooms: Room[] | null
+  current: RoomId
+  unread: Record<string, number>
+  onSelect: (room: RoomId) => void
+  onCreate: (name: string) => Promise<void>
+  onJoin: (code: string) => Promise<void>
+}) {
+  const [mode, setMode] = useState<'create' | 'join' | null>(null)
+  const [value, setValue] = useState('')
+  const { busy, error, setError, run } = useAction()
+
+  function open(next: 'create' | 'join' | null) {
+    setMode(next)
+    setValue('')
+    setError(null)
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    const text = value.trim()
+    if (!text || !mode) return
+    const done = await run(() => (mode === 'create' ? onCreate(text) : onJoin(text)))
+    if (done) open(null)
+  }
+
+  const entries: { id: RoomId; name: string }[] = [{ id: null, name: '大廳' }, ...(rooms ?? [])]
+  return (
+    <section className="chat-card">
+      <h2 className="chat-card-title">房間</h2>
+      <ul className="chat-rooms">
+        {entries.map((entry) => {
+          const count = unread[roomKey(entry.id)] ?? 0
+          const here = entry.id === current
+          return (
+            <li key={roomKey(entry.id)}>
+              <button
+                type="button"
+                className={`chat-room ${here ? 'current' : ''}`}
+                aria-current={here ? 'true' : undefined}
+                onClick={() => onSelect(entry.id)}
+              >
+                <span className="chat-room-icon" aria-hidden="true">
+                  {entry.id === null ? '#' : '🔒'}
+                </span>
+                <span className="chat-room-name">{entry.name}</span>
+                {count > 0 && !here && (
+                  <span className="chat-unread" aria-label={`${count} 則未讀`}>
+                    {countLabel(count)}
+                  </span>
+                )}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+
+      {mode === null ? (
+        <div className="chat-card-actions">
+          <button type="button" className="secondary" onClick={() => open('create')}>
+            ＋ 建立私人房間
+          </button>
+          <button type="button" className="secondary" onClick={() => open('join')}>
+            🔑 輸入代碼
+          </button>
+        </div>
+      ) : (
+        <form className="chat-room-form" onSubmit={submit}>
+          <label className="muted" htmlFor="chat-room-input">
+            {mode === 'create' ? '房間名稱（建立後會拿到一組代碼，有代碼的人才進得來）' : '朋友給你的 8 碼代碼'}
+          </label>
+          <input
+            id="chat-room-input"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={mode === 'create' ? '例如：週末爬山' : 'ABCD-EFGH'}
+            maxLength={mode === 'create' ? MAX_ROOM_NAME : 20}
+            autoComplete="off"
+            autoCapitalize={mode === 'join' ? 'characters' : undefined}
+            spellCheck={false}
+            autoFocus
+          />
+          <div className="chat-card-actions">
+            <button type="submit" disabled={busy || !value.trim()}>
+              {mode === 'create' ? '建立' : '加入'}
+            </button>
+            <button type="button" className="secondary" onClick={() => open(null)} disabled={busy}>
+              取消
+            </button>
+          </div>
+        </form>
+      )}
+      {error && <p className="error">{error}</p>}
+    </section>
+  )
+}
+
+/** 正在看的私人房間：代碼、成員和房主的管理 */
+function RoomCard({
+  room,
+  me,
+  online,
+  onRename,
+  onNewCode,
+  onKick,
+  onLeave,
+  onDelete,
+}: {
+  room: Room
+  me: number | null
+  online: OnlineUser[]
+  onRename: (name: string) => Promise<void>
+  onNewCode: () => Promise<void>
+  onKick: (member: number) => Promise<void>
+  onLeave: () => Promise<void>
+  onDelete: () => Promise<void>
+}) {
+  const isOwner = room.owner_id === me
+  const [copied, setCopied] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [name, setName] = useState(room.name)
+  const { busy, error, setError, run } = useAction()
+
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 2000)
+    return () => clearTimeout(timer)
+  }, [copied])
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(formatCode(room.code))
+      setCopied(true)
+    } catch {
+      setError('沒辦法自動複製，請直接選取上面的代碼')
+    }
+  }
+
+  async function rename(e: FormEvent) {
+    e.preventDefault()
+    if (await run(() => onRename(name.trim()))) setRenaming(false)
+  }
+
+  function kick(member: { id: number; username: string }) {
+    if (confirm(`把 ${member.username} 移出「${room.name}」？\n代碼會換一組新的，舊代碼就不能用了。`)) {
+      void run(() => onKick(member.id))
+    }
+  }
+
+  function newCode() {
+    if (confirm('換一組新代碼？舊代碼馬上就不能用了，已經在裡面的人不受影響。')) void run(onNewCode)
+  }
+
+  function leave() {
+    const others = room.members.filter((m) => m.id !== me)
+    const message = !isOwner
+      ? `離開「${room.name}」？之後要有代碼才能再進來。`
+      : others.length > 0
+        ? `離開「${room.name}」？房主會交給 ${others[0].username}。`
+        : `離開「${room.name}」？你是最後一個人，房間和裡面的訊息會一起刪掉。`
+    if (confirm(message)) void run(onLeave)
+  }
+
+  function remove() {
+    if (confirm(`刪除「${room.name}」？裡面的訊息會全部刪掉，所有人都會被移出。`)) void run(onDelete)
+  }
+
+  const presence = new Map(online.map((u) => [u.id, u.active]))
+  return (
+    <section className="chat-card">
+      {renaming ? (
+        <form className="chat-room-form" onSubmit={rename}>
+          <label className="muted" htmlFor="chat-room-name">
+            房間名稱
+          </label>
+          <input
+            id="chat-room-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={MAX_ROOM_NAME}
+            autoComplete="off"
+            autoFocus
+          />
+          <div className="chat-card-actions">
+            <button type="submit" disabled={busy || !name.trim()}>
+              儲存
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setRenaming(false)
+                setName(room.name)
+              }}
+              disabled={busy}
+            >
+              取消
+            </button>
+          </div>
+        </form>
+      ) : (
+        <h2 className="chat-card-title chat-room-title">🔒 {room.name}</h2>
+      )}
+      <p className="muted">只有成員看得到這間和裡面的訊息。把代碼給朋友，他們按「輸入代碼」就能加入。</p>
+      <div className="chat-code">
+        <code className="chat-code-value">{formatCode(room.code)}</code>
+        <button type="button" className="secondary" onClick={copy}>
+          {copied ? '已複製' : '複製代碼'}
+        </button>
+      </div>
+
+      <h3 className="chat-card-sub">成員 {room.members.length} 人</h3>
+      <ul className="chat-online">
+        {room.members.map((member) => {
+          const active = presence.get(member.id)
+          return (
+            <li key={member.id}>
+              <span className={`chat-dot ${active ? 'on' : ''} ${active === undefined ? 'off' : ''}`} aria-hidden="true" />
+              <span className="chat-online-name">
+                {member.username}
+                {member.id === room.owner_id && <span className="muted">（房主）</span>}
+                {member.id === me && <span className="muted">（你）</span>}
+              </span>
+              <span className="muted chat-online-state">
+                {active === undefined ? '離線' : active ? '在看' : '離開視窗'}
+              </span>
+              {isOwner && member.id !== me && (
+                <button type="button" className="link chat-kick" onClick={() => kick(member)} disabled={busy}>
+                  移出
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+
+      <div className="chat-card-actions">
+        {isOwner && !renaming && (
+          <>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setName(room.name)
+                setRenaming(true)
+              }}
+              disabled={busy}
+            >
+              改名
+            </button>
+            <button type="button" className="secondary" onClick={newCode} disabled={busy}>
+              換代碼
+            </button>
+          </>
+        )}
+        <button type="button" className="secondary" onClick={leave} disabled={busy}>
+          離開房間
+        </button>
+        {isOwner && (
+          <button type="button" className="danger" onClick={remove} disabled={busy}>
+            刪除房間
+          </button>
+        )}
+      </div>
+      {error && <p className="error">{error}</p>}
+    </section>
+  )
 }
 
 function NotifyCard({

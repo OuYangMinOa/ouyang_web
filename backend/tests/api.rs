@@ -1,13 +1,11 @@
-mod common;
-
 use std::sync::atomic::Ordering;
 
+use crate::common::app;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
 use backend::{AppState, healthcheck, router};
-use common::app;
 use http_body_util::BodyExt;
 use serde_json::json;
 use tower::ServiceExt;

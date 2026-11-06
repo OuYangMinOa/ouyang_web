@@ -1,12 +1,10 @@
-mod common;
-
 use std::path::PathBuf;
 
+use crate::common::{TestApp, app, app_with_music};
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
-use common::{TestApp, app, app_with_music};
 use http_body_util::BodyExt;
 use serde_json::json;
 use tower::ServiceExt;

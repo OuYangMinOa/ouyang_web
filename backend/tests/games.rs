@@ -1,10 +1,8 @@
-mod common;
-
 use std::time::Duration;
 
+use crate::common::{TestApp, app, app_on};
 use axum::http::StatusCode;
 use backend::auth::upsert_admin;
-use common::{TestApp, app, app_on};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpStream;

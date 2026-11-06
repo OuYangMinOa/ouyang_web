@@ -1,14 +1,12 @@
-mod common;
-
 use std::{path::PathBuf, sync::Arc};
 
+use crate::common::{TestApp, app};
 use axum::http::StatusCode;
 use backend::{
     auth::upsert_admin,
     monitor::{Monitor, Target},
     router,
 };
-use common::{TestApp, app};
 use serde_json::{Value, json};
 
 async fn login_admin(app: &TestApp) -> String {
