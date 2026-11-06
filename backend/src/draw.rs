@@ -26,8 +26,10 @@
 //! 計分：猜中的人越早分數越高（20～100 分），畫的人每有一個人猜中得 25 分，普通的詞乘 1.2、困難的乘 1.5。
 //! 分數在同一個房間跨局累計。
 //!
-//! 題庫：內建的 `draw_words.txt`，加上玩家投稿、管理員審核通過的詞（見 `draw_words.rs`）。
-//! 兩者合成一份放在 `BANK`，伺服器啟動和管理員改了投稿之後整份換掉；每一局開局時拿當下那份，一局之中不會變。
+//! 題庫：內建的 `draw_words.txt` 和主題詞庫（`THEME_FILES`，例如英雄聯盟），加上玩家投稿、管理員審核通過的詞（見 `draw_words.rs`）。
+//! 全部合成一份放在 `BANK`，伺服器啟動和管理員改了投稿之後整份換掉；每一局開局時照房主選的分類從當下那份挑出來，一局之中不會變。
+//! 房主沒選分類就是「綜合」：主題以外的所有分類。主題的分類只有房主選了才會出。
+//! 詞可以有別名（例如名字只有一個字的英雄出稱號「影忍至尊」，打「劫」也算對），猜題、不能說出答案都看詞本身和別名。
 
 use std::{
     collections::{HashMap, HashSet},
@@ -104,12 +106,32 @@ pub struct Entry {
     pub word: String,
     pub category: String,
     pub level: Level,
+    /// 也算猜對的其他寫法（只有內建詞庫有，投稿的沒有）
+    pub alts: Vec<String>,
 }
 
-/// 內建詞庫，格式見 draw_words.txt
-pub static WORDS: LazyLock<Vec<Entry>> = LazyLock::new(|| {
-    include_str!("draw_words.txt")
-        .lines()
+impl Entry {
+    pub fn new(word: impl Into<String>, category: impl Into<String>, level: Level) -> Self {
+        Self { word: word.into(), category: category.into(), level, alts: Vec::new() }
+    }
+
+    /// 算猜對的寫法：詞本身和別名
+    pub fn answers(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.word.as_str()).chain(self.alts.iter().map(String::as_str))
+    }
+
+    /// 公布答案時的樣子：有別名就接在後面，例如「影忍至尊（劫）」
+    pub fn label(&self) -> String {
+        if self.alts.is_empty() { self.word.clone() } else { format!("{}（{}）", self.word, self.alts.join("、")) }
+    }
+}
+
+/// 主題詞庫（格式和 draw_words.txt 一樣）：裡面的分類只有房主選了才會出，「綜合」不含，一字千金也不用
+const THEME_FILES: &[&str] = &[include_str!("draw_words_lol.txt")];
+
+/// 詞庫檔：每行「難度|分類|詞、詞…」，「詞/別名/別名」的別名也算猜對
+fn parse(text: &str) -> Vec<Entry> {
+    text.lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .flat_map(|line| {
@@ -117,14 +139,31 @@ pub static WORDS: LazyLock<Vec<Entry>> = LazyLock::new(|| {
             let level =
                 parts.next().and_then(|n| n.parse().ok()).and_then(Level::from_number).expect("難度只能是 1～3");
             let category = parts.next().expect("分類").trim();
-            parts.next().expect("詞").split('、').map(str::trim).filter(|w| !w.is_empty()).map(move |word| Entry {
-                word: word.to_owned(),
-                category: category.to_owned(),
-                level,
+            parts.next().expect("詞").split('、').map(str::trim).filter(|w| !w.is_empty()).map(move |item| {
+                let mut names = item.split('/').map(str::trim);
+                let mut entry = Entry::new(names.next().expect("詞"), category, level);
+                entry.alts = names.map(str::to_owned).collect();
+                entry
             })
         })
         .collect()
+}
+
+/// 內建詞庫：draw_words.txt 在前，後面接主題詞庫
+pub static WORDS: LazyLock<Vec<Entry>> = LazyLock::new(|| {
+    let mut words = parse(include_str!("draw_words.txt"));
+    words.extend(THEME_FILES.iter().flat_map(|text| parse(text)));
+    words
 });
+
+/// 主題的分類
+static THEMES: LazyLock<HashSet<String>> =
+    LazyLock::new(|| THEME_FILES.iter().flat_map(|text| parse(text)).map(|e| e.category).collect());
+
+/// 是不是主題的分類（投稿到這個分類的詞也算主題）
+pub fn is_theme(category: &str) -> bool {
+    THEMES.contains(category)
+}
 
 /// 出題用的詞庫：內建的在前，後面接審核通過的投稿
 static BANK: LazyLock<RwLock<Arc<Vec<Entry>>>> = LazyLock::new(|| RwLock::new(Arc::new(WORDS.clone())));
@@ -139,12 +178,24 @@ pub fn set_submitted(submitted: Vec<Entry>) {
     *BANK.write().unwrap() = Arc::new(merge(submitted));
 }
 
-/// 內建詞庫接上投稿的詞；內建已經有的（比對方式跟猜題一樣）和重複的跳過
+/// 內建詞庫接上投稿的詞；內建已經有的（含別名，比對方式跟猜題一樣）和重複的跳過
 fn merge(submitted: Vec<Entry>) -> Vec<Entry> {
-    let mut seen: HashSet<Vec<char>> = WORDS.iter().map(|e| normalize(&e.word)).collect();
+    let mut seen: HashSet<Vec<char>> = WORDS.iter().flat_map(Entry::answers).map(normalize).collect();
     let mut all = WORDS.clone();
     all.extend(submitted.into_iter().filter(|e| seen.insert(normalize(&e.word))));
     all
+}
+
+/// 這一局出題用的詞：選了分類就只出那些分類，沒選（「綜合」）就是主題以外的全部。
+/// 選的分類不到三個詞（投稿的分類被管理員清空了）時改出綜合，回傳的 bool 是有沒有照選的分類。
+fn pick_pool(bank: &[Entry], categories: &[String]) -> (Vec<Entry>, bool) {
+    if !categories.is_empty() {
+        let pool: Vec<Entry> = bank.iter().filter(|e| categories.contains(&e.category)).cloned().collect();
+        if pool.len() >= 3 {
+            return (pool, true);
+        }
+    }
+    (bank.iter().filter(|e| !is_theme(&e.category)).cloned().collect(), categories.is_empty())
 }
 
 /// 比對用：全形轉半形、只留文字和數字（空白標點不算）、英文轉小寫
@@ -176,7 +227,8 @@ fn one_edit(a: &[char], b: &[char]) -> bool {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+/// 越前面越接近（幾個寫法各比一次，取最接近的）
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum Judge {
     Correct,
     /// 整句裡有答案，但多打了其他字：不能公開
@@ -201,8 +253,15 @@ pub fn judge(guess: &str, answer: &str) -> Judge {
     }
 }
 
-fn says(text: &str, word: &str) -> bool {
-    contains(&normalize(text), &normalize(word))
+/// 跟詞本身和別名都比一次，取最接近的
+fn judge_entry(guess: &str, entry: &Entry) -> Judge {
+    entry.answers().map(|answer| judge(guess, answer)).min().unwrap_or(Judge::Miss)
+}
+
+/// 這句話有沒有說出答案（詞本身或別名）
+fn says(text: &str, entry: &Entry) -> bool {
+    let text = normalize(text);
+    entry.answers().any(|answer| contains(&text, &normalize(answer)))
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -214,11 +273,13 @@ pub struct Options {
     pub draw_secs: u16,
     /// 提示裡顯示詞的分類
     pub category: bool,
+    /// 只出這些分類的詞；空的是「綜合」（主題以外的所有分類）
+    pub categories: Vec<String>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { cycles: 2, draw_secs: 80, category: true }
+        Self { cycles: 2, draw_secs: 80, category: true, categories: Vec::new() }
     }
 }
 
@@ -319,7 +380,7 @@ pub struct Draw {
     stage: Stage,
     deadline: Option<Instant>,
     stage_started: Instant,
-    /// 這一局的詞庫（開局時的那一份）
+    /// 這一局出題用的詞（開局時照選的分類從詞庫挑出來的）
     bank: Arc<Vec<Entry>>,
     /// 這一棒給畫的人選的詞（`bank` 的索引）
     choices: Vec<usize>,
@@ -485,14 +546,14 @@ impl Draw {
         let points = (DRAWER_POINTS * guessed as f64 * entry.level.bonus()).round() as u32;
         self.turn_points[self.drawer] = points;
         self.scores[self.drawer] += points;
-        self.done.push(Done { drawer: self.drawer, word: entry.word.clone(), guessed });
+        self.done.push(Done { drawer: self.drawer, word: entry.label(), guessed });
         self.ending = Some(ending);
         let why = match ending {
             Ending::AllGuessed => "大家都猜中了！".to_owned(),
             Ending::Timeout => "時間到！".to_owned(),
             Ending::DrawerLeft => format!("{} 離線了。", self.names[self.drawer]),
         };
-        ctx.announce(To::All, format!("{why}答案是「{}」", entry.word), "accent");
+        ctx.announce(To::All, format!("{why}答案是「{}」", entry.label()), "accent");
         self.set_stage(Stage::Reveal, Some(REVEAL), ctx);
     }
 
@@ -610,6 +671,11 @@ impl PartyGame for Draw {
     fn check_options(mut options: Options) -> Result<Options, String> {
         options.cycles = options.cycles.clamp(1, 3);
         options.draw_secs = options.draw_secs.clamp(30, 180);
+        // 只留題庫裡有的分類，重複的拿掉
+        let bank = bank();
+        let known: HashSet<&str> = bank.iter().map(|e| e.category.as_str()).collect();
+        let mut seen = HashSet::new();
+        options.categories.retain(|c| known.contains(c.as_str()) && seen.insert(c.clone()));
         Ok(options)
     }
 
@@ -621,6 +687,7 @@ impl PartyGame for Draw {
         let carried = previous
             .map(|p| p.carried.clone().into_iter().chain((0..p.pids.len()).map(|s| (p.pids[s], p.total(s)))).collect())
             .unwrap_or_default();
+        let (pool, as_chosen) = pick_pool(&bank(), &options.categories);
         let mut game = Self {
             options: options.clone(),
             pids: ctx.seats.iter().map(|s| s.pid).collect(),
@@ -643,10 +710,17 @@ impl PartyGame for Draw {
             carried,
             canvas: Canvas::default(),
             done: Vec::new(),
-            bank: bank(),
+            bank: Arc::new(pool),
             used: previous.map(|p| p.used.clone()).unwrap_or_default(),
         };
-        ctx.system(To::All, format!("新的一局：{n} 個人，每人畫 {} 次", options.cycles));
+        let topic = if options.categories.is_empty() {
+            "綜合".to_owned()
+        } else if as_chosen {
+            options.categories.join("、")
+        } else {
+            "綜合（選的分類詞不夠）".to_owned()
+        };
+        ctx.system(To::All, format!("新的一局：{n} 個人，每人畫 {} 次，題目：{topic}", options.cycles));
         game.begin_turn(ctx);
         game
     }
@@ -710,7 +784,7 @@ impl PartyGame for Draw {
             Stage::Reveal | Stage::End => Chat::Show,
             Stage::Choose => {
                 // 畫的人看得到三個候選詞，不能先講出來
-                if seat == Some(self.drawer) && self.choices.iter().any(|&i| says(text, &self.bank[i].word)) {
+                if seat == Some(self.drawer) && self.choices.iter().any(|&i| says(text, &self.bank[i])) {
                     ctx.system(To::Seat(self.drawer), "不能說出題目，這句沒有送出");
                     Chat::Drop
                 } else {
@@ -718,22 +792,21 @@ impl PartyGame for Draw {
                 }
             }
             Stage::Draw => {
-                let Some(answer) = self.answer().map(str::to_owned) else { return Chat::Show };
-                let answer = answer.as_str();
+                let Some(entry) = self.word.map(|i| self.bank[i].clone()) else { return Chat::Show };
                 match seat {
                     // 觀戰的人看不到答案，但碰巧猜中也不能公開
-                    None if says(text, answer) => {
+                    None if says(text, &entry) => {
                         ctx.system(To::SeatsAndSpectators(Vec::new()), "觀戰時說出答案不會送出");
                         Chat::Drop
                     }
                     None => Chat::Show,
-                    Some(s) if s == self.drawer && says(text, answer) => {
+                    Some(s) if s == self.drawer && says(text, &entry) => {
                         ctx.system(To::Seat(s), "不能說出答案，這句沒有送出");
                         Chat::Drop
                     }
                     // 畫的人和猜中的人之間的對話，還沒猜中的人看不到
                     Some(s) if s == self.drawer || self.guessed[s].is_some() => Chat::Only(To::Seats(self.insiders())),
-                    Some(s) => match judge(text, answer) {
+                    Some(s) => match judge_entry(text, &entry) {
                         Judge::Correct => {
                             self.correct(s, ctx);
                             Chat::Only(To::Seat(s))
@@ -776,7 +849,7 @@ impl PartyGame for Draw {
                 .iter()
                 .map(|&i| {
                     let e = &self.bank[i];
-                    json!({ "word": e.word, "category": e.category, "level": e.level })
+                    json!({ "word": e.word, "alts": e.alts, "category": e.category, "level": e.level })
                 })
                 .collect::<Vec<_>>()
         });
@@ -801,6 +874,7 @@ impl PartyGame for Draw {
             "options": self.options,
             "choices": choices,
             "word": entry.filter(|_| insider || public).map(|e| &e.word),
+            "alts": entry.filter(|_| insider || public).map(|e| &e.alts),
             "level": entry.map(|e| e.level),
             "hint": hint,
             "hintsLeft": if self.stage == Stage::Draw { self.hints_left() } else { 0 },
@@ -879,8 +953,13 @@ mod tests {
         for entry in WORDS.iter() {
             let len = entry.word.chars().count();
             assert!((2..=8).contains(&len), "{} 的長度不對", entry.word);
-            assert!(seen.insert(normalize(&entry.word)), "重複的詞：{}", entry.word);
             assert!(!entry.category.is_empty());
+            // 別名可以只有一個字（例如「劫」）
+            for answer in entry.answers() {
+                assert!((1..=8).contains(&answer.chars().count()), "{answer} 的長度不對");
+                assert!(answer.chars().all(char::is_alphanumeric), "{answer} 有空白或標點");
+                assert!(seen.insert(normalize(answer)), "重複的詞：{answer}");
+            }
         }
         for level in [Level::Easy, Level::Medium, Level::Hard] {
             assert!(WORDS.iter().filter(|e| e.level == level).count() >= 60, "{level:?} 的詞太少");
@@ -889,14 +968,15 @@ mod tests {
 
     #[test]
     fn submitted_words_are_appended_without_duplicates() {
-        let entry = |word: &str, level| Entry { word: word.into(), category: "投稿".into(), level };
+        let entry = |word: &str, level| Entry::new(word, "投稿", level);
         let merged = merge(vec![
             entry("長頸鹿", Level::Easy),
             entry("電音三太子", Level::Hard),
             entry("ＯＫ繃", Level::Medium),
             entry("ok繃", Level::Medium),
+            entry("劍聖", Level::Medium),
         ]);
-        assert_eq!(merged.len(), WORDS.len() + 2, "內建已經有的、只差全形半形大小寫的都算重複");
+        assert_eq!(merged.len(), WORDS.len() + 2, "內建已經有的（含別名）、只差全形半形大小寫的都算重複");
         assert_eq!(merged[..WORDS.len()], WORDS[..]);
         assert_eq!(merged[WORDS.len()].word, "電音三太子");
         assert_eq!(merged[WORDS.len() + 1].word, "ＯＫ繃");
@@ -905,7 +985,7 @@ mod tests {
     #[test]
     fn a_tiny_bank_still_gives_three_choices() {
         let (mut g, seats, mut rng) = start(2, Options::default());
-        let entry = |word: &str| Entry { word: word.into(), category: "投稿".into(), level: Level::Medium };
+        let entry = |word: &str| Entry::new(word, "投稿", Level::Medium);
         g.bank = Arc::new(vec![entry("甲乙"), entry("丙丁"), entry("戊己"), entry("庚辛")]);
         g.used.clear();
         for _ in 0..5 {
@@ -916,6 +996,71 @@ mod tests {
             assert_eq!(sorted.len(), 3, "三個不同的詞：{choices:?}");
             g.used.insert(g.bank[choices[0]].word.clone());
         }
+    }
+
+    #[test]
+    fn league_of_legends_is_a_theme() {
+        let lol: Vec<&Entry> = WORDS.iter().filter(|e| e.category == "英雄聯盟").collect();
+        assert_eq!(lol.len(), 173);
+        assert!(is_theme("英雄聯盟"));
+        assert!(!is_theme("動物"));
+        for level in [Level::Easy, Level::Medium, Level::Hard] {
+            assert!(lol.iter().filter(|e| e.level == level).count() >= 30, "{level:?} 的英雄太少");
+        }
+        let zed = lol.iter().find(|e| e.word == "影忍至尊").unwrap();
+        assert_eq!(zed.alts, ["劫"]);
+        assert_eq!(zed.label(), "影忍至尊（劫）");
+
+        // 綜合不含主題；選了就只出那個分類
+        let (general, ok) = pick_pool(&WORDS, &[]);
+        assert!(ok);
+        assert!(general.iter().all(|e| !is_theme(&e.category)));
+        assert_eq!(general.len(), WORDS.len() - lol.len());
+        let (only, ok) = pick_pool(&WORDS, &["英雄聯盟".into()]);
+        assert!(ok);
+        assert_eq!(only.len(), 173);
+        let (mixed, _) = pick_pool(&WORDS, &["英雄聯盟".into(), "成語".into()]);
+        assert!(mixed.iter().any(|e| e.category == "成語") && mixed.iter().any(|e| e.category == "英雄聯盟"));
+        // 選的分類不到三個詞就改出綜合
+        let mut bank = WORDS.clone();
+        bank.push(Entry::new("電音三太子", "冷門", Level::Hard));
+        let (fallback, ok) = pick_pool(&bank, &["冷門".into()]);
+        assert!(!ok);
+        assert_eq!(fallback.len(), general.len() + 1, "綜合，含那個詞");
+    }
+
+    #[test]
+    fn aliases_count_as_answers() {
+        let mut zed = Entry::new("影忍至尊", "英雄聯盟", Level::Medium);
+        zed.alts = vec!["劫".into()];
+        assert_eq!(judge_entry("劫", &zed), Judge::Correct);
+        assert_eq!(judge_entry("影忍至尊", &zed), Judge::Correct);
+        assert_eq!(judge_entry("是劫嗎", &zed), Judge::Contains);
+        assert_eq!(judge_entry("影忍", &zed), Judge::Close);
+        assert_eq!(judge_entry("慎", &zed), Judge::Miss);
+        assert!(says("我畫的是劫", &zed));
+        let mut renata = Entry::new("睿娜妲", "英雄聯盟", Level::Hard);
+        renata.alts = vec!["睿娜妲格萊斯克".into()];
+        assert_eq!(judge_entry("睿娜妲．格萊斯克", &renata), Judge::Correct, "全名也對，不是「多打了字」");
+    }
+
+    #[test]
+    fn the_host_picks_categories() {
+        assert_eq!(
+            Draw::check_options(Options {
+                categories: vec!["英雄聯盟".into(), "沒有這個".into(), "英雄聯盟".into(), "動物".into()],
+                ..Options::default()
+            })
+            .unwrap()
+            .categories,
+            ["英雄聯盟", "動物"],
+            "沒有的分類和重複的拿掉"
+        );
+        let (g, _, _) = start(3, Options { categories: vec!["英雄聯盟".into()], ..Options::default() });
+        assert!(g.bank.iter().all(|e| e.category == "英雄聯盟"));
+        assert!(g.choices.iter().all(|&i| g.bank[i].category == "英雄聯盟"));
+        let (g, _, _) = start(3, Options::default());
+        assert!(g.bank.iter().all(|e| e.category != "英雄聯盟"), "預設是綜合，不出主題");
     }
 
     #[test]

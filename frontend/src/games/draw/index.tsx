@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { api } from '../../api'
 import { ChatBox, Countdown, PartyEntry, PartyHeader, PartyLobby, PartyNotice } from '../shared/Party'
 import { GameLayout, Segmented, SfxButton, StatusLine } from '../shared/ui'
 import { MAX_CHAT, useParty, type Party } from '../shared/useParty'
@@ -6,7 +7,14 @@ import { Board } from './board'
 import { Contribute } from './Contribute'
 import { useDrawSfx, useDrawSounds, type DrawSound } from './sfx'
 import { Sketch } from './Sketch'
-import { LEVEL_NAMES, type DrawOptions, type DrawParty, type DrawView } from './types'
+import {
+  LEVEL_NAMES,
+  wordLabel,
+  type CategoryInfo,
+  type DrawOptions,
+  type DrawParty,
+  type DrawView,
+} from './types'
 import './draw.css'
 
 type DgParty = Party<DrawParty>
@@ -45,6 +53,10 @@ function Rules() {
         </li>
         <li>猜中的人和畫的人可以互相聊天，還沒猜中的人看不到。</li>
         <li>計分：越早猜中分數越高（20～100 分）；畫的人每有一個人猜中得 25 分。普通的詞乘 1.2、困難的乘 1.5。分數在同一個房間累計。</li>
+        <li>
+          房主可以選題目：「綜合」是一般的分類全部混在一起；也可以只出某些分類，或選「英雄聯盟」這類主題（所有英雄，綜合裡不會出）。
+        </li>
+        <li>有些詞有別名，例如名字只有一個字的英雄出稱號「影忍至尊」，打「劫」也算對。</li>
         <li>題目除了內建的，還有大家投稿、管理員審核通過的。登入後可以在開房間的地方「投稿題目」。</li>
       </ul>
     </div>
@@ -159,6 +171,11 @@ function OptionsForm({ party }: { party: DgParty }) {
 
   return (
     <div className="dg-options">
+      <TopicPicker
+        value={o.categories ?? []}
+        onChange={(categories) => set({ categories })}
+        disabled={!editable}
+      />
       <Segmented
         label="每人畫幾次"
         value={o.cycles}
@@ -187,6 +204,99 @@ function OptionsForm({ party }: { party: DgParty }) {
         {players >= 2 ? `${players} 人，每人畫 ${o.cycles} 次，共 ${players * o.cycles} 棒。` : '至少要 2 人。'}
         {!party.isHost && ' 選項由房主決定。'}
       </p>
+    </div>
+  )
+}
+
+/**
+ * 題目：不選是「綜合」（主題以外的所有分類）。主題（例如英雄聯盟）放在第一排，一般分類收在「自選分類」裡，都可以複選。
+ * 分類清單開房間時讀一次；讀不到也還是顯示目前選的。
+ */
+function TopicPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string[]
+  onChange: (categories: string[]) => void
+  disabled: boolean
+}) {
+  const id = useId()
+  const [list, setList] = useState<CategoryInfo[] | null>(null)
+  useEffect(() => {
+    api<CategoryInfo[]>('/games/draw/categories')
+      .then(setList)
+      .catch(() => setList([]))
+  }, [])
+  const known = list ?? []
+  const themes = known.filter((c) => c.theme)
+  const general = known.filter((c) => !c.theme)
+  // 清單裡沒有的（還沒讀到、讀不到）也要看得到目前選了什麼
+  const unknown = value.filter((name) => !known.some((c) => c.name === name))
+  const pickedGeneral = value.some((name) => general.some((c) => c.name === name))
+  const [more, setMore] = useState(false)
+  const showGeneral = more || pickedGeneral
+
+  const toggle = (name: string) =>
+    onChange(value.includes(name) ? value.filter((n) => n !== name) : [...value, name])
+  const chip = (name: string, words?: number) => {
+    const on = value.includes(name)
+    return (
+      <button
+        key={name}
+        type="button"
+        aria-pressed={on}
+        className={on ? 'active' : ''}
+        disabled={disabled}
+        onClick={() => toggle(name)}
+      >
+        {name}
+        {words !== undefined && <small>{words}</small>}
+      </button>
+    )
+  }
+
+  const count = (names: string[]) => known.filter((c) => names.includes(c.name)).reduce((n, c) => n + c.words, 0)
+  const total = value.length === 0 ? general.reduce((n, c) => n + c.words, 0) : count(value)
+  const summary = value.length === 0 ? '綜合：一般的分類全部混在一起（不含主題）' : `只出：${value.join('、')}`
+
+  return (
+    <div className="segmented-field">
+      <span className="segmented-label" id={id}>
+        題目
+      </span>
+      <div className="dg-topics" role="group" aria-labelledby={id}>
+        <button
+          type="button"
+          aria-pressed={value.length === 0}
+          className={value.length === 0 ? 'active' : ''}
+          disabled={disabled}
+          onClick={() => onChange([])}
+        >
+          綜合
+        </button>
+        {themes.map((c) => chip(c.name, c.words))}
+        {unknown.map((name) => chip(name))}
+        {general.length > 0 && !pickedGeneral && (
+          <button
+            type="button"
+            className="dg-topics-more"
+            aria-expanded={showGeneral}
+            onClick={() => setMore(!more)}
+          >
+            自選分類 {showGeneral ? '▴' : '▾'}
+          </button>
+        )}
+      </div>
+      {showGeneral && general.length > 0 && (
+        <div className="dg-topics" role="group" aria-label="一般分類">
+          {general.map((c) => chip(c.name, c.words))}
+        </div>
+      )}
+      <span className="muted dg-topics-summary">
+        {summary}
+        {list && total > 0 && `，共 ${total} 個詞`}
+      </span>
     </div>
   )
 }
@@ -268,7 +378,7 @@ function Play({
   } else if (view.stage === 'reveal' && view.word) {
     overlay = (
       <p>
-        答案是<strong>{view.word}</strong>
+        答案是<strong>{wordLabel(view.word, view.alts)}</strong>
       </p>
     )
   }
@@ -286,6 +396,7 @@ function Play({
           {view.choices.map((c, i) => (
             <button key={i} type="button" onClick={() => party.act({ type: 'choose', index: i })}>
               <strong>{c.word}</strong>
+              {c.alts.length > 0 && <span className="dg-alts">也可以猜：{c.alts.join('、')}</span>}
               <span className={`chip dg-level ${c.level}`}>{LEVEL_NAMES[c.level]}</span>
               <span className="muted">{c.category}</span>
             </button>
@@ -370,6 +481,7 @@ function WordBar({ view, drawing, onHint }: { view: DrawView; drawing: boolean; 
               ))
             : view.word}
         </strong>
+        {view.alts && view.alts.length > 0 && <span className="dg-alts">也可以猜：{view.alts.join('、')}</span>}
         {view.level && <span className={`chip dg-level ${view.level}`}>{LEVEL_NAMES[view.level]}</span>}
         {drawing && (
           <button

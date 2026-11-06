@@ -18,7 +18,7 @@
 }
 :where(:root[data-style='doodle']) body {
   background: transparent;
-  /* 手寫字看起來比黑體小一點 */
+  /* 塗鴉的字放大一號，圓體讀起來更輕鬆 */
   font-size: 17px;
   text-shadow: var(--chalk);
 }
@@ -41,14 +41,10 @@
   overflow: hidden;
 }
 
-/* ---- 字：手寫字只有一種粗細，標題不要用假粗體 ---- */
+/* ---- 字：全站都是粉圓（index.css 的 --sans、--serif），站名當 logo 用手寫的芫荽 ---- */
 
-:where(:root[data-style='doodle']) h1,
-:where(:root[data-style='doodle']) h2,
-:where(:root[data-style='doodle']) h3 {
-  font-weight: 400;
-}
 :where(:root[data-style='doodle']) .brand {
+  font-family: var(--hand);
   font-weight: 400;
   font-size: 22px;
 }

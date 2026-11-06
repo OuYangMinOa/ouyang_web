@@ -206,3 +206,16 @@ async fn reviewing_changes_the_word_bank() {
     assert!(in_bank("鹹酥龍珠"));
     assert_eq!(app.get(MINE, Some(&admin)).await.body["words"][0]["status"], "approved");
 }
+
+#[tokio::test]
+async fn anyone_can_list_the_categories() {
+    let app = app().await;
+    let reply = app.get("/api/games/draw/categories", None).await;
+    assert_eq!(reply.status, StatusCode::OK);
+    let list = reply.body.as_array().unwrap();
+    let find = |name: &str| list.iter().find(|c| c["name"] == name).unwrap_or_else(|| panic!("沒有 {name}"));
+    assert_eq!(find("動物")["theme"], false);
+    let lol = find("英雄聯盟");
+    assert_eq!(lol["theme"], true, "主題要選了才會出");
+    assert!(lol["words"].as_u64().unwrap() >= 173);
+}

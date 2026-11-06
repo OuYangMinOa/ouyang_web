@@ -5,6 +5,7 @@
 //! - 待審核的可以自己收回；之後就由管理員處理。沒通過的詞會一直擋著不能再投，管理員刪掉那筆才能再投。
 //! - 有「管理使用者」權限的人投稿直接通過，不用自己審自己。
 //! - 遊戲用的詞庫放在記憶體（`draw::set_submitted`）：伺服器啟動時讀一次，之後每次改到通過的詞就重讀。
+//! - 房主選題目用的分類清單（`categories_list`）不用登入。
 
 use std::collections::{HashMap, HashSet};
 
@@ -77,7 +78,7 @@ pub async fn reload(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .await?;
     draw::set_submitted(
         rows.into_iter()
-            .filter_map(|(word, category, level)| Some(Entry { word, category, level: Level::from_number(level)? }))
+            .filter_map(|(word, category, level)| Some(Entry::new(word, category, Level::from_number(level)?)))
             .collect(),
     );
     Ok(())
@@ -115,6 +116,32 @@ macro_rules! word_query {
             $tail
         )
     };
+}
+
+// ---- 選題目的分類 ----
+
+#[derive(Serialize)]
+pub struct CategoryInfo {
+    pub name: String,
+    /// 幾個詞（內建的加上投稿通過的）
+    pub words: usize,
+    /// 主題：「綜合」不含，要選了才會出
+    pub theme: bool,
+}
+
+/// 題庫裡的分類和詞數，照內建詞庫的順序，投稿的新分類接在後面；房主開局前選題目用
+pub async fn categories_list() -> Json<Vec<CategoryInfo>> {
+    let bank = draw::bank();
+    let mut rows: Vec<CategoryInfo> = Vec::new();
+    let mut index: HashMap<&str, usize> = HashMap::new();
+    for entry in bank.iter() {
+        let row = *index.entry(entry.category.as_str()).or_insert_with(|| {
+            rows.push(CategoryInfo { name: entry.category.clone(), words: 0, theme: draw::is_theme(&entry.category) });
+            rows.len() - 1
+        });
+        rows[row].words += 1;
+    }
+    Json(rows)
 }
 
 // ---- 投稿 ----
@@ -186,7 +213,7 @@ pub async fn submit(
         return Err(AppError::BadRequest(format!("一次最多投 {MAX_PER_SUBMIT} 個詞")));
     }
     let trusted = user.has(AdminUsers::NAME);
-    let builtin: HashSet<String> = WORDS.iter().map(|e| norm(&e.word)).collect();
+    let builtin: HashSet<String> = WORDS.iter().flat_map(Entry::answers).map(norm).collect();
 
     let mut tx = state.pool.begin().await?;
     let mut seen = HashSet::new();
@@ -445,8 +472,8 @@ mod tests {
     #[test]
     fn distribution_splits_builtin_and_submitted() {
         let mut bank = WORDS.clone();
-        bank.push(Entry { word: "電音三太子".into(), category: "台灣在地".into(), level: Level::Hard });
-        bank.push(Entry { word: "貓跳台".into(), category: "寵物".into(), level: Level::Easy });
+        bank.push(Entry::new("電音三太子", "台灣在地", Level::Hard));
+        bank.push(Entry::new("貓跳台", "寵物", Level::Easy));
         let rows = distribution(&bank);
         let builtin: usize = rows.iter().map(|r| r.builtin.iter().sum::<usize>()).sum();
         assert_eq!(builtin, WORDS.len());

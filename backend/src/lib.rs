@@ -293,6 +293,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
         .route("/games/draw/party", post(party::create::<draw::Draw>))
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
+        .route("/games/draw/categories", get(draw_words::categories_list))
         .route("/games/draw/words", get(draw_words::mine).post(draw_words::submit))
         .route("/games/draw/words/{id}", delete(draw_words::withdraw))
         .route("/games/antique/party", post(party::create::<antique::Antique>))
