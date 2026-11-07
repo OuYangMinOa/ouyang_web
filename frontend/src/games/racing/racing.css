@@ -520,6 +520,56 @@ button.race-start {
   flex: 1 1 auto;
 }
 
+/* 線上：觀戰、結算倒數、斷線提示，疊在左上的名次底下 */
+.race-online-chips {
+  position: absolute;
+  top: calc(var(--race-top) + 100px);
+  left: var(--race-left);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100% - var(--race-left) - var(--race-right));
+  pointer-events: none;
+}
+.race-online-chips .race-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: var(--text);
+  pointer-events: auto;
+}
+.race-online-chips strong {
+  color: var(--text-h);
+}
+.race-watch button {
+  min-height: 40px;
+  padding: 0 14px;
+}
+.race-online-chips .race-offline {
+  color: var(--danger);
+}
+.race-grace-line {
+  margin: 0;
+}
+.race-online-pause {
+  width: min(400px, 100%);
+}
+.race-online-pause .party-chat {
+  text-align: left;
+}
+.race-chat summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  cursor: pointer;
+  color: var(--text-h);
+}
+
 /* 手機觸控：左下方向、右下踏板 */
 .race-touch {
   position: absolute;
@@ -669,6 +719,18 @@ button.race-pedal.on {
   }
   table.responsive.race-table td[data-label='最快圈']::before {
     content: '最快圈 ';
+  }
+  /* 線上多一欄積分：和最快圈放在第二行 */
+  table.responsive.race-table.online td[data-label='最快圈'] {
+    grid-column: 2;
+  }
+  table.responsive.race-table.online td[data-label='積分'] {
+    grid-column: 3;
+    font-size: 13px;
+    text-align: right;
+  }
+  table.responsive.race-table.online td[data-label='積分']::before {
+    content: '積分 ';
   }
 }
 

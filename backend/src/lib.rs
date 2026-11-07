@@ -36,6 +36,7 @@ pub mod party;
 pub mod poker;
 pub mod puyo;
 pub mod puyo_scores;
+pub mod racing;
 pub mod registration;
 pub mod short_links;
 pub mod telephone;
@@ -99,6 +100,7 @@ pub struct AppState {
     pub undercover: Arc<party::Parties<undercover::Undercover>>,
     pub bigtwo: Arc<party::Parties<bigtwo::BigTwo>>,
     pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
+    pub racing: Arc<party::Parties<racing::Racing>>,
     pub draw: Arc<party::Parties<draw::Draw>>,
     pub antique: Arc<party::Parties<antique::Antique>>,
     pub uno: Arc<party::Parties<uno::Uno>>,
@@ -163,6 +165,7 @@ impl AppState {
             undercover: Arc::default(),
             bigtwo: Arc::default(),
             minesrace: Arc::default(),
+            racing: Arc::default(),
             draw: Arc::default(),
             antique: Arc::default(),
             uno: Arc::default(),
@@ -292,6 +295,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/bigtwo/party/{code}/ws", get(party::connect::<bigtwo::BigTwo>))
         .route("/games/minesrace/party", post(party::create::<minesrace::MinesRace>))
         .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
+        .route("/games/racing/party", post(party::create::<racing::Racing>))
+        .route("/games/racing/party/{code}/ws", get(party::connect::<racing::Racing>))
         .route("/games/draw/party", post(party::create::<draw::Draw>))
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
         .route("/games/draw/categories", get(draw_words::categories_list))

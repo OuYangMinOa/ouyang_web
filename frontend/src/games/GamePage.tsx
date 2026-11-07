@@ -36,7 +36,7 @@ export default function GamePage() {
   if (game.fullscreen) {
     return (
       <Suspense fallback={<p className="game-fullscreen-loading">載入中…</p>}>
-        <Game key={game.id} />
+        <Game key={`${game.id}:${follow}`} />
       </Suspense>
     )
   }
