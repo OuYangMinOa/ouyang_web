@@ -1,0 +1,691 @@
+/* 3D 賽車：整個畫面都是遊戲，蓋住網站的頁首和側邊欄；儀表、選單浮在 3D 畫面上 */
+.race-root {
+  --race-pad: 12px;
+  --race-top: max(var(--race-pad), env(safe-area-inset-top));
+  --race-bottom: max(var(--race-pad), env(safe-area-inset-bottom));
+  --race-left: max(var(--race-pad), env(safe-area-inset-left));
+  --race-right: max(var(--race-pad), env(safe-area-inset-right));
+  --race-glass: color-mix(in srgb, var(--surface) 84%, transparent);
+  --race-line: color-mix(in srgb, var(--border) 85%, transparent);
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text-h);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.race-view,
+.race-view canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.race-chip {
+  background: var(--race-glass);
+  border: 1px solid var(--race-line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* 上方：左邊名次與時間，右邊按鈕與小地圖 */
+.race-top {
+  position: absolute;
+  top: var(--race-top);
+  left: var(--race-left);
+  right: var(--race-right);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 3;
+}
+.race-top > * {
+  pointer-events: auto;
+}
+.race-top-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 60%;
+}
+.race-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+button.race-icon {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 18px;
+  line-height: 1;
+  background: var(--race-glass);
+  color: var(--text-h);
+  border: 1px solid var(--race-line);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+button.race-icon:hover {
+  border-color: var(--accent);
+}
+
+.race-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  font-variant-numeric: tabular-nums;
+}
+.race-pos {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  color: var(--text-h);
+}
+.race-pos strong {
+  font-size: 40px;
+  line-height: 1;
+  color: var(--accent);
+}
+.race-pos span {
+  font-size: 15px;
+  color: var(--text);
+}
+.race-lines {
+  display: grid;
+  gap: 1px;
+  line-height: 1.25;
+}
+.race-lap {
+  font-size: 14px;
+  color: var(--text);
+}
+.race-lap strong {
+  color: var(--text-h);
+}
+.race-time {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+.race-sub {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.race-map {
+  width: clamp(96px, 22vmin, 170px);
+  height: clamp(96px, 22vmin, 170px);
+  padding: 6px;
+  box-sizing: border-box;
+}
+.race-map-road {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.7;
+}
+.race-map-car {
+  fill: var(--car);
+  stroke: var(--surface);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.race-map-me {
+  fill: var(--car);
+  stroke: var(--accent);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 速度表與甩尾集氣 */
+.race-speed {
+  position: absolute;
+  right: var(--race-right);
+  bottom: var(--race-bottom);
+  z-index: 2;
+  min-width: 128px;
+  padding: 8px 14px 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.race-speed-value {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-h);
+}
+.race-speed-unit {
+  margin-left: 4px;
+  font-size: 14px;
+  color: var(--text);
+}
+.race-drift {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  height: 6px;
+}
+.race-drift span {
+  flex: 1;
+  border-radius: 3px;
+  background: var(--border);
+  transition: background-color 0.15s;
+}
+.race-drift[data-level='0'] span:first-child {
+  background: var(--text);
+}
+.race-drift[data-level='1'] span:first-child {
+  background: var(--race-drift-1);
+}
+.race-drift[data-level='2'] span {
+  background: var(--race-drift-2);
+}
+.race-drift[data-boost='true'] span {
+  background: var(--accent);
+  animation: race-pulse 0.2s infinite alternate;
+}
+@keyframes race-pulse {
+  to {
+    opacity: 0.45;
+  }
+}
+
+/* 倒數、提示、逆向警告 */
+.race-countdown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 4;
+  font-size: clamp(72px, 22vmin, 180px);
+  font-weight: 900;
+  color: var(--accent);
+  -webkit-text-stroke: 4px var(--surface);
+  paint-order: stroke fill;
+  pointer-events: none;
+  animation: race-pop 0.9s ease-out both;
+}
+@keyframes race-pop {
+  from {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  20% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.9);
+    opacity: 0.2;
+  }
+}
+.race-toast {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  z-index: 4;
+  max-width: calc(100% - 2 * var(--race-pad));
+  box-sizing: border-box;
+  padding: 8px 18px;
+  transform: translateX(-50%);
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  animation: race-toast 2.2s ease both;
+}
+@keyframes race-toast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  to {
+    opacity: 0;
+  }
+}
+.race-hint {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+.race-hint strong {
+  font-size: clamp(28px, 7vmin, 48px);
+  color: var(--text-h);
+  -webkit-text-stroke: 3px var(--surface);
+  paint-order: stroke fill;
+}
+.race-hint.wrongWay strong {
+  color: var(--danger);
+  animation: race-pulse 0.5s infinite alternate;
+}
+
+/* 選單、暫停、成績 */
+.race-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  box-sizing: border-box;
+  padding: calc(var(--race-top) + 52px) var(--race-right) var(--race-bottom) var(--race-left);
+  pointer-events: none;
+}
+.race-center {
+  align-items: center;
+  justify-content: center;
+  padding-top: var(--race-top);
+  background: var(--scrim);
+  pointer-events: auto;
+}
+.race-panel {
+  pointer-events: auto;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding: 18px 20px 20px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--race-line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.race-panel h1,
+.race-panel h2 {
+  margin: 0;
+  color: var(--text-h);
+}
+.race-title {
+  font-size: 26px;
+}
+.race-menu {
+  align-items: flex-start;
+}
+
+.race-tracks {
+  display: grid;
+  gap: 8px;
+}
+button.race-track {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+button.race-track strong {
+  font-size: 16px;
+  color: var(--text-h);
+}
+button.race-track.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.race-record {
+  font-size: 13px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.race-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+button.race-color {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--car);
+  border: 2px solid var(--border);
+}
+button.race-color[aria-checked='true'] {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.race-checks {
+  display: grid;
+  gap: 6px;
+}
+.race-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+.race-check input {
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.race-best {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.race-best strong {
+  color: var(--text-h);
+}
+/* 選單、成績的主要按鈕黏在面板底部：面板很長（矮螢幕）時不用捲到最下面 */
+.race-start-bar,
+.race-result .race-actions {
+  position: sticky;
+  bottom: -20px;
+  margin: 0 -20px -20px;
+  padding: 10px 20px 20px;
+  background: linear-gradient(transparent, var(--surface) 30%);
+}
+button.race-start {
+  width: 100%;
+  min-height: 52px;
+  font-size: 18px;
+  font-weight: 700;
+}
+.race-help {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.race-pause {
+  width: min(320px, 100%);
+  text-align: center;
+}
+
+.race-result {
+  width: min(560px, 100%);
+}
+.race-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 0;
+}
+.race-summary dt {
+  font-size: 13px;
+}
+.race-summary dd {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.race-summary .chip {
+  margin: 0 0 0 8px;
+  vertical-align: middle;
+}
+.race-laps-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.race-laps-list .best {
+  color: var(--accent);
+  font-weight: 700;
+}
+.race-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.race-table th,
+.race-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.race-table th {
+  font-size: 13px;
+  font-weight: 500;
+}
+.race-table tr.me td {
+  color: var(--accent);
+  font-weight: 700;
+}
+.race-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--car);
+  border: 1px solid var(--border);
+  vertical-align: -1px;
+}
+.race-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.race-actions button {
+  flex: 1 1 auto;
+}
+
+/* 手機觸控：左下方向、右下踏板 */
+.race-touch {
+  position: absolute;
+  left: var(--race-left);
+  right: var(--race-right);
+  bottom: var(--race-bottom);
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+.race-steer,
+.race-pedal {
+  pointer-events: auto;
+  touch-action: none;
+}
+.race-steer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(44vw, 240px);
+  height: 76px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border-radius: 38px;
+  background: var(--race-glass);
+  border: 1px solid var(--race-line);
+  color: var(--text-h);
+}
+.race-steer-arrow {
+  font-size: 18px;
+  opacity: 0.8;
+}
+.race-steer-track {
+  position: relative;
+  flex: 1;
+  height: 44px;
+  display: flex;
+  justify-content: center;
+}
+.race-steer-knob {
+  width: 34%;
+  height: 100%;
+  border-radius: 22px;
+  background: var(--accent);
+  opacity: 0.9;
+}
+.race-pedals {
+  display: grid;
+  grid-template-columns: 60px 76px;
+  grid-template-rows: 60px 60px;
+  gap: 8px;
+}
+button.race-pedal {
+  min-height: 0;
+  padding: 0;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--race-glass);
+  color: var(--text-h);
+  border: 1px solid var(--race-line);
+}
+button.race-pedal.gas {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+button.race-pedal.drift {
+  grid-column: 1;
+  grid-row: 1;
+}
+button.race-pedal.brake {
+  grid-column: 1;
+  grid-row: 2;
+}
+button.race-pedal.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 觸控版面：速度表移到踏板上面 */
+.race-root.touch .race-speed {
+  bottom: calc(var(--race-bottom) + 140px);
+  min-width: 0;
+  padding: 6px 12px 8px;
+}
+.race-root.touch .race-speed-value {
+  font-size: 28px;
+}
+
+@media (max-width: 640px), (max-height: 480px) {
+  .race-status {
+    gap: 8px;
+    padding: 6px 10px;
+  }
+  .race-pos strong {
+    font-size: 30px;
+  }
+  .race-time {
+    font-size: 16px;
+  }
+  button.race-icon {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    font-size: 16px;
+  }
+  .race-toast {
+    font-size: 15px;
+    white-space: normal;
+  }
+  .race-panel {
+    padding: 14px 16px 16px;
+  }
+  .race-start-bar,
+  .race-result .race-actions {
+    bottom: -16px;
+    margin: 0 -16px -16px;
+    padding: 10px 16px 16px;
+  }
+}
+
+/* 窄螢幕的成績表：每台車一張小卡片，第一行名次、車手、總時間，第二行最快圈 */
+@media (max-width: 640px) {
+  table.responsive.race-table tr {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    align-items: center;
+    gap: 2px 10px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+  }
+  table.responsive.race-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  table.responsive.race-table td[data-label]::before {
+    content: none;
+  }
+  table.responsive.race-table td[data-label='最快圈'] {
+    grid-column: 2 / span 2;
+    font-size: 13px;
+  }
+  table.responsive.race-table td[data-label='最快圈']::before {
+    content: '最快圈 ';
+  }
+}
+
+/* 橫放的手機：畫面很矮，選單貼齊上緣、時間只留主要的 */
+@media (max-height: 480px) {
+  .race-layer {
+    padding-top: var(--race-top);
+  }
+  .race-menu {
+    justify-content: center;
+  }
+  .race-sub {
+    display: none;
+  }
+  .race-root.touch .race-speed {
+    bottom: var(--race-bottom);
+    right: 50%;
+    transform: translateX(50%);
+  }
+}
