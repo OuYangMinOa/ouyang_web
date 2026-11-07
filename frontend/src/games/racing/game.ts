@@ -809,7 +809,8 @@ export class RaceGame {
       this.look.set(c.x - fx * dist, c.y + height, c.z - fz * dist)
       // 位置平滑會讓鏡頭落後「速度 ÷ 平滑係數」那麼遠（極速時多 4 公尺，車子變很小、反而不覺得快），往前補回去
       const a = k(14)
-      const lead = a < 1 ? ((1 - a) / a) * dt : 0
+      // 暫停後繼續的第一格 dt 是 0（a 也是 0）：不補，不然 0 ÷ 0 會讓鏡頭位置變成 NaN、畫面全黑
+      const lead = a > 0 && a < 1 ? ((1 - a) / a) * dt : 0
       this.look.x += c.vx * lead
       this.look.z += c.vz * lead
       this.camPos.lerp(this.look, a)
