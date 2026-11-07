@@ -115,6 +115,11 @@ export function driftLevel(car: Car): number {
   return car.driftTime >= DRIFT_LEVELS[1] ? 2 : car.driftTime >= DRIFT_LEVELS[0] ? 1 : 0
 }
 
+/** 集氣到第 `level` 段的集氣秒數（線上別人的車只知道段數，用這個讓火花顏色一樣） */
+export function driftTimeFor(level: number): number {
+  return level >= 2 ? DRIFT_LEVELS[1] : level === 1 ? DRIFT_LEVELS[0] : 0
+}
+
 function approach(v: number, target: number, step: number) {
   return v < target ? Math.min(target, v + step) : Math.max(target, v - step)
 }
@@ -274,42 +279,63 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
 
 /** 車與車的碰撞：每台車用前後兩個圓近似，互相推開並交換一部分速度；撞擊力道也記在 `impact` */
 export function collideCars(cars: Car[]) {
-  const r2 = CAR.radius * 2
   for (let i = 0; i < cars.length; i++) {
-    for (let j = i + 1; j < cars.length; j++) {
-      const a = cars[i]
-      const b = cars[j]
-      const dx0 = b.x - a.x
-      const dz0 = b.z - a.z
-      if (dx0 * dx0 + dz0 * dz0 > 36) continue
-      for (let ka = -1; ka <= 1; ka += 2) {
-        for (let kb = -1; kb <= 1; kb += 2) {
-          const ax = a.x + Math.sin(a.heading) * CAR.axle * ka
-          const az = a.z + Math.cos(a.heading) * CAR.axle * ka
-          const bx = b.x + Math.sin(b.heading) * CAR.axle * kb
-          const bz = b.z + Math.cos(b.heading) * CAR.axle * kb
-          const dx = bx - ax
-          const dz = bz - az
-          const d2 = dx * dx + dz * dz
-          if (d2 >= r2 * r2 || d2 < 1e-6) continue
-          const d = Math.sqrt(d2)
-          const nx = dx / d
-          const nz = dz / d
-          const push = (r2 - d) / 2
-          a.x -= nx * push
-          a.z -= nz * push
-          b.x += nx * push
-          b.z += nz * push
-          const rel = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz
-          if (rel < 0) {
-            a.impact = Math.max(a.impact, -rel)
-            b.impact = Math.max(b.impact, -rel)
-            const j2 = (-(1 + 0.3) * rel) / 2
-            a.vx -= nx * j2
-            a.vz -= nz * j2
-            b.vx += nx * j2
-            b.vz += nz * j2
-          }
+    for (let j = i + 1; j < cars.length; j++) collidePair(cars[i], cars[j])
+  }
+}
+
+/**
+ * 線上和別人的車相撞：只動自己的車 `a`，`b` 當作推不動的障礙。
+ * 自己的車整個推出重疊（畫面上不會穿進去），速度只拿兩台車對撞時自己那一半；
+ * 對方該拿到的另一半加進 `kick`（速度變化，公尺／秒），送給對方的瀏覽器套到它自己的車上。
+ * 回傳有沒有撞上（互相靠近時才算，貼著滑不算）。
+ */
+export function collideRemote(a: Car, b: Car, kick: { x: number; z: number }): boolean {
+  kick.x = kick.z = 0
+  collidePair(a, b, kick)
+  return kick.x !== 0 || kick.z !== 0
+}
+
+/** `kick` 不是 null 時只動 `a`，`b` 該拿到的速度變化加進 `kick` */
+function collidePair(a: Car, b: Car, kick: { x: number; z: number } | null = null) {
+  const onlyA = kick !== null
+  const r2 = CAR.radius * 2
+  const dx0 = b.x - a.x
+  const dz0 = b.z - a.z
+  if (dx0 * dx0 + dz0 * dz0 > 36) return
+  for (let ka = -1; ka <= 1; ka += 2) {
+    for (let kb = -1; kb <= 1; kb += 2) {
+      const ax = a.x + Math.sin(a.heading) * CAR.axle * ka
+      const az = a.z + Math.cos(a.heading) * CAR.axle * ka
+      const bx = b.x + Math.sin(b.heading) * CAR.axle * kb
+      const bz = b.z + Math.cos(b.heading) * CAR.axle * kb
+      const dx = bx - ax
+      const dz = bz - az
+      const d2 = dx * dx + dz * dz
+      if (d2 >= r2 * r2 || d2 < 1e-6) continue
+      const d = Math.sqrt(d2)
+      const nx = dx / d
+      const nz = dz / d
+      const push = onlyA ? r2 - d : (r2 - d) / 2
+      a.x -= nx * push
+      a.z -= nz * push
+      if (!onlyA) {
+        b.x += nx * push
+        b.z += nz * push
+      }
+      const rel = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz
+      if (rel < 0) {
+        a.impact = Math.max(a.impact, -rel)
+        const j2 = (-(1 + 0.3) * rel) / 2
+        a.vx -= nx * j2
+        a.vz -= nz * j2
+        if (kick) {
+          kick.x += nx * j2
+          kick.z += nz * j2
+        } else {
+          b.impact = Math.max(b.impact, -rel)
+          b.vx += nx * j2
+          b.vz += nz * j2
         }
       }
     }

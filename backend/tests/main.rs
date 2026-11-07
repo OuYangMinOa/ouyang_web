@@ -32,6 +32,7 @@ mod nav_pins;
 mod party;
 mod puyo;
 mod puyo_scores;
+mod racing;
 mod registration;
 mod short_links;
 mod tetris;

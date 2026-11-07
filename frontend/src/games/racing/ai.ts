@@ -7,6 +7,12 @@ import type { TrackPath } from './track'
 
 export type Difficulty = 'easy' | 'normal' | 'hard'
 
+export const DIFFICULTIES: { value: Difficulty; label: string }[] = [
+  { value: 'easy', label: '簡單' },
+  { value: 'normal', label: '普通' },
+  { value: 'hard', label: '困難' },
+]
+
 export type AiDriver = {
   /** 過彎速度的倍率（乘在建議速度上） */
   corner: number

@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
+import { lobbyPath, useLobby } from '../lobby/useLobby'
+import { Countdown } from '../shared/Party'
 import { load, save } from '../shared/storage'
 import { Segmented } from '../shared/ui'
-import type { Difficulty } from './ai'
+import { useParty } from '../shared/useParty'
+import { DIFFICULTIES, type Difficulty } from './ai'
+import { formatMs, hexColor } from './format'
 import {
   CAMERA_NAMES,
   CAR_COLORS,
   RaceGame,
+  seatColor,
   type FinishResult,
   type Hint,
   type HudFrame,
@@ -17,6 +22,8 @@ import {
   type Standing,
 } from './game'
 import type { TouchState } from './input'
+import { seatName, type RacingParty, type RacingView } from './online'
+import { OnlineMenu, OnlinePause, OnlineResult } from './OnlinePanels'
 import { findTrack, TRACKS } from './tracks'
 import './racing.css'
 
@@ -36,17 +43,20 @@ type Records = Record<string, { lap?: number; race?: Record<string, number> }>
 
 type Result = FinishResult & { newLap: boolean; newRace: boolean }
 
+/** 單人（和電腦比）或多人連線 */
+type Mode = 'solo' | 'online'
+
+const MODES: { value: Mode; label: string }[] = [
+  { value: 'solo', label: '單人' },
+  { value: 'online', label: '多人連線' },
+]
+
 const LAPS = [1, 3, 5]
 const OPPONENTS = [
   { value: 0, label: '計時賽' },
   { value: 3, label: '3 台' },
   { value: 5, label: '5 台' },
   { value: 7, label: '7 台' },
-]
-const DIFFICULTIES: { value: Difficulty; label: string }[] = [
-  { value: 'easy', label: '簡單' },
-  { value: 'normal', label: '普通' },
-  { value: 'hard', label: '困難' },
 ]
 
 const isCoarse = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
@@ -66,16 +76,10 @@ function loadSettings(): Settings {
   }
 }
 
-/** 1:23.45 */
-function formatMs(ms: number | null | undefined): string {
-  if (ms === null || ms === undefined || !Number.isFinite(ms)) return '–:––.––'
-  const cs = Math.floor(ms / 10)
-  const m = Math.floor(cs / 6000)
-  const s = Math.floor((cs % 6000) / 100)
-  return `${m}:${String(s).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`
+/** 照 view 推出起跑的時間（performance.now() 的時間軸）；`viewAt` 是收到這份 view 的時間 */
+function goAtOf(view: RacingView, viewAt: number): number {
+  return viewAt + (view.startsIn > 0 ? view.startsIn : -view.elapsed)
 }
-
-const hexColor = (hex: number) => `#${hex.toString(16).padStart(6, '0')}`
 
 function typing(target: EventTarget | null) {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
@@ -103,6 +107,34 @@ export default function Racing() {
   const [touch, setTouch] = useState(isCoarse)
   const [fullscreen, setFullscreen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 多人連線：網址帶 ?room=（邀請連結、遊戲室）就直接進多人
+  const [params, setParams] = useSearchParams()
+  const lobby = useLobby()
+  const [mode, setMode] = useState<Mode>(() =>
+    params.has('room') ? 'online' : load<Mode>('racing:mode', 'solo') === 'online' ? 'online' : 'solo',
+  )
+  /** 現在這場比賽是單人還是線上的 */
+  const [raceKind, setRaceKind] = useState<Mode>('solo')
+  /** 線上觀戰（沒有座位、或重新整理前已經跑完）時鏡頭跟著的座位；自己在跑是 null */
+  const [watchSeat, setWatchSeat] = useState<number | null>(null)
+  const party = useParty<RacingParty>('racing', {
+    enabled: mode === 'online',
+    onEvent: (e) => {
+      if (e?.type === 'cars') gameRef.current?.onlineCars(e.cars)
+      else if (e?.type === 'pong') gameRef.current?.onlinePong(e.t, e.clock)
+      else if (e?.type === 'bump') gameRef.current?.onlineBump(e.from, e.to, e.v)
+    },
+  })
+  const online = mode === 'online'
+  const view = online ? party.view : null
+  const roomPhase = online ? (party.room?.phase ?? null) : null
+  /** 已經開過的那一局（view.game），同一局不重開 */
+  const startedGame = useRef<number | null>(null)
+  /** 線上比賽時把過線回報給伺服器 */
+  const reportLap = useRef<((lap: number, time: number) => void) | null>(null)
+  reportLap.current =
+    raceKind === 'online' ? (lap, time) => party.act({ type: 'lap', lap, time: Math.max(0, Math.round(time)) }) : null
 
   // 每個畫面更新的東西直接改 DOM，不經過 React
   const speedRef = useRef<HTMLSpanElement>(null)
@@ -151,6 +183,7 @@ export default function Racing() {
           if (e.n === 0) window.setTimeout(() => setCountdown((n) => (n === 0 ? null : n)), 900)
           break
         case 'lap':
+          reportLap.current?.(e.lap, e.at)
           setBestLap((b) => (b === null || e.ms < b ? e.ms : b))
           showToast(
             e.final
@@ -163,6 +196,7 @@ export default function Racing() {
           break
         case 'finish': {
           const r = e.result
+          reportLap.current?.(r.laps, r.time)
           const prev = recordsRef.current[r.track] ?? {}
           const prevRace = prev.race?.[String(r.laps)]
           const newLap = prev.lap === undefined || r.bestLap < prev.lap
@@ -233,10 +267,71 @@ export default function Racing() {
     }
   }, [])
 
-  // 選單的背景是電腦在跑選好的賽道；換賽道、回到選單時跟著換（進頁面時也從這裡開始）
+  // 選單的背景是電腦在跑選好的賽道（線上是房主選的）；換賽道、回到選單時跟著換（進頁面時也從這裡開始）
+  const menuTrack = online && party.room ? party.room.options.track : settings.track
   useEffect(() => {
-    if (screen === 'menu') gameRef.current?.preview(findTrack(settings.track))
-  }, [screen, settings.track])
+    if (screen === 'menu') gameRef.current?.preview(findTrack(menuTrack))
+  }, [screen, menuTrack])
+
+  // 線上開局：房間進入對局、收到新的一局（view.game 換了）就排起跑格。觀戰、重新整理後接著跑也從這裡進來
+  useEffect(() => {
+    const game = gameRef.current
+    const room = party.room
+    if (!online || !game || !view || room?.phase !== 'playing' || view.ended) return
+    if (startedGame.current === view.game) return
+    startedGame.current = view.game
+    const me = view.you !== null && view.players[view.you]?.finish === null ? view.you : null
+    const resume = me !== null && view.resume && view.elapsed > 0 ? view.resume : null
+    const myLaps = me !== null ? view.players[me].lapTimes : []
+    setResult(null)
+    setStandings(null)
+    setPaused(false)
+    setHint(null)
+    setBestLap(resume && myLaps.length ? Math.min(...myLaps) : null)
+    setCountdown(null)
+    setToast(null)
+    setRaceKind('online')
+    setScreen('race')
+    game.startOnline(
+      {
+        track: findTrack(view.track),
+        laps: view.laps,
+        seats: view.players.map((_, seat) => ({ name: seatName(party, seat), color: seatColor(seat) })),
+        grid: view.grid,
+        me,
+        goAt: goAtOf(view, party.viewAt),
+        resume,
+        results: view.players,
+        bots: view.bots,
+        driving: view.you !== null && view.driver === view.you,
+        difficulty: view.difficulty,
+        botStates: view.elapsed > 0 ? view.botStates : [],
+      },
+      {
+        state: (d, bots) => party.act({ type: 'state', ...(d ? { d } : {}), ...(bots.length ? { bots } : {}) }),
+        botLap: (bot, lap, time) => party.act({ type: 'lap', lap, time: Math.max(0, time), bot }),
+        ping: (t) => party.act({ type: 'ping', t }),
+        bump: (hits) => party.act({ type: 'bump', hits }),
+      },
+    )
+    setWatchSeat(me === null ? game.focusSeat() : null)
+  }, [online, view, party])
+
+  // 線上：別人過線、跑完時更新名次；結算了就停下來看成績
+  useEffect(() => {
+    const game = gameRef.current
+    if (raceKind !== 'online' || !game || !view || startedGame.current !== view.game) return
+    game.onlineResults(view.players)
+    game.setDriving(view.you !== null && view.driver === view.you)
+    if (view.ended) game.endOnline()
+    else game.syncClock(goAtOf(view, party.viewAt))
+  }, [raceKind, view, party.viewAt])
+
+  // 線上：離開房間、房主中止這局（回到大廳）時回選單
+  useEffect(() => {
+    if (raceKind !== 'online' || screen !== 'race') return
+    if (!online || !party.code || roomPhase === 'lobby') backToMenu()
+  })
 
   useEffect(() => {
     gameRef.current?.setAutoGas(settings.autoGas)
@@ -365,6 +460,8 @@ export default function Racing() {
     if (!game) return
     game.unlockAudio()
     if (settings.fullscreen) enterFullscreen()
+    setRaceKind('solo')
+    setWatchSeat(null)
     setResult(null)
     setStandings(null)
     setPaused(false)
@@ -384,6 +481,10 @@ export default function Racing() {
 
   function backToMenu() {
     gameRef.current?.setPaused(false)
+    // 離開房間後再回來（同一局還在跑）要重新開局，從伺服器記的位置接著跑
+    startedGame.current = null
+    setRaceKind('solo')
+    setWatchSeat(null)
     setPaused(false)
     setResult(null)
     setStandings(null)
@@ -392,14 +493,45 @@ export default function Racing() {
     setScreen('menu')
   }
 
+  /** 離開遊戲：從遊戲室來的回遊戲室 */
   function exit() {
-    navigate('/games')
+    navigate(lobby.code ? lobbyPath(lobby.code) : '/games')
+  }
+
+  function changeMode(next: Mode) {
+    setMode(next)
+    save('racing:mode', next)
+    // 回到單人就離開房間，免得重新整理又被帶回去
+    if (next === 'solo' && params.has('room')) {
+      setParams(
+        (prev) => {
+          const p = new URLSearchParams(prev)
+          p.delete('room')
+          return p
+        },
+        { replace: true },
+      )
+    }
+  }
+
+  function leaveRoom() {
+    party.leave()
+    backToMenu()
+  }
+
+  function watchNext() {
+    const seat = gameRef.current?.cycleFocus()
+    if (seat !== undefined && seat !== null) setWatchSeat(seat)
   }
 
   const inRace = screen === 'race'
   const racing = inRace && (phase === 'countdown' || phase === 'racing')
+  const onlineRace = inRace && raceKind === 'online'
+  const watching = onlineRace && watchSeat !== null
   const track = findTrack(settings.track)
   const record = records[track.id]
+  const modeSwitch = <Segmented label="模式" value={mode} options={MODES} onChange={changeMode} />
+  const exitLabel = lobby.code ? '回到遊戲室' : '回到小遊戲'
 
   return (
     <div className={`race-root${touch ? ' touch' : ''}`} ref={rootRef}>
@@ -429,7 +561,7 @@ export default function Racing() {
               </div>
             </div>
           ) : (
-            <button type="button" className="race-icon" onClick={exit} aria-label="回到小遊戲" title="回到小遊戲">
+            <button type="button" className="race-icon" onClick={exit} aria-label={exitLabel} title={exitLabel}>
               ←
             </button>
           )}
@@ -513,6 +645,31 @@ export default function Racing() {
         </div>
       )}
 
+      {onlineRace && (
+        <div className="race-online-chips">
+          {watching && (
+            <div className="race-chip race-watch">
+              <span>
+                觀戰：<strong>{seatName(party, watchSeat)}</strong>
+              </span>
+              <button type="button" className="secondary" onClick={watchNext}>
+                換人
+              </button>
+            </div>
+          )}
+          {view && !view.ended && view.endsIn !== null && (
+            <div className="race-chip race-grace" role="status">
+              結算倒數 <Countdown ms={view.endsIn} stamp={view} />
+            </div>
+          )}
+          {(party.error || !party.connected) && (
+            <div className="race-chip race-offline" role="alert">
+              {party.error ?? '連線中斷，重新連線中…'}
+            </div>
+          )}
+        </div>
+      )}
+
       {inRace && countdown !== null && (
         <div className="race-countdown" key={countdown} role="status">
           {countdown === 0 ? 'GO!' : countdown}
@@ -532,18 +689,22 @@ export default function Racing() {
         </div>
       )}
 
-      {racing && touch && !paused && <TouchControls onChange={sendTouch} />}
+      {racing && touch && !paused && !watching && <TouchControls onChange={sendTouch} />}
 
       {screen === 'menu' && (
         <div className="race-layer race-menu">
-          <div className="race-panel">
+          {/* 線上不是自己按開始（房主按），在選單上點任何東西時先把聲音打開 */}
+          <div className="race-panel" onClick={() => gameRef.current?.unlockAudio()}>
             <h1 className="race-title">
               <span aria-hidden="true">🏎️</span> 3D 賽車
             </h1>
             {error ? (
               <p className="error">{error}</p>
+            ) : online ? (
+              <OnlineMenu party={party} modeSwitch={modeSwitch} />
             ) : (
               <>
+                {modeSwitch}
                 <div className="segmented-field">
                   <span className="segmented-label">賽道</span>
                   <div className="race-tracks">
@@ -649,7 +810,14 @@ export default function Racing() {
         </div>
       )}
 
-      {paused && (
+      {/* 結算後選單收起來，換成績表 */}
+      {paused && onlineRace && !view?.ended && (
+        <div className="race-layer race-center">
+          <OnlinePause party={party} onResume={() => setPause(false)} onLeave={leaveRoom} onExit={exit} />
+        </div>
+      )}
+
+      {paused && !onlineRace && (
         <div className="race-layer race-center">
           <div className="race-panel race-pause">
             <h2>暫停</h2>
@@ -676,7 +844,13 @@ export default function Racing() {
         </div>
       )}
 
-      {inRace && phase === 'finished' && result && (
+      {onlineRace && view && (phase === 'finished' || view.ended) && (
+        <div className="race-layer race-center">
+          <OnlineResult party={party} view={view} onLeave={leaveRoom} onExit={exit} />
+        </div>
+      )}
+
+      {inRace && !onlineRace && phase === 'finished' && result && (
         <div className="race-layer race-center">
           <ResultPanel
             result={result}

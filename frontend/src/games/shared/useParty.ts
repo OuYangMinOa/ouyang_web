@@ -93,6 +93,8 @@ type Live<T extends PartyTypes> = {
   connected: boolean
   room: PartyRoom<T['options']> | null
   view: T['view'] | null
+  /** 收到這份 view 的時間（performance.now()）：view 裡的倒數從這個時間起算，不受畫面忙碌延遲影響 */
+  viewAt: number
   chat: ChatLine[]
 }
 
@@ -198,6 +200,7 @@ export function useParty<T extends PartyTypes>(
               connected: true,
               room: prev && prev.key === roomKey ? prev.room : null,
               view: prev && prev.key === roomKey ? prev.view : null,
+              viewAt: prev && prev.key === roomKey ? prev.viewAt : 0,
               chat: prev && prev.key === roomKey ? prev.chat : NO_CHAT,
             }))
             setError(null)
@@ -213,9 +216,12 @@ export function useParty<T extends PartyTypes>(
           case 'chat':
             update((prev) => ({ ...prev, chat: [...prev.chat, msg.line].slice(-CHAT_KEEP) }))
             break
-          case 'view':
-            update((prev) => ({ ...prev, view: msg.view }))
+          case 'view': {
+            // 時間要在這裡記：更新函式要等到下一次 render 才會執行，畫面忙的時候會晚很多
+            const viewAt = performance.now()
+            update((prev) => ({ ...prev, view: msg.view, viewAt }))
             break
+          }
           case 'event':
             onEventRef.current?.(msg.event)
             for (const listener of listeners) listener(msg.event)
@@ -332,6 +338,8 @@ export function useParty<T extends PartyTypes>(
     connected: current?.connected ?? false,
     room,
     view: (current?.view ?? null) as T['view'] | null,
+    /** 收到目前這份 view 的時間（performance.now()），即時遊戲拿來對時 */
+    viewAt: current?.viewAt ?? 0,
     chat: current?.chat ?? NO_CHAT,
     /** 自己的動作被拒絕時的訊息；`id` 每次都不一樣，用來重新顯示 */
     notice,
