@@ -17,6 +17,7 @@ import {
   PING_FIRST,
   RemoteDriver,
   SEND_EVERY,
+  type BumpHit,
 } from './online'
 import { collideCars, collideRemote, driftLevel, newCar, placeCar, stepCar, type Car, type Controls } from './physics'
 import { CAR } from './spec'
@@ -93,16 +94,27 @@ export type OnlineSetup = {
   me: number | null
   /** 起跑的時間（performance.now() 的時間軸） */
   goAt: number
-  /** 重新整理頁面後接著跑：自己最後送出的狀態、跑完的每一圈 */
-  resume: { state: number[]; lapTimes: number[] } | null
+  /** 重新整理頁面後接著跑：自己最後送出的狀態 */
+  resume: number[] | null
+  /** 伺服器記的每個座位的成績（重新整理後圈數照這個接著算） */
+  results: OnlineResult[]
+  /** 電腦的座位 */
+  bots: number[]
+  /** 自己負責開電腦 */
+  driving: boolean
+  difficulty: Difficulty
+  /** 負責開電腦時，電腦最後的狀態（每列 [座位, ...狀態]）：重新整理後從這裡接著開 */
+  botStates: number[][]
 }
 
-/** 線上比賽送東西給伺服器：自己車子的狀態、對時 */
+/** 線上比賽送東西給伺服器 */
 export type OnlineLink = {
-  state: (d: number[]) => void
+  /** 自己車子的狀態（跑完後重新整理、沒有自己的車時是 null），和自己負責開的電腦的狀態（每列 [座位, ...狀態]） */
+  state: (d: number[] | null, bots: number[][]) => void
+  /** 替自己負責開的電腦回報過線 */
+  botLap: (seat: number, lap: number, time: number) => void
   ping: (t: number) => void
-  /** 撞到座位 `seat` 的車，`vx`、`vz` 是它該拿到的速度變化 */
-  bump: (seat: number, vx: number, vz: number) => void
+  bump: (hits: BumpHit[]) => void
 }
 
 /** 伺服器記的每個座位的成績（RacingView.players） */
@@ -164,8 +176,10 @@ type Racer = {
   ai: AiDriver | null
   /** 線上別人的車：照收到的狀態畫，不跑物理 */
   remote: RemoteDriver | null
-  /** 線上：上次和這台車相撞的時間（performance.now），同一次碰撞只算一次 */
-  hitAt: number
+  /** 線上的座位（單機是 -1） */
+  seat: number
+  /** 線上的電腦（不管是不是自己負責開） */
+  bot: boolean
   ctl: Controls
   lapStart: number
   lapsDone: number
@@ -182,6 +196,9 @@ const SMOKE_NIGHT = new Color(0x8c8aa2)
 const SPARK = [new Color(0xfff1b0), new Color(0x4cc9ff), new Color(0xff9a2e)]
 const FLAME = new Color(0xff7a1a)
 const CRASH = new Color(0xffd27a)
+
+/** 兩個座位配成一個數字（座位最多 8 個），碰撞去重用 */
+const pairKey = (a: number, b: number) => a * 16 + b
 
 export class RaceGame {
   private readonly host: HTMLElement
@@ -257,10 +274,20 @@ export class RaceGame {
     pings: number
     bestRtt: number
     bumpTimer: number
-    /** 還沒送出的撞擊通知：座位 → 該拿到的速度變化 */
-    bumps: Map<number, { x: number; z: number }>
+    /** 還沒送出的撞擊通知（pairKey(自己這邊的座位, 被撞的座位) → 被撞的車該拿到的速度變化） */
+    bumps: Map<number, { seat: number; by: number | undefined; x: number; z: number }>
   } | null = null
   private readonly kick = { x: 0, z: 0 }
+  /** 線上：自己這邊的座位和別人的座位上次相撞的時間（pairKey → performance.now），同一次碰撞只算一次 */
+  private readonly hitAt = new Map<number, number>()
+  /** 線上：自己負責開電腦（伺服器指定） */
+  private driving = false
+  private difficulty: Difficulty = 'normal'
+  /** 線上電腦的座位（照順序分強弱） */
+  private botSeats: number[] = []
+  /** 線上在自己這邊跑物理的車：自己的車和負責開的電腦 */
+  private locals: Racer[] = []
+  private localCars: Car[] = []
   /** 線上的比賽時鐘（秒，起跑前是負的），每一步物理往前推 */
   private clock = 0
   /** 線上比賽打開選單時：不能暫停，只是放開所有按鍵 */
@@ -322,6 +349,7 @@ export class RaceGame {
 
   startRace(setup: RaceSetup) {
     this.online = null
+    this.driving = false
     this.hold = false
     this.closed = false
     this.loadTrack(setup.track)
@@ -366,6 +394,10 @@ export class RaceGame {
     }
     this.hold = false
     this.closed = false
+    this.driving = setup.driving
+    this.difficulty = setup.difficulty
+    this.botSeats = [...setup.bots]
+    this.hitAt.clear()
     this.spawnOnline(setup)
     this.clock = (performance.now() - setup.goAt) / 1000
     this.countdown = -this.clock
@@ -407,20 +439,25 @@ export class RaceGame {
     online.goAt = (t + now) / 2 - clock
   }
 
-  /** 被座位 `from` 的車撞到（對方的瀏覽器算的）：自己這邊還沒算過這次碰撞的話，把速度變化加到自己的車上 */
-  onlineBump(from: number, v: number[]) {
-    const me = this.player
-    const r = this.racers[this.seatIndex[from] ?? -1]
-    if (!this.online || !me || !r?.remote || this.phase === 'countdown') return
+  /**
+   * 座位 `from` 的車撞到自己這邊開的座位 `to`（自己的車或負責開的電腦；對方的瀏覽器算的）：
+   * 這次碰撞自己還沒算過的話，把速度變化加到那台車上
+   */
+  onlineBump(from: number, to: number, v: number[]) {
+    const target = this.racers[this.seatIndex[to] ?? -1]
+    const other = this.racers[this.seatIndex[from] ?? -1]
+    // 剛換人開電腦時，撞電腦的通知可能晚到：已經不是自己開的就不理
+    if (!this.online || !target || target.remote || !other?.remote || this.phase === 'countdown') return
     const vx = v[0]
     const vz = v[1]
     if (!Number.isFinite(vx) || !Number.isFinite(vz)) return
     const now = performance.now()
-    if (now - r.hitAt < BUMP_DEDUPE_MS) return
-    r.hitAt = now
-    me.car.vx += vx
-    me.car.vz += vz
-    me.impact = Math.max(me.impact, Math.hypot(vx, vz) * 1.5)
+    const key = pairKey(to, from)
+    if (now - (this.hitAt.get(key) ?? -Infinity) < BUMP_DEDUPE_MS) return
+    this.hitAt.set(key, now)
+    target.car.vx += vx
+    target.car.vz += vz
+    target.impact = Math.max(target.impact, Math.hypot(vx, vz) * 1.5)
   }
 
   /** 收到伺服器轉送的車子狀態：每列是 [座位, ...狀態] */
@@ -439,13 +476,34 @@ export class RaceGame {
     if (!this.online) return
     results.forEach((res, seat) => {
       const r = this.racers[this.seatIndex[seat] ?? -1]
-      if (!r?.remote) return
-      r.lapTimes = [...res.lapTimes]
-      r.lapsDone = res.lapTimes.length
-      r.bestLap = res.lapTimes.length ? Math.min(...res.lapTimes) : null
-      r.lapStart = res.lapTimes.reduce((a, b) => a + b, 0) / 1000
-      r.finish = res.finish
+      if (r?.remote) this.setLaps(r, res.lapTimes, res.finish)
     })
+  }
+
+  /**
+   * 伺服器指定誰負責開電腦。輪到自己：電腦從現在畫的位置和速度接著開；
+   * 換給別人：改成照收到的狀態畫，先墊上自己最後的狀態，新的人的狀態進來前不會不見
+   */
+  setDriving(driving: boolean) {
+    if (!this.online || driving === this.driving) return
+    this.driving = driving
+    const now = performance.now()
+    for (const r of this.racers) {
+      if (!r.bot) continue
+      const c = r.car
+      if (driving) {
+        r.remote = null
+        r.ai = this.botAi(r.seat)
+        c.power = r.ai.power
+        c.drift = c.driftTime = c.driftHold = c.driftExit = 0
+        c.boost = 0
+      } else {
+        r.ai = null
+        r.remote = new RemoteDriver()
+        r.remote.push(this.encode(c), this.clock, now)
+      }
+    }
+    this.refreshLocals()
   }
 
   /** 線上這局結算了：還沒跑完的話交給電腦開、鏡頭繞著車轉 */
@@ -474,7 +532,8 @@ export class RaceGame {
     const now = performance.now()
     for (let k = 1; k <= this.racers.length; k++) {
       const i = (this.focus + k) % this.racers.length
-      if (this.racers[i].remote?.visible(now) || k === this.racers.length) {
+      const remote = this.racers[i].remote
+      if (!remote || remote.visible(now) || k === this.racers.length) {
         this.focus = i
         break
       }
@@ -621,6 +680,8 @@ export class RaceGame {
     this.player = null
     this.seatIndex = []
     this.seatOf = []
+    this.locals = []
+    this.localCars = []
   }
 
   /** 排起跑格：電腦在前面（越前面越弱），玩家在最後一排 */
@@ -651,7 +712,8 @@ export class RaceGame {
         info,
         ai,
         remote: null,
-        hitAt: 0,
+        seat: -1,
+        bot: false,
         ctl: { throttle: 0, brake: 0, steer: 0, drift: false },
         lapStart: 0,
         lapsDone: 0,
@@ -671,10 +733,15 @@ export class RaceGame {
     this.emit({ type: 'racers', racers: infos })
   }
 
-  /** 線上的起跑格：照伺服器抽的順序排，自己的車照單機版操作，別人的車等狀態進來 */
+  /**
+   * 線上的起跑格：照伺服器抽的順序排。自己的車照單機版操作，自己負責開的電腦照單機版的電腦開，
+   * 別人的車（含別人負責開的電腦）等狀態進來
+   */
   private spawnOnline(setup: OnlineSetup) {
     this.clearRacers()
     const track = this.track!
+    const bots = new Set(setup.bots)
+    const botStates = new Map(setup.botStates.map((row) => [row[0], row.slice(1)]))
     setup.seats.forEach((seat, s) => {
       const info: RacerInfo = { name: seat.name, color: seat.color, player: s === setup.me }
       const car = newCar()
@@ -684,13 +751,17 @@ export class RaceGame {
       car.progress = -back
       const model = new CarModel(this.parts, info.color)
       this.world!.scene.add(model.root)
+      const bot = bots.has(s)
+      const ai = bot && setup.driving ? this.botAi(s) : null
+      if (ai) car.power = ai.power
       const racer: Racer = {
         car,
         model,
         info,
-        ai: null,
-        remote: info.player ? null : new RemoteDriver(),
-        hitAt: 0,
+        ai,
+        remote: info.player || ai ? null : new RemoteDriver(),
+        seat: s,
+        bot,
         ctl: { throttle: 0, brake: 0, steer: 0, drift: false },
         lapStart: 0,
         lapsDone: 0,
@@ -700,33 +771,72 @@ export class RaceGame {
         impact: 0,
         boosting: false,
       }
-      if (info.player && setup.resume) {
-        // 重新整理後接著跑：放回最後送出的位置（速度歸零），圈數照伺服器記的
-        const d = setup.resume.state
-        car.x = d[1]
-        car.z = d[2]
-        car.heading = d[3]
-        car.progress = d[9]
-        car.loc.i = track.indexAt(((d[9] % track.length) + track.length) % track.length)
-        track.locate(car.x, car.z, car.loc)
-        car.y = car.loc.y
-        racer.lapTimes = [...setup.resume.lapTimes]
-        racer.lapsDone = racer.lapTimes.length
-        racer.bestLap = racer.lapTimes.length ? Math.min(...racer.lapTimes) : null
-        racer.lapStart = racer.lapTimes.reduce((a, b) => a + b, 0) / 1000
-      }
+      // 重新整理後接著跑：自己的車、自己負責開的電腦放回最後送出的位置（速度歸零），圈數照伺服器記的
+      const res = setup.results[s]
+      if (res) this.setLaps(racer, res.lapTimes, info.player ? null : res.finish)
+      const last = info.player ? setup.resume : ai ? botStates.get(s) : undefined
+      if (last) this.placeAt(car, last)
       this.seatIndex[s] = this.racers.length
       this.seatOf.push(s)
       this.racers.push(racer)
       if (info.player) this.player = racer
     })
     this.cars = this.racers.map((r) => r.car)
+    this.refreshLocals()
     // 觀戰：先看最前面那一格的車
     const front = setup.grid.indexOf(0)
     this.focus = this.player ? this.racers.indexOf(this.player) : (this.seatIndex[front] ?? 0)
     this.frame.cars = new Float32Array(this.racers.length * 2)
     this.camReady = false
     this.emit({ type: 'racers', racers: this.racers.map((r) => r.info) })
+  }
+
+  /** 自己負責開的電腦：照電腦的順序分強弱（第一台最強），換人開時同一台的強弱不變 */
+  private botAi(seat: number): AiDriver {
+    const k = this.botSeats.indexOf(seat)
+    const n = this.botSeats.length
+    return newAi(this.difficulty, n > 1 ? k / (n - 1) : 0.5)
+  }
+
+  private refreshLocals() {
+    this.locals = this.racers.filter((r) => !r.remote)
+    this.localCars = this.locals.map((r) => r.car)
+  }
+
+  /** 圈數和完賽時間照伺服器記的 */
+  private setLaps(r: Racer, lapTimes: number[], finish: number | null) {
+    r.lapTimes = [...lapTimes]
+    r.lapsDone = lapTimes.length
+    r.bestLap = lapTimes.length ? Math.min(...lapTimes) : null
+    r.lapStart = lapTimes.reduce((a, b) => a + b, 0) / 1000
+    r.finish = finish
+  }
+
+  /** 放到送出過的狀態 `d` 的位置（速度歸零） */
+  private placeAt(car: Car, d: number[]) {
+    const track = this.track!
+    car.x = d[1]
+    car.z = d[2]
+    car.heading = d[3]
+    car.progress = d[9]
+    car.loc.i = track.indexAt(((d[9] % track.length) + track.length) % track.length)
+    track.locate(car.x, car.z, car.loc)
+    car.y = car.loc.y
+  }
+
+  private encode(c: Car): number[] {
+    return encodeState(c, this.clock, c.drift !== 0 ? driftLevel(c) : 0)
+  }
+
+  /** 線上：還在跑的真人裡跑最前面的進度（電腦照這個調整動力）；起跑前、真人都跑完了是 null */
+  private leaderProgress(): number | null {
+    if (this.clock <= 0) return null
+    let best: number | null = null
+    for (const r of this.racers) {
+      if (r.bot || r.finish !== null) continue
+      if (best === null || r.car.progress > best) best = r.car.progress
+    }
+    return best
   }
 
   private reset(r: Racer) {
@@ -796,17 +906,22 @@ export class RaceGame {
       steps++
     }
     if (steps === MAX_STEPS) this.acc = 0
-    if (online && this.player && !this.closed) {
+    if (online && (this.player || this.driving) && !this.closed) {
       online.timer -= dt
       if (online.timer <= 0) {
         online.timer = Math.max(0, online.timer + SEND_EVERY)
-        const c = this.player.car
-        online.link.state(encodeState(c, this.clock, c.drift !== 0 ? driftLevel(c) : 0))
+        const bots: number[][] = []
+        if (this.driving) for (const r of this.locals) if (r.bot) bots.push([r.seat, ...this.encode(r.car)])
+        online.link.state(this.player ? this.encode(this.player.car) : null, bots)
       }
       online.bumpTimer -= dt
       if (online.bumps.size > 0 && online.bumpTimer <= 0) {
         online.bumpTimer = BUMP_EVERY
-        for (const [seat, v] of online.bumps) online.link.bump(seat, Math.round(v.x * 100) / 100, Math.round(v.z * 100) / 100)
+        const hits: BumpHit[] = []
+        for (const b of online.bumps.values()) {
+          hits.push({ seat: b.seat, by: b.by, v: [Math.round(b.x * 100) / 100, Math.round(b.z * 100) / 100] })
+        }
+        online.link.bump(hits)
         online.bumps.clear()
       }
       online.pingTimer -= dt
@@ -840,6 +955,14 @@ export class RaceGame {
     const moving = this.phase !== 'countdown'
     const player = this.player
     const now = online ? performance.now() : 0
+    // 電腦照誰調整動力：單機是玩家；線上是還在跑的真人裡最前面的
+    const pace = online
+      ? this.driving
+        ? this.leaderProgress()
+        : null
+      : player && this.phase === 'racing'
+        ? player.car.progress
+        : null
     for (const r of this.racers) {
       if (r.remote) {
         r.remote.apply(r.car, track, this.clock, h)
@@ -851,8 +974,8 @@ export class RaceGame {
       } else if (r.ai) {
         driveAi(r.car, r.ai, track, this.cars, h, r.ctl)
         // 領先太多就放慢一點、落後太多就加把勁，比賽才不會一下子就拉開
-        if (player && this.phase === 'racing' && r !== player) {
-          const gap = r.car.progress - player.car.progress
+        if (pace !== null && r !== player) {
+          const gap = r.car.progress - pace
           r.car.power = r.ai.power * (1 + clamp(-gap / 600, -0.05, 0.06))
         }
       } else Object.assign(r.ctl, this.playerCtl)
@@ -869,33 +992,37 @@ export class RaceGame {
   }
 
   /**
-   * 線上：自己的車和別人的車相撞。自己推開、拿自己那一半的速度變化；對方那一半記下來送過去。
+   * 線上碰撞。自己這邊開的車（自己的車、負責開的電腦）互撞照單機版算；
+   * 撞到別人的車時只推開自己這台、拿自己那一半的速度變化，對方那一半記下來送過去。
    * 對方剛送過這次碰撞的通知（已經套用了）就不再算一次。
    */
   private collideOnline(now: number) {
-    const me = this.player
     const online = this.online
-    if (!me || !online) return
-    for (let i = 0; i < this.racers.length; i++) {
-      const r = this.racers[i]
-      if (!r.remote?.visible(now)) continue
-      const recent = now - r.hitAt < BUMP_DEDUPE_MS
-      const vx = me.car.vx
-      const vz = me.car.vz
-      if (!collideRemote(me.car, r.car, this.kick)) continue
-      if (recent) {
-        // 這次碰撞已經照對方的通知算過了：位置照樣推開，速度不要再改一次
-        me.car.vx = vx
-        me.car.vz = vz
-        continue
+    if (!online) return
+    if (this.localCars.length > 1) collideCars(this.localCars)
+    for (const mine of this.locals) {
+      for (const r of this.racers) {
+        if (!r.remote?.visible(now)) continue
+        const key = pairKey(mine.seat, r.seat)
+        const recent = now - (this.hitAt.get(key) ?? -Infinity) < BUMP_DEDUPE_MS
+        const vx = mine.car.vx
+        const vz = mine.car.vz
+        if (!collideRemote(mine.car, r.car, this.kick)) continue
+        if (recent) {
+          // 這次碰撞已經照對方的通知算過了：位置照樣推開，速度不要再改一次
+          mine.car.vx = vx
+          mine.car.vz = vz
+          continue
+        }
+        this.hitAt.set(key, now)
+        const pending = online.bumps.get(key)
+        if (pending) {
+          pending.x += this.kick.x
+          pending.z += this.kick.z
+        } else {
+          online.bumps.set(key, { seat: r.seat, by: mine.bot ? mine.seat : undefined, x: this.kick.x, z: this.kick.z })
+        }
       }
-      r.hitAt = now
-      const seat = this.seatOf[i]
-      const pending = online.bumps.get(seat)
-      if (pending) {
-        pending.x += this.kick.x
-        pending.z += this.kick.z
-      } else online.bumps.set(seat, { x: this.kick.x, z: this.kick.z })
     }
   }
 
@@ -921,8 +1048,10 @@ export class RaceGame {
           this.audio.lap(final)
           this.emit({ type: 'lap', lap: done, ms, at: this.raceTime * 1000, best: best && done > 1, final })
         }
-      } else if (this.phase === 'finished' && r.finish !== null) {
-        this.emit({ type: 'standings', standings: this.standings() })
+      } else {
+        // 自己負責開的電腦：替它回報過線
+        if (r.bot) this.online?.link.botLap(r.seat, done, Math.round(this.raceTime * 1000))
+        if (this.phase === 'finished' && r.finish !== null) this.emit({ type: 'standings', standings: this.standings() })
       }
     }
   }

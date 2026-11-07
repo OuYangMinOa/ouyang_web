@@ -5,7 +5,7 @@ import { Countdown } from '../shared/Party'
 import { load, save } from '../shared/storage'
 import { Segmented } from '../shared/ui'
 import { useParty } from '../shared/useParty'
-import type { Difficulty } from './ai'
+import { DIFFICULTIES, type Difficulty } from './ai'
 import { formatMs, hexColor } from './format'
 import {
   CAMERA_NAMES,
@@ -57,11 +57,6 @@ const OPPONENTS = [
   { value: 3, label: '3 台' },
   { value: 5, label: '5 台' },
   { value: 7, label: '7 台' },
-]
-const DIFFICULTIES: { value: Difficulty; label: string }[] = [
-  { value: 'easy', label: '簡單' },
-  { value: 'normal', label: '普通' },
-  { value: 'hard', label: '困難' },
 ]
 
 const isCoarse = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
@@ -128,7 +123,7 @@ export default function Racing() {
     onEvent: (e) => {
       if (e?.type === 'cars') gameRef.current?.onlineCars(e.cars)
       else if (e?.type === 'pong') gameRef.current?.onlinePong(e.t, e.clock)
-      else if (e?.type === 'bump') gameRef.current?.onlineBump(e.from, e.v)
+      else if (e?.type === 'bump') gameRef.current?.onlineBump(e.from, e.to, e.v)
     },
   })
   const online = mode === 'online'
@@ -286,13 +281,13 @@ export default function Racing() {
     if (startedGame.current === view.game) return
     startedGame.current = view.game
     const me = view.you !== null && view.players[view.you]?.finish === null ? view.you : null
-    const resume =
-      me !== null && view.resume && view.elapsed > 0 ? { state: view.resume, lapTimes: view.players[me].lapTimes } : null
+    const resume = me !== null && view.resume && view.elapsed > 0 ? view.resume : null
+    const myLaps = me !== null ? view.players[me].lapTimes : []
     setResult(null)
     setStandings(null)
     setPaused(false)
     setHint(null)
-    setBestLap(resume && resume.lapTimes.length ? Math.min(...resume.lapTimes) : null)
+    setBestLap(resume && myLaps.length ? Math.min(...myLaps) : null)
     setCountdown(null)
     setToast(null)
     setRaceKind('online')
@@ -306,11 +301,17 @@ export default function Racing() {
         me,
         goAt: goAtOf(view, party.viewAt),
         resume,
+        results: view.players,
+        bots: view.bots,
+        driving: view.you !== null && view.driver === view.you,
+        difficulty: view.difficulty,
+        botStates: view.elapsed > 0 ? view.botStates : [],
       },
       {
-        state: (d) => party.act({ type: 'state', d }),
+        state: (d, bots) => party.act({ type: 'state', ...(d ? { d } : {}), ...(bots.length ? { bots } : {}) }),
+        botLap: (bot, lap, time) => party.act({ type: 'lap', lap, time: Math.max(0, time), bot }),
         ping: (t) => party.act({ type: 'ping', t }),
-        bump: (seat, vx, vz) => party.act({ type: 'bump', seat, v: [vx, vz] }),
+        bump: (hits) => party.act({ type: 'bump', hits }),
       },
     )
     setWatchSeat(me === null ? game.focusSeat() : null)
@@ -321,6 +322,7 @@ export default function Racing() {
     const game = gameRef.current
     if (raceKind !== 'online' || !game || !view || startedGame.current !== view.game) return
     game.onlineResults(view.players)
+    game.setDriving(view.you !== null && view.driver === view.you)
     if (view.ended) game.endOnline()
     else game.syncClock(goAtOf(view, party.viewAt))
   }, [raceKind, view, party.viewAt])

@@ -74,8 +74,8 @@ async fn two_racers_share_states_and_impossible_laps_are_rejected() {
     let room = a.until(|m| m["type"] == "room").await;
     assert_eq!(room["min"], 2);
     assert_eq!(room["max"], 8);
-    assert_eq!(room["maxBots"], 0);
-    assert_eq!(room["options"], json!({ "track": "coast", "laps": 3 }));
+    assert_eq!(room["maxBots"], 7);
+    assert_eq!(room["options"], json!({ "track": "coast", "laps": 3, "difficulty": "normal" }));
 
     let mut b = Client::connect(&addr, &code, "bob").await;
     a.until(|m| m["type"] == "room" && m["players"].as_array().unwrap().len() == 2).await;
@@ -92,6 +92,8 @@ async fn two_racers_share_states_and_impossible_laps_are_rejected() {
     assert_eq!(view["laps"], 1);
     assert_eq!(view["you"], 0);
     assert!(view["resume"].is_null());
+    assert_eq!(view["bots"], json!([]));
+    assert!(view["driver"].is_null(), "沒有電腦就不用人開");
     let mut grid: Vec<u64> = view["grid"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
     grid.sort();
     assert_eq!(grid, vec![0, 1]);
@@ -125,4 +127,40 @@ async fn two_racers_share_states_and_impossible_laps_are_rejected() {
     tokio::time::sleep(Duration::from_millis(starts_in + 200)).await;
     a.act(json!({ "type": "lap", "lap": 1, "time": 30000 })).await;
     assert_eq!(a.until(|m| m["type"] == "notice").await["message"], "這圈快得不合理，不算");
+}
+
+#[tokio::test]
+async fn one_player_drives_the_bots() {
+    let (app, addr) = serve().await;
+    let reply = app.call("POST", "/api/games/racing/party", None, None).await;
+    let code = reply.body["code"].as_str().unwrap().to_owned();
+
+    let mut a = Client::connect(&addr, &code, "alice").await;
+    a.until(|m| m["type"] == "room").await;
+    a.send(json!({ "type": "addBot" })).await;
+    a.until(|m| m["type"] == "room" && m["players"].as_array().unwrap().len() == 2).await;
+    a.send(json!({ "type": "options", "options": { "track": "city", "laps": 1, "difficulty": "hard" } })).await;
+    a.until(|m| m["type"] == "room" && m["options"]["difficulty"] == "hard").await;
+    // 一個人加一台電腦就能開
+    a.send(json!({ "type": "start" })).await;
+    let view = a.until(|m| m["type"] == "view" && !m["view"].is_null()).await["view"].clone();
+    assert_eq!(view["bots"], json!([1]));
+    assert_eq!(view["driver"], 0);
+    assert_eq!(view["difficulty"], "hard");
+
+    // 電腦的狀態跟著自己的一起送，轉送時是電腦的座位
+    let mut bot = vec![json!(1)];
+    bot.extend(state(7.5).as_array().unwrap().iter().cloned());
+    a.act(json!({ "type": "state", "d": state(1.5), "bots": [bot] })).await;
+    let cars = a
+        .until(|m| {
+            m["type"] == "event" && m["event"]["cars"].as_array().is_some_and(|cars| cars.iter().any(|row| row[0] == 1))
+        })
+        .await["event"]["cars"]
+        .clone();
+    let row = cars.as_array().unwrap().iter().find(|row| row[0] == 1).unwrap();
+    assert_eq!(row[2], 7.5);
+    // 撞擊通知要用新的格式
+    a.act(json!({ "type": "bump", "seat": 1, "v": [1, 0] })).await;
+    assert_eq!(a.until(|m| m["type"] == "notice").await["message"], "看不懂這個動作");
 }

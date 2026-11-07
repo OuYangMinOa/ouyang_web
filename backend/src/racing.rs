@@ -12,11 +12,14 @@
 //!
 //!   改用戶端可以作弊，但改不出不可能的成績。
 //! - 車子互撞在各自的瀏覽器裡算，每個人只推開自己的車；撞到別人時把對方該拿到的速度變化送過去
-//!   （`Action::Bump`，伺服器只轉給被撞的人），不然被撞的人常常看不到重疊、感覺不到被撞。
+//!   （`Action::Bump`，伺服器只轉給開被撞那台車的人），不然被撞的人常常看不到重疊、感覺不到被撞。
 //! - 對時（`Action::Ping`）：用戶端照來回時間對準伺服器的比賽時鐘，別人的車才推算得準。
 //! - 開局倒數 `COUNTDOWN`。第一個人跑完後，其他人還有 `GRACE` 可以跑。
-//!   時間到時，沒跑完的照圈數和進度排名；連著線的人都跑完就提早結算。
-//! - 不能加電腦：伺服器沒有物理，沒辦法替電腦開車。
+//!   時間到時，沒跑完的照圈數和進度排名；連著線的真人都跑完就提早結算（不等電腦）。
+//! - 電腦：伺服器沒有物理，所以指定一位真人（`driver`）在他的瀏覽器裡開所有電腦，
+//!   電腦的狀態跟著他自己的狀態一起送（`State::bots`），過線也由他回報，檢查規則跟真人一樣。
+//!   撞到電腦的通知轉給他。他斷線、或 `BOT_STALE` 沒送電腦的狀態（切到背景時瀏覽器不跑畫面）
+//!   就輪給下一位連著線的真人，新的人從電腦最後的位置接著開。
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -48,6 +51,10 @@ const PROGRESS: usize = 9;
 const MAX_VALUE: f64 = 1e7;
 /// 一次碰撞最多讓對方的速度變多少（公尺／秒）：兩台都用極速正面對撞也不會超過
 const MAX_BUMP: f64 = 2.0 * MAX_SPEED;
+/// 一則撞擊通知最多幾筆（自己的車加上開的電腦，同時撞到的車不會比這多）
+const MAX_HITS: usize = 16;
+/// 電腦的狀態多久沒進來就換人開
+const BOT_STALE: Duration = Duration::from_secs(2);
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(rename_all = "lowercase")]
@@ -78,32 +85,65 @@ impl Track {
     }
 }
 
+/// 電腦的難度（電腦在用戶端開，伺服器只轉告；對應 `ai.ts` 的 Difficulty）
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Difficulty {
+    Easy,
+    #[default]
+    Normal,
+    Hard,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Options {
     pub track: Track,
     pub laps: u32,
+    pub difficulty: Difficulty,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { track: Track::Coast, laps: 3 }
+        Self { track: Track::Coast, laps: 3, difficulty: Difficulty::Normal }
     }
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Action {
-    /// 自己的車現在的狀態，格式見 `STATE_LEN`
-    State { d: [f64; STATE_LEN] },
-    /// 跑完第 `lap` 圈；`time` 是過線時的比賽時間（毫秒，從起跑算）
-    Lap { lap: u32, time: u64 },
+    /// 自己的車現在的狀態，格式見 `STATE_LEN`；跑完後重新整理（沒有自己的車）時沒有 `d`。
+    /// 負責開電腦的人順便送電腦的狀態，每列是 [座位, ...狀態]
+    State {
+        #[serde(default)]
+        d: Option<[f64; STATE_LEN]>,
+        #[serde(default)]
+        bots: Vec<[f64; STATE_LEN + 1]>,
+    },
+    /// 跑完第 `lap` 圈；`time` 是過線時的比賽時間（毫秒，從起跑算）。`bot` 是負責開電腦的人替那台電腦回報
+    Lap {
+        lap: u32,
+        time: u64,
+        #[serde(default)]
+        bot: Option<usize>,
+    },
     /// 對時：伺服器只回給送的人 `{type:"pong", t, clock}`，`t` 原封不動、`clock` 是伺服器現在的比賽時間
     /// （毫秒，起跑前是負的）。用戶端照來回時間估自己的時鐘差多少（見 `online.ts`）
     Ping { t: f64 },
-    /// 撞到別人：撞人的瀏覽器算出被撞的車該拿到的速度變化 `v`（公尺／秒，[vx, vz]），
-    /// 伺服器只轉給那個座位 `{type:"bump", from, v}`，由他自己套到自己的車上
-    Bump { seat: usize, v: [f64; 2] },
+    /// 撞到別人：撞人的瀏覽器算出被撞的車該拿到的速度變化。
+    /// 伺服器轉給開那台車的人 `{type:"bump", from, to, v}`（被撞的是電腦就轉給負責開電腦的人），由他套到那台車上
+    Bump { hits: Vec<Hit> },
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Hit {
+    /// 被撞的座位
+    seat: usize,
+    /// 撞人的是自己開的電腦（座位）；自己的車撞的不用填
+    #[serde(default)]
+    by: Option<usize>,
+    /// 被撞的車該拿到的速度變化（公尺／秒，[vx, vz]）
+    v: [f64; 2],
 }
 
 struct Racer {
@@ -147,6 +187,20 @@ pub struct Racing {
     ended: Option<Duration>,
     /// 這個房間累計的分數（pid → 分）
     scores: HashMap<u32, u32>,
+    /// 每個座位是不是電腦
+    bots: Vec<bool>,
+    /// 負責開電腦的座位；沒有電腦、或沒有真人連著線是 None
+    driver: Option<usize>,
+    /// 最後一次收到電腦狀態的時間（換人開時重算；起跑前不會早於起跑時間，讓大家有時間載入）
+    bots_heard: Instant,
+}
+
+/// 送出去的一列車子狀態：[座位, ...狀態]
+fn row(seat: usize, d: &[f64; STATE_LEN]) -> Value {
+    let mut row = Vec::with_capacity(STATE_LEN + 1);
+    row.push(json!(seat));
+    row.extend(d.iter().map(|v| json!(v)));
+    Value::Array(row)
 }
 
 /// 1:23.45
@@ -158,6 +212,67 @@ fn lap_text(ms: u64) -> String {
 impl Racing {
     fn deadline(&self) -> Instant {
         self.grace_at.map_or(self.limit_at, |g| g.min(self.limit_at))
+    }
+
+    fn has_bots(&self) -> bool {
+        self.bots.contains(&true)
+    }
+
+    fn is_bot(&self, seat: usize) -> bool {
+        self.bots.get(seat).copied().unwrap_or(false)
+    }
+
+    /// 換人開電腦：從 `after` 的下一個座位開始輪，找連著線的真人（輪一圈都沒有別人就還是 `after` 自己）
+    fn hand_over(&mut self, after: Option<usize>, ctx: &mut Ctx) {
+        let n = self.bots.len();
+        let first = after.map_or(0, |s| s + 1);
+        let next = (0..n).map(|k| (first + k) % n).find(|&s| !self.bots[s] && ctx.seats[s].online);
+        self.bots_heard = ctx.now.max(self.go);
+        if next != self.driver {
+            self.driver = next;
+            ctx.changed();
+        }
+    }
+
+    /// 記下一台車的狀態；亂送的數字直接丟掉，進度不能比一路用極速跑還多
+    fn store(&mut self, seat: usize, d: [f64; STATE_LEN], ctx: &Ctx) {
+        if d.iter().any(|v| !v.is_finite() || v.abs() > MAX_VALUE) {
+            return;
+        }
+        let elapsed = ctx.now.saturating_duration_since(self.go).as_secs_f64();
+        let r = &mut self.racers[seat];
+        r.progress = d[PROGRESS].min((elapsed + 1.0) * MAX_SPEED);
+        r.state = Some(d);
+        r.fresh = true;
+    }
+
+    /// 撞擊通知：檢查完轉給開被撞那台車的人
+    fn bump(&self, seat: usize, hit: &Hit, ctx: &mut Ctx) {
+        let n = self.racers.len();
+        let from = hit.by.unwrap_or(seat);
+        // 只有負責開電腦的人可以替電腦撞人
+        if hit.by.is_some() && (self.driver != Some(seat) || !self.is_bot(from)) {
+            return;
+        }
+        let target = hit.seat;
+        // 撞自己、自己開的車互撞（在自己的瀏覽器裡就算好了）、沒有這個座位、亂送的數字都不轉
+        let ok = target != from
+            && target != seat
+            && target < n
+            && hit.v.iter().all(|x| x.is_finite())
+            && hit.v[0].hypot(hit.v[1]) <= MAX_BUMP;
+        if !ok {
+            return;
+        }
+        let to = if self.is_bot(target) {
+            match self.driver {
+                Some(d) if d != seat => d,
+                _ => return,
+            }
+        } else {
+            target
+        };
+        ctx.emit(To::Seat(to), json!({ "type": "bump", "from": from, "to": target, "v": hit.v }));
     }
 
     /// 名次：跑完的照完賽時間，沒跑完的照圈數、再照進度；同樣的照座位
@@ -242,6 +357,8 @@ impl PartyGame for Racing {
     const ID: &'static str = "racing";
     const MIN_PLAYERS: usize = 2;
     const MAX_PLAYERS: usize = 8;
+    /// 至少要一個真人負責開電腦，所以最多 7 台
+    const MAX_BOTS: usize = 7;
     /// 合併轉送車子狀態的間隔
     const TICK: Duration = Duration::from_millis(50);
     /// 狀態每秒 20 則，加上碰撞（用戶端最多每秒 10 則）、對時、過線、聊天
@@ -268,6 +385,8 @@ impl PartyGame for Racing {
             format!("新的一局：{}，{} 圈，起跑位置抽好了。5 秒後起跑！", options.track.name(), options.laps),
         );
         ctx.changed();
+        let bots: Vec<bool> = ctx.seats.iter().map(|s| s.bot).collect();
+        let driver = if bots.contains(&true) { (0..n).find(|&s| !bots[s] && ctx.seats[s].online) } else { None };
         Self {
             game: previous.map_or(1, |p| p.game + 1),
             options: options.clone(),
@@ -279,6 +398,9 @@ impl PartyGame for Racing {
             grace_at: None,
             ended: None,
             scores: previous.map(|p| p.scores.clone()).unwrap_or_default(),
+            bots,
+            driver,
+            bots_heard: go,
         }
     }
 
@@ -289,21 +411,34 @@ impl PartyGame for Racing {
             return Ok(());
         }
         match action {
-            Action::State { d } => {
+            Action::State { d, bots } => {
                 // 狀態只靠 tick 合併轉送，不重送 view；格式不對的直接丟掉（每秒 20 則，不要每則都回錯誤）
                 ctx.quiet();
-                if d.iter().any(|v| !v.is_finite() || v.abs() > MAX_VALUE) {
-                    return Ok(());
+                if let Some(d) = d {
+                    self.store(seat, d, ctx);
                 }
-                let elapsed = ctx.now.saturating_duration_since(self.go).as_secs_f64();
-                let r = &mut self.racers[seat];
-                // 進度不能比一路用極速跑還多
-                r.progress = d[PROGRESS].min((elapsed + 1.0) * MAX_SPEED);
-                r.state = Some(d);
-                r.fresh = true;
+                // 電腦的狀態只收負責開的人送的（剛換人時，前一個人還在路上的就不要了）
+                if !bots.is_empty() && self.driver == Some(seat) {
+                    self.bots_heard = ctx.now;
+                    for row in bots {
+                        let bot = row[0];
+                        if bot >= 0.0 && bot.fract() == 0.0 && self.is_bot(bot as usize) {
+                            let mut d = [0.0; STATE_LEN];
+                            d.copy_from_slice(&row[1..]);
+                            self.store(bot as usize, d, ctx);
+                        }
+                    }
+                }
                 Ok(())
             }
-            Action::Lap { lap, time } => self.lap(seat, lap, time, ctx),
+            Action::Lap { lap, time, bot: None } => self.lap(seat, lap, time, ctx),
+            Action::Lap { lap, time, bot: Some(bot) } => {
+                // 電腦的過線：只收負責開的人送的；不合理就不算，不用告訴他（不是他自己的成績）
+                if self.driver != Some(seat) || !self.is_bot(bot) || self.lap(bot, lap, time, ctx).is_err() {
+                    ctx.quiet();
+                }
+                Ok(())
+            }
             Action::Ping { t } => {
                 ctx.quiet();
                 let clock = if ctx.now >= self.go {
@@ -314,15 +449,10 @@ impl PartyGame for Racing {
                 ctx.emit(To::Seat(seat), json!({ "type": "pong", "t": t, "clock": clock }));
                 Ok(())
             }
-            Action::Bump { seat: target, v } => {
+            Action::Bump { hits } => {
                 ctx.quiet();
-                // 撞自己、沒有這個座位、亂送的數字都不轉
-                let ok = target != seat
-                    && target < self.racers.len()
-                    && v.iter().all(|x| x.is_finite())
-                    && v[0].hypot(v[1]) <= MAX_BUMP;
-                if ok {
-                    ctx.emit(To::Seat(target), json!({ "type": "bump", "from": seat, "v": v }));
+                for hit in hits.iter().take(MAX_HITS) {
+                    self.bump(seat, hit, ctx);
                 }
                 Ok(())
             }
@@ -341,24 +471,36 @@ impl PartyGame for Racing {
             .filter_map(|(seat, r)| {
                 let state = r.state.filter(|_| r.fresh)?;
                 r.fresh = false;
-                let mut row = Vec::with_capacity(STATE_LEN + 1);
-                row.push(json!(seat));
-                row.extend(state.iter().map(|v| json!(v)));
-                Some(Value::Array(row))
+                Some(row(seat, &state))
             })
             .collect();
         if !cars.is_empty() {
             ctx.emit(To::All, json!({ "type": "cars", "cars": cars }));
         }
-        // 有人跑完、而且連著線的人都跑完了（斷線的不等），或時間到了就結算
+        // 負責開電腦的人一陣子沒送電腦的狀態（切到背景、當掉）：換人開
+        if self.has_bots() && ctx.now >= self.go {
+            let stale = ctx.now.saturating_duration_since(self.bots_heard) > BOT_STALE;
+            if self.driver.is_none() || stale {
+                self.hand_over(self.driver, ctx);
+            }
+        }
+        // 有人跑完、而且連著線的真人都跑完了（斷線的、電腦都不等），或時間到了就結算
         let someone_done = self.racers.iter().any(|r| r.finish.is_some());
-        let all_done = (0..self.racers.len()).all(|s| self.racers[s].finish.is_some() || !ctx.seats[s].online);
+        let all_done =
+            (0..self.racers.len()).all(|s| self.racers[s].finish.is_some() || !ctx.seats[s].online || self.bots[s]);
         if (someone_done && all_done) || ctx.now >= self.deadline() {
             self.end(ctx);
         }
     }
 
-    fn presence(&mut self, _seat: usize, _online: bool, ctx: &mut Ctx) {
+    fn presence(&mut self, seat: usize, online: bool, ctx: &mut Ctx) {
+        if self.has_bots() && self.ended.is_none() {
+            if !online && self.driver == Some(seat) {
+                self.hand_over(Some(seat), ctx);
+            } else if online && self.driver.is_none() {
+                self.hand_over(None, ctx);
+            }
+        }
         ctx.changed();
     }
 
@@ -378,6 +520,17 @@ impl PartyGame for Racing {
             })
             .collect();
         let elapsed = self.ended.unwrap_or_else(|| now.saturating_duration_since(self.go));
+        let bot_states: Vec<Value> = if seat.is_some() && seat == self.driver {
+            (0..self.racers.len())
+                .filter(|&s| self.bots[s])
+                .filter_map(|s| {
+                    let d = self.racers[s].state?;
+                    Some(row(s, &d))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         json!({
             "game": self.game,
             "track": self.options.track,
@@ -392,6 +545,11 @@ impl PartyGame for Racing {
             // 自己最後送出的狀態：重新整理頁面後從這裡接著跑，不用回到起跑線
             "resume": seat.and_then(|s| self.racers[s].state),
             "players": players,
+            "difficulty": self.options.difficulty,
+            "bots": (0..self.bots.len()).filter(|&s| self.bots[s]).collect::<Vec<_>>(),
+            "driver": self.driver,
+            // 負責開電腦的人才拿得到：電腦最後的狀態（重新整理後從這裡接著開），每列是 [座位, ...狀態]
+            "botStates": bot_states,
         })
     }
 
@@ -406,21 +564,32 @@ mod tests {
     use crate::party::{Outbox, Rng, SeatInfo, test_ctx};
 
     fn seats(n: usize) -> Vec<SeatInfo> {
-        (0..n).map(|i| SeatInfo { pid: i as u32 + 1, name: format!("P{i}"), bot: false, online: true }).collect()
+        mixed(n, 0)
+    }
+
+    /// 前面 `humans` 個真人，後面 `bots` 個電腦
+    fn mixed(humans: usize, bots: usize) -> Vec<SeatInfo> {
+        (0..humans + bots)
+            .map(|i| SeatInfo { pid: i as u32 + 1, name: format!("P{i}"), bot: i >= humans, online: true })
+            .collect()
     }
 
     /// 開一局，起跑時間設成 `ago` 之前（測試不用真的等）
     fn game(n: usize, laps: u32, ago: Duration) -> (Racing, Vec<SeatInfo>, Rng) {
-        let seats = seats(n);
+        start_with(seats(n), laps, ago)
+    }
+
+    fn start_with(seats: Vec<SeatInfo>, laps: u32, ago: Duration) -> (Racing, Vec<SeatInfo>, Rng) {
         let mut rng = Rng::new();
         let mut out = Outbox::default();
         let now = Instant::now();
         let mut game = {
             let mut ctx = test_ctx(now, &mut rng, &seats, &mut out);
-            Racing::start(&Options { track: Track::City, laps }, None, &mut ctx)
+            Racing::start(&Options { track: Track::City, laps, ..Options::default() }, None, &mut ctx)
         };
         game.go = now - ago;
         game.limit_at = game.go + LAP_LIMIT * laps;
+        game.bots_heard = now;
         (game, seats, rng)
     }
 
@@ -438,7 +607,20 @@ mod tests {
     }
 
     fn state(progress: f64) -> Action {
-        Action::State { d: [1000.0, 1.0, 2.0, 0.5, 3.0, 4.0, 0.1, -0.2, 3.0, progress] }
+        Action::State { d: Some([1000.0, 1.0, 2.0, 0.5, 3.0, 4.0, 0.1, -0.2, 3.0, progress]), bots: vec![] }
+    }
+
+    fn lap(lap: u32, time: u64) -> Action {
+        Action::Lap { lap, time, bot: None }
+    }
+
+    fn bump(seat: usize, by: Option<usize>, v: [f64; 2]) -> Action {
+        Action::Bump { hits: vec![Hit { seat, by, v }] }
+    }
+
+    /// 負責開電腦的人送的狀態：自己的車沒有，只有電腦 `bot`
+    fn bot_state(bot: f64, progress: f64) -> Action {
+        Action::State { d: None, bots: vec![[bot, 1000.0, 1.0, 2.0, 0.5, 3.0, 4.0, 0.1, -0.2, 3.0, progress]] }
     }
 
     /// 把起跑時間改成 `secs` 秒前
@@ -449,7 +631,6 @@ mod tests {
     #[test]
     fn laps_must_come_in_order_and_be_possible() {
         let (mut g, seats, mut rng) = game(2, 3, Duration::from_secs(16));
-        let lap = |lap, time| Action::Lap { lap, time };
         assert!(act(&mut g, &seats, &mut rng, 0, lap(2, 15_000)).is_err(), "跳過第一圈");
         // 夜城一圈至少 19.7 秒
         assert!(act(&mut g, &seats, &mut rng, 0, lap(1, 15_000)).is_err());
@@ -469,7 +650,7 @@ mod tests {
     fn lap_times_far_behind_the_server_clock_are_pulled_forward() {
         let (mut g, seats, mut rng) = game(2, 1, Duration::from_secs(40));
         // 說自己 20 秒就跑完，但伺服器已經過了 40 秒：最多只能早 3 秒
-        act(&mut g, &seats, &mut rng, 0, Action::Lap { lap: 1, time: 20_000 }).unwrap();
+        act(&mut g, &seats, &mut rng, 0, lap(1, 20_000)).unwrap();
         let finish = g.racers[0].finish.unwrap();
         assert!((36_900..=37_100).contains(&finish), "完賽時間 {finish}");
     }
@@ -478,7 +659,7 @@ mod tests {
     fn nothing_counts_before_the_start() {
         let (mut g, seats, mut rng) = game(2, 1, Duration::ZERO);
         g.go = Instant::now() + Duration::from_secs(3);
-        assert!(act(&mut g, &seats, &mut rng, 0, Action::Lap { lap: 1, time: 30_000 }).is_err());
+        assert!(act(&mut g, &seats, &mut rng, 0, lap(1, 30_000)).is_err());
     }
 
     #[test]
@@ -508,7 +689,7 @@ mod tests {
         // 亂送的數字直接丟掉
         let mut bad = [0.0; STATE_LEN];
         bad[1] = 1e12;
-        act(&mut g, &seats, &mut rng, 1, Action::State { d: bad }).unwrap();
+        act(&mut g, &seats, &mut rng, 1, Action::State { d: Some(bad), bots: vec![] }).unwrap();
         assert!(g.racers[1].state.is_none());
     }
 
@@ -517,7 +698,7 @@ mod tests {
         let (mut g, seats, mut rng) = game(3, 1, Duration::from_secs(40));
         act(&mut g, &seats, &mut rng, 1, state(900.0)).unwrap();
         act(&mut g, &seats, &mut rng, 2, state(1200.0)).unwrap();
-        act(&mut g, &seats, &mut rng, 0, Action::Lap { lap: 1, time: 39_000 }).unwrap();
+        act(&mut g, &seats, &mut rng, 0, lap(1, 39_000)).unwrap();
         assert!(g.grace_at.is_some());
         tick(&mut g, &seats, &mut rng, Instant::now());
         assert!(g.ended.is_none(), "其他人還在跑");
@@ -536,10 +717,10 @@ mod tests {
     fn ends_early_when_everyone_online_has_finished() {
         let (mut g, mut seats, mut rng) = game(3, 1, Duration::from_secs(40));
         seats[2].online = false;
-        act(&mut g, &seats, &mut rng, 0, Action::Lap { lap: 1, time: 38_000 }).unwrap();
+        act(&mut g, &seats, &mut rng, 0, lap(1, 38_000)).unwrap();
         tick(&mut g, &seats, &mut rng, Instant::now());
         assert!(g.ended.is_none());
-        act(&mut g, &seats, &mut rng, 1, Action::Lap { lap: 1, time: 39_000 }).unwrap();
+        act(&mut g, &seats, &mut rng, 1, lap(1, 39_000)).unwrap();
         tick(&mut g, &seats, &mut rng, Instant::now());
         assert!(g.ended.is_some(), "斷線的人不用等");
         assert_eq!(g.racers[0].place, Some(1));
@@ -578,20 +759,120 @@ mod tests {
         let (mut g, seats, mut rng) = game(3, 1, Duration::from_secs(5));
         let mut out = Outbox::default();
         let mut ctx = test_ctx(Instant::now(), &mut rng, &seats, &mut out);
-        g.act(0, Action::Bump { seat: 2, v: [3.0, -1.5] }, &mut ctx).unwrap();
-        g.act(0, Action::Bump { seat: 0, v: [3.0, 0.0] }, &mut ctx).unwrap();
-        g.act(0, Action::Bump { seat: 7, v: [3.0, 0.0] }, &mut ctx).unwrap();
-        g.act(0, Action::Bump { seat: 1, v: [500.0, 0.0] }, &mut ctx).unwrap();
+        g.act(0, bump(2, None, [3.0, -1.5]), &mut ctx).unwrap();
+        g.act(0, bump(0, None, [3.0, 0.0]), &mut ctx).unwrap();
+        g.act(0, bump(7, None, [3.0, 0.0]), &mut ctx).unwrap();
+        g.act(0, bump(1, None, [500.0, 0.0]), &mut ctx).unwrap();
+        g.act(0, bump(1, Some(2), [3.0, 0.0]), &mut ctx).unwrap();
         let events = out.events();
-        assert_eq!(events.len(), 1, "撞自己、沒有的座位、太大的都不轉");
+        assert_eq!(events.len(), 1, "撞自己、沒有的座位、太大的、冒充別人的車都不轉");
         assert!(matches!(events[0].0, To::Seat(2)));
-        assert_eq!(events[0].1, json!({ "type": "bump", "from": 0, "v": [3.0, -1.5] }));
+        assert_eq!(events[0].1, json!({ "type": "bump", "from": 0, "to": 2, "v": [3.0, -1.5] }));
+    }
+
+    #[test]
+    fn bot_states_come_only_from_the_driver() {
+        let (mut g, seats, mut rng) = start_with(mixed(2, 2), 1, Duration::from_secs(10));
+        assert_eq!(g.driver, Some(0), "第一個連著線的真人負責開電腦");
+        act(&mut g, &seats, &mut rng, 1, bot_state(2.0, 50.0)).unwrap();
+        assert!(g.racers[2].state.is_none(), "不是負責開的人");
+        act(&mut g, &seats, &mut rng, 0, bot_state(2.0, 50.0)).unwrap();
+        act(&mut g, &seats, &mut rng, 0, bot_state(1.0, 60.0)).unwrap();
+        act(&mut g, &seats, &mut rng, 0, bot_state(3.5, 60.0)).unwrap();
+        assert_eq!(g.racers[2].progress, 50.0);
+        assert!(g.racers[1].state.is_none(), "真人的車不能替他送");
+        assert!(g.racers[3].state.is_none());
+        // 電腦的狀態跟著一起轉送
+        let out = tick(&mut g, &seats, &mut rng, Instant::now());
+        assert_eq!(out.events()[0].1["cars"][0][0], 2);
+        // 重新整理時接著開：只有負責開的人拿得到電腦最後的狀態
+        let mine = g.view(Some(0), Instant::now());
+        assert_eq!(mine["bots"], json!([2, 3]));
+        assert_eq!(mine["driver"], 0);
+        assert_eq!(mine["botStates"][0][0], 2);
+        assert_eq!(mine["botStates"][0][PROGRESS + 1], 50.0);
+        assert_eq!(g.view(Some(1), Instant::now())["botStates"], json!([]));
+    }
+
+    #[test]
+    fn the_bots_pass_on_when_the_driver_goes_quiet_or_offline() {
+        let (mut g, mut seats, mut rng) = start_with(mixed(3, 1), 1, Duration::from_secs(10));
+        assert_eq!(g.driver, Some(0));
+        tick(&mut g, &seats, &mut rng, Instant::now() + Duration::from_secs(1));
+        assert_eq!(g.driver, Some(0), "還沒到換人的時間");
+        // 太久沒送電腦的狀態（切到背景）：輪給下一位
+        tick(&mut g, &seats, &mut rng, Instant::now() + BOT_STALE + Duration::from_secs(1));
+        assert_eq!(g.driver, Some(1));
+        act(&mut g, &seats, &mut rng, 0, bot_state(3.0, 80.0)).unwrap();
+        assert!(g.racers[3].state.is_none(), "換人後前一個人送的不要");
+        // 負責開的人斷線：跳過斷線的人輪下去
+        seats[2].online = false;
+        seats[1].online = false;
+        let mut out = Outbox::default();
+        let mut ctx = test_ctx(Instant::now(), &mut rng, &seats, &mut out);
+        g.presence(1, false, &mut ctx);
+        assert_eq!(g.driver, Some(0));
+        // 只剩自己一個真人：切到背景也只能等他回來
+        tick(&mut g, &seats, &mut rng, Instant::now() + BOT_STALE * 3);
+        assert_eq!(g.driver, Some(0));
+        // 大家都斷線就沒人開，有人回來再交給他
+        seats[0].online = false;
+        let mut ctx = test_ctx(Instant::now(), &mut rng, &seats, &mut out);
+        g.presence(0, false, &mut ctx);
+        assert_eq!(g.driver, None);
+        seats[2].online = true;
+        let mut ctx = test_ctx(Instant::now(), &mut rng, &seats, &mut out);
+        g.presence(2, true, &mut ctx);
+        assert_eq!(g.driver, Some(2));
+    }
+
+    #[test]
+    fn bot_laps_and_bumps_go_through_the_driver() {
+        let (mut g, seats, mut rng) = start_with(mixed(2, 1), 3, Duration::from_secs(30));
+        let bot_lap = |lap, time| Action::Lap { lap, time, bot: Some(2) };
+        act(&mut g, &seats, &mut rng, 1, bot_lap(1, 29_000)).unwrap();
+        assert!(g.racers[2].lap_times.is_empty(), "不是負責開的人");
+        assert!(act(&mut g, &seats, &mut rng, 0, bot_lap(2, 29_000)).is_ok(), "電腦的成績不合理也不回錯誤");
+        assert!(g.racers[2].lap_times.is_empty());
+        act(&mut g, &seats, &mut rng, 0, bot_lap(1, 29_000)).unwrap();
+        assert_eq!(g.racers[2].lap_times, vec![29_000]);
+        assert!(g.racers[0].lap_times.is_empty(), "算在電腦身上，不是負責開的人");
+
+        let mut out = Outbox::default();
+        let mut ctx = test_ctx(Instant::now(), &mut rng, &seats, &mut out);
+        // 撞到電腦：轉給負責開電腦的人
+        g.act(1, bump(2, None, [1.0, 2.0]), &mut ctx).unwrap();
+        // 負責開的人自己的車撞到自己開的電腦：在他的瀏覽器裡就算好了，不轉
+        g.act(0, bump(2, None, [1.0, 2.0]), &mut ctx).unwrap();
+        // 電腦撞到別人：用電腦的名義轉過去
+        g.act(0, bump(1, Some(2), [-1.0, 0.5]), &mut ctx).unwrap();
+        // 電腦撞到負責開的人自己：也是在他那邊算好了
+        g.act(0, bump(0, Some(2), [-1.0, 0.5]), &mut ctx).unwrap();
+        let events = out.events();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0].0, To::Seat(0)));
+        assert_eq!(events[0].1, json!({ "type": "bump", "from": 1, "to": 2, "v": [1.0, 2.0] }));
+        assert!(matches!(events[1].0, To::Seat(1)));
+        assert_eq!(events[1].1, json!({ "type": "bump", "from": 2, "to": 1, "v": [-1.0, 0.5] }));
+    }
+
+    #[test]
+    fn bots_do_not_hold_up_the_end() {
+        let (mut g, seats, mut rng) = start_with(mixed(1, 2), 1, Duration::from_secs(40));
+        act(&mut g, &seats, &mut rng, 0, bot_state(1.0, 900.0)).unwrap();
+        act(&mut g, &seats, &mut rng, 0, lap(1, 39_000)).unwrap();
+        tick(&mut g, &seats, &mut rng, Instant::now());
+        assert!(g.ended.is_some(), "真人都跑完了就結算");
+        assert_eq!(g.racers[0].place, Some(1));
+        assert_eq!(g.racers[1].place, Some(2), "沒跑完的電腦照進度排");
+        assert_eq!(g.scores[&2], 1, "電腦也拿分");
     }
 
     #[test]
     fn only_one_three_or_five_laps() {
-        assert!(Racing::check_options(Options { track: Track::Canyon, laps: 5 }).is_ok());
-        assert!(Racing::check_options(Options { track: Track::Canyon, laps: 2 }).is_err());
-        assert!(Racing::check_options(Options { track: Track::Canyon, laps: 0 }).is_err());
+        let options = |laps| Options { track: Track::Canyon, laps, ..Options::default() };
+        assert!(Racing::check_options(options(5)).is_ok());
+        assert!(Racing::check_options(options(2)).is_err());
+        assert!(Racing::check_options(options(0)).is_err());
     }
 }

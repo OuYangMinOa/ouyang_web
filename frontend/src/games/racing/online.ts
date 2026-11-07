@@ -4,13 +4,14 @@
 // 別人的車收到的是「一小段時間以前」的狀態，用速度和轉向速度往前推算到現在才畫，
 // 新的狀態進來時和舊的推算差了多少，就當作誤差在零點幾秒內慢慢消掉，畫面不會一跳一跳。
 import type { Party } from '../shared/useParty'
+import type { Difficulty } from './ai'
 import { clamp, wrapAngle } from './noise'
 import { driftTimeFor, type Car } from './physics'
 import type { TrackPath } from './track'
 
 export type OnlineTrack = 'coast' | 'canyon' | 'city'
 
-export type RacingOptions = { track: OnlineTrack; laps: number }
+export type RacingOptions = { track: OnlineTrack; laps: number; difficulty: Difficulty }
 
 export type RacingPlayer = {
   /** 每一圈的時間（毫秒） */
@@ -41,23 +42,34 @@ export type RacingView = {
   /** 自己最後送出的狀態（重新整理後從這裡接著跑） */
   resume: number[] | null
   players: RacingPlayer[]
+  difficulty: Difficulty
+  /** 電腦的座位 */
+  bots: number[]
+  /** 負責開電腦的座位（電腦在他的瀏覽器裡跑）；沒有電腦是 null */
+  driver: number | null
+  /** 自己負責開電腦時才有：電腦最後的狀態，每列是 [座位, ...狀態]（重新整理後接著開） */
+  botStates: number[][]
 }
 
+/** 撞到座位 `seat` 的車：`by` 是撞人的電腦（自己的車撞的不填），`v` 是被撞的車該拿到的速度變化 [vx, vz] */
+export type BumpHit = { seat: number; by?: number; v: number[] }
+
 export type RacingAction =
-  | { type: 'state'; d: number[] }
-  | { type: 'lap'; lap: number; time: number }
+  /** 自己的車（跑完後重新整理就沒有）和自己負責開的電腦（每列 [座位, ...狀態]） */
+  | { type: 'state'; d?: number[]; bots?: number[][] }
+  /** `bot` 是替自己負責開的電腦回報 */
+  | { type: 'lap'; lap: number; time: number; bot?: number }
   /** 對時：`t` 是送出時的 performance.now()，伺服器原封不動送回來 */
   | { type: 'ping'; t: number }
-  /** 撞到座位 `seat` 的車：`v` 是它該拿到的速度變化 [vx, vz] */
-  | { type: 'bump'; seat: number; v: number[] }
+  | { type: 'bump'; hits: BumpHit[] }
 
 export type RacingEvent =
   /** 每列是 [座位, ...狀態] */
   | { type: 'cars'; cars: number[][] }
   /** 只回給送 ping 的人：`clock` 是伺服器收到時的比賽時間（毫秒，起跑前是負的） */
   | { type: 'pong'; t: number; clock: number }
-  /** 被座位 `from` 的車撞到：自己的車加上速度變化 `v` */
-  | { type: 'bump'; from: number; v: number[] }
+  /** 座位 `from` 的車撞到自己這邊開的座位 `to`（自己的車或負責開的電腦）：那台車加上速度變化 `v` */
+  | { type: 'bump'; from: number; to: number; v: number[] }
 
 export type RacingParty = { view: RacingView; action: RacingAction; options: RacingOptions; event: RacingEvent }
 

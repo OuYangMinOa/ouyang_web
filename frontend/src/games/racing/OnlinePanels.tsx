@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { ChatBox, Countdown, PartyEntry, PartyHeader, PartyLobby, PartyNotice } from '../shared/Party'
 import { Segmented } from '../shared/ui'
 import type { Party } from '../shared/useParty'
+import { DIFFICULTIES } from './ai'
 import { formatMs, hexColor } from './format'
 import { seatColor } from './game'
 import { seatName, type OnlineTrack, type RacingParty, type RacingView } from './online'
@@ -13,7 +14,7 @@ type RacingRoom = Party<RacingParty>
 
 const ONLINE_LAPS = [1, 3, 5]
 
-/** 房主選賽道和圈數；其他人看得到但不能改 */
+/** 房主選賽道、圈數和電腦難度；其他人看得到但不能改 */
 function OnlineOptions({ party }: { party: RacingRoom }) {
   const room = party.room
   if (!room) return null
@@ -46,7 +47,16 @@ function OnlineOptions({ party }: { party: RacingRoom }) {
         onChange={(laps) => party.setOptions({ ...options, laps })}
         disabled={locked}
       />
-      {!party.isHost && <p className="muted race-help">賽道和圈數由房主決定。</p>}
+      {room.players.some((p) => p.bot) && (
+        <Segmented
+          label="電腦難度"
+          value={options.difficulty}
+          options={DIFFICULTIES}
+          onChange={(difficulty) => party.setOptions({ ...options, difficulty })}
+          disabled={locked}
+        />
+      )}
+      {!party.isHost && <p className="muted race-help">這些設定由房主決定。</p>}
     </>
   )
 }
@@ -59,7 +69,7 @@ export function OnlineMenu({ party, modeSwitch }: { party: RacingRoom; modeSwitc
         {modeSwitch}
         <PartyEntry party={party}>
           <p className="race-help">
-            開一個房間，把連結傳給朋友，2～8 人在同一條賽道上比。每個人開自己的車，車子會互相碰撞；起跑位置每局重新抽。
+            開一個房間，把連結傳給朋友，2～8 人在同一條賽道上比，人不夠可以加電腦。每個人開自己的車，車子會互相碰撞；起跑位置每局重新抽。
           </p>
         </PartyEntry>
       </>
