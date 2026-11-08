@@ -97,11 +97,17 @@ async fn two_racers_share_states_and_impossible_laps_are_rejected() {
     let mut grid: Vec<u64> = view["grid"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
     grid.sort();
     assert_eq!(grid, vec![0, 1]);
-    let starts_in = view["startsIn"].as_u64().unwrap();
-    assert!(starts_in > 3000, "倒數 {starts_in}");
+    // 先選車：兩個人都按了選好了才開始倒數
+    assert_eq!(view["select"]["ready"], json!([false, false]));
     let bob_view = b.until(|m| m["type"] == "view" && !m["view"].is_null()).await["view"].clone();
     assert_eq!(bob_view["you"], 1);
     assert_eq!(bob_view["grid"], view["grid"]);
+    a.act(json!({ "type": "ready" })).await;
+    b.until(|m| m["type"] == "view" && m["view"]["select"]["ready"] == json!([true, false])).await;
+    b.act(json!({ "type": "ready" })).await;
+    let view = a.until(|m| m["type"] == "view" && m["view"]["select"].is_null()).await["view"].clone();
+    let starts_in = view["startsIn"].as_u64().unwrap();
+    assert!((3000..=5000).contains(&starts_in), "倒數 {starts_in}");
 
     // 狀態合併成 cars 事件轉送給所有人：alice 收得到 bob 的車
     a.act(json!({ "type": "state", "d": state(1.5) })).await;
@@ -147,6 +153,10 @@ async fn one_player_drives_the_bots() {
     assert_eq!(view["bots"], json!([1]));
     assert_eq!(view["driver"], 0);
     assert_eq!(view["difficulty"], "hard");
+    // 電腦一開始就選好了，自己按了選好了就開始倒數
+    assert_eq!(view["select"]["ready"], json!([false, true]));
+    a.act(json!({ "type": "ready" })).await;
+    a.until(|m| m["type"] == "view" && m["view"]["select"].is_null()).await;
 
     // 電腦的狀態跟著自己的一起送，轉送時是電腦的座位
     let mut bot = vec![json!(1)];
@@ -163,4 +173,37 @@ async fn one_player_drives_the_bots() {
     // 撞擊通知要用新的格式
     a.act(json!({ "type": "bump", "seat": 1, "v": [1, 0] })).await;
     assert_eq!(a.until(|m| m["type"] == "notice").await["message"], "看不懂這個動作");
+}
+
+#[tokio::test]
+async fn everyone_picks_a_car_after_the_host_starts_and_colors_go_to_whoever_picks_first() {
+    let (app, addr) = serve().await;
+    let reply = app.call("POST", "/api/games/racing/party", None, None).await;
+    let code = reply.body["code"].as_str().unwrap().to_owned();
+
+    let mut a = Client::connect(&addr, &code, "alice").await;
+    a.until(|m| m["type"] == "room").await;
+    let mut b = Client::connect(&addr, &code, "bob").await;
+    a.until(|m| m["type"] == "room" && m["players"].as_array().unwrap().len() == 2).await;
+    a.send(json!({ "type": "start" })).await;
+    let view = a.until(|m| m["type"] == "view" && !m["view"].is_null()).await["view"].clone();
+    assert_eq!(view["cars"], json!([{ "car": "all", "color": 0 }, { "car": "all", "color": 1 }]));
+    assert!(view["select"]["endsIn"].as_u64().unwrap() > 25_000);
+    b.until(|m| m["type"] == "view" && !m["view"].is_null()).await;
+
+    // alice 換成極速型、第 5 個顏色；bob 要同一個顏色就被擋下來
+    a.act(json!({ "type": "pick", "car": "speed", "color": 5 })).await;
+    b.until(|m| m["type"] == "view" && m["view"]["cars"][0]["color"] == 5).await;
+    b.act(json!({ "type": "pick", "car": "drift", "color": 5 })).await;
+    assert_eq!(b.until(|m| m["type"] == "notice").await["message"], "這個顏色已經有人選了，換一個吧");
+    b.act(json!({ "type": "pick", "car": "drift", "color": 2 })).await;
+    b.until(|m| m["type"] == "view" && m["view"]["cars"][1] == json!({ "car": "drift", "color": 2 })).await;
+
+    // 都選好了就開始倒數，之後不能換
+    a.act(json!({ "type": "ready" })).await;
+    b.act(json!({ "type": "ready" })).await;
+    let view = a.until(|m| m["type"] == "view" && m["view"]["select"].is_null()).await["view"].clone();
+    assert_eq!(view["cars"], json!([{ "car": "speed", "color": 5 }, { "car": "drift", "color": 2 }]));
+    a.act(json!({ "type": "pick", "car": "all", "color": 7 })).await;
+    assert_eq!(a.until(|m| m["type"] == "notice").await["message"], "已經開始了，這局不能換車");
 }

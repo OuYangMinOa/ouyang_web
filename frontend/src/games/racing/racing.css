@@ -86,6 +86,10 @@ button.race-icon {
 button.race-icon:hover {
   border-color: var(--accent);
 }
+/* 音樂關掉時淡一點 */
+button.race-icon.off {
+  opacity: 0.45;
+}
 
 .race-status {
   display: flex;
@@ -394,6 +398,279 @@ button.race-color[aria-checked='true'] {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
+/* 線上別人選走的顏色：斜線劃掉 */
+button.race-color.taken {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background:
+    linear-gradient(135deg, transparent 44%, var(--text-h) 44% 56%, transparent 56%),
+    var(--car);
+}
+
+/* 車種：五個按鈕排一列，下面是選到的那台的說明和評分 */
+.race-cars {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+button.race-car-option {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  min-height: 60px;
+  padding: 6px 4px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+button.race-car-option[aria-checked='true'] {
+  color: var(--text-h);
+  font-weight: 700;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.race-car-svg {
+  display: block;
+  width: 100%;
+  max-width: 64px;
+  height: auto;
+  aspect-ratio: 5.1 / 1.72;
+  overflow: visible;
+}
+/* 白車在亮色、黑車在深色主題下也要看得到輪廓 */
+.race-car-body {
+  fill: var(--car);
+  stroke: color-mix(in srgb, var(--text-h) 40%, transparent);
+  stroke-width: 0.05;
+}
+.race-car-glass {
+  fill: color-mix(in srgb, var(--text-h) 72%, var(--surface));
+}
+.race-car-trim,
+.race-car-wheel {
+  fill: var(--text-h);
+}
+/* 車的評分：一項一條 */
+.race-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+}
+.race-stats > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.race-stats dt {
+  flex: none;
+  font-size: 13px;
+  color: var(--text);
+}
+.race-stats dd {
+  flex: 1;
+  height: 8px;
+  margin: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--border) 85%, transparent);
+  overflow: hidden;
+}
+.race-stat {
+  display: block;
+  width: calc(var(--v) * 100%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.race-car-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.race-root .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/*
+ * 選車：左邊（窄螢幕在下面）只有車型和顏色，右邊是 3D 預覽（就是後面的遊戲畫面，車子畫在 .race-select-car 那一塊），
+ * 預覽上面是大家選好了沒有（線上），下面是選到的車的說明和評分
+ */
+.race-select {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  grid-template-areas: 'panel stage';
+  gap: 16px;
+}
+.race-select-panel {
+  grid-area: panel;
+  width: auto;
+  align-self: start;
+}
+.race-select-head {
+  display: grid;
+  gap: 2px;
+}
+.race-select-stage {
+  grid-area: stage;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
+}
+.race-select-car {
+  flex: 1;
+  min-height: 110px;
+}
+.race-select-info {
+  align-self: flex-end;
+  display: grid;
+  gap: 8px;
+  width: min(100%, 420px);
+  box-sizing: border-box;
+  padding: 12px 16px;
+  color: var(--text);
+  pointer-events: auto;
+}
+.race-select-info h3 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--text-h);
+}
+.race-select-info p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.race-select-info .race-stats-note {
+  font-size: 13px;
+}
+.race-select-roster {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: auto;
+}
+.race-select-roster li {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  font-size: 14px;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+.race-select-roster li.me {
+  border-color: var(--accent);
+}
+.race-select-roster .race-swatch {
+  margin: 0;
+}
+.race-select-roster .race-car-tag {
+  margin: 0;
+}
+.race-select-state {
+  font-size: 13px;
+  color: var(--text);
+}
+.race-select-state.ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+.race-select-actions {
+  display: flex;
+  gap: 8px;
+}
+.race-select-actions button {
+  flex: none;
+  min-height: 52px;
+}
+.race-select-actions button.race-start {
+  flex: 1;
+  width: auto;
+}
+.race-select-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  font-size: 15px;
+  color: var(--text-h);
+}
+
+/* 窄螢幕：預覽在上、選單在下，選單太長時自己捲 */
+@media (max-width: 720px) {
+  .race-select {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas: 'stage' 'panel';
+    gap: 8px;
+  }
+  .race-select-panel {
+    align-self: stretch;
+    gap: 10px;
+    max-height: 56vh;
+    max-height: 56dvh;
+  }
+  .race-select-head h2 {
+    font-size: 20px;
+  }
+  .race-select-stage {
+    gap: 6px;
+  }
+  .race-select-roster {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .race-select-info {
+    width: 100%;
+    gap: 4px;
+    padding: 8px 12px;
+  }
+  .race-select-info h3 {
+    font-size: 17px;
+  }
+  .race-select-info p {
+    font-size: 13px;
+  }
+  .race-select-info .race-stats-note {
+    display: none;
+  }
+  .race-select-info .race-stats {
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 4px 12px;
+  }
+}
 
 .race-checks {
   display: grid;
@@ -401,6 +678,8 @@ button.race-color[aria-checked='true'] {
 }
 .race-check {
   display: flex;
+  /* 全站的 label 是直排（App.css），勾選框要和文字並排 */
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   min-height: 40px;
@@ -741,6 +1020,18 @@ button.race-pedal.on {
   }
   .race-menu {
     justify-content: center;
+  }
+  /* 選車畫面還是要讓出上面的按鈕列；車的說明只留評分 */
+  .race-layer.race-select {
+    padding-top: calc(var(--race-top) + 50px);
+  }
+  .race-select-info .race-select-blurb,
+  .race-select-info .race-stats-note {
+    display: none;
+  }
+  .race-select-info .race-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 12px;
   }
   .race-sub {
     display: none;

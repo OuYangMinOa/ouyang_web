@@ -3,7 +3,7 @@
 // 甩尾鍵按得越久，車尾甩得越開（車身打得越橫）、彎也轉得越急，像跑跑卡丁車那樣點一下是小甩、按住是大甩。
 // 純計算，不碰畫面，電腦對手和玩家用同一套。
 import { clamp, wrapAngle } from './noise'
-import { CAR, CURB } from './spec'
+import { CAR, CARS, carShape, CURB, type CarSpec } from './spec'
 import { newLoc, type TrackLoc, type TrackPath } from './track'
 
 export type Controls = {
@@ -30,6 +30,10 @@ const DRIFT_EXIT = 0.45
 const DRIFT_SNAP = 3.5
 
 export type Car = {
+  /** 車種的數值（極速、加速、過彎、重量…） */
+  spec: CarSpec
+  /** 碰撞用的車身大小（照車種算好） */
+  shape: ReturnType<typeof carShape>
   x: number
   y: number
   z: number
@@ -64,8 +68,10 @@ export type Car = {
   progress: number
 }
 
-export function newCar(): Car {
+export function newCar(spec: CarSpec = CARS[0]): Car {
   return {
+    spec,
+    shape: carShape(spec),
     x: 0,
     y: 0,
     z: 0,
@@ -137,9 +143,10 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
   car.steer = approach(car.steer, target, (returning ? 9 : 5) * dt)
 
   car.offroad = Math.abs(car.loc.lat) > track.halfWidth + CURB
+  const spec = car.spec
   const boosting = car.boost > 0
   const vmax =
-    CAR.maxSpeed * car.power * (boosting ? CAR.boostSpeed : 1) * (car.offroad ? CAR.offroadSpeed : 1)
+    spec.maxSpeed * car.power * (boosting ? CAR.boostSpeed : 1) * (car.offroad ? CAR.offroadSpeed : 1)
 
   // 前後方向
   let a = 0
@@ -157,7 +164,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
     if (vf < -0.5) a += CAR.brake * ctl.throttle
     else {
       const r = Math.max(0, vf) / vmax
-      a += CAR.engine * car.power * ctl.throttle * Math.max(0, 1 - r * r)
+      a += spec.engine * car.power * ctl.throttle * Math.max(0, 1 - r * r)
     }
   }
   if (boosting) {
@@ -181,7 +188,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
   } else if (!ctl.drift || vf < 8) {
     // 放開按鍵才給加速；速度掉光了就白甩
     if (!ctl.drift) {
-      car.boost = Math.max(car.boost, DRIFT_BOOST[driftLevel(car)])
+      car.boost = Math.max(car.boost, DRIFT_BOOST[driftLevel(car)] * spec.driftBoost)
       car.driftExit = DRIFT_EXIT
     }
     endDrift(car)
@@ -200,7 +207,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
     // 按越久轉越急
     const k = 0.5 + 0.45 * into
     const turn = CAR.driftTurn * (0.8 + 0.5 * ramp)
-    const limit = Math.min(CAR.maxYaw * 1.3, (CAR.latAcc * turn) / Math.max(absV, 1))
+    const limit = Math.min(spec.maxYaw * 1.3, (spec.latAcc * turn) / Math.max(absV, 1))
     const base = k * limit
     // 按越久車尾甩越開：車身轉的速度固定時，抓地力越小、滑行角越大（穩定時 tan(角度) = 轉速 / 抓地力）。
     // 反打方向盤時角度收小，用來調整走線
@@ -210,9 +217,9 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
     const now = Math.atan2(vl * car.drift, Math.max(vf, 1))
     yaw = -car.drift * Math.max(0, base + DRIFT_SNAP * (angle - now))
     // 甩得越開集氣越快
-    car.driftTime += dt * (0.6 + 0.4 * Math.max(0, into)) * (0.8 + 0.4 * ramp)
+    car.driftTime += dt * (0.6 + 0.4 * Math.max(0, into)) * (0.8 + 0.4 * ramp) * spec.driftCharge
   } else {
-    const limit = Math.min(CAR.maxYaw, CAR.latAcc / Math.max(absV, 1))
+    const limit = Math.min(spec.maxYaw, spec.latAcc / Math.max(absV, 1))
     yaw = -car.steer * limit * lowSpeed * dir
   }
   car.yawRate = yaw
@@ -245,7 +252,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
   const prevS = car.loc.s
   track.locate(car.x, car.z, car.loc)
   car.impact = 0
-  const limit = track.wall - CAR.halfWidth
+  const limit = track.wall - car.shape.halfWidth
   const lat = car.loc.lat
   if (Math.abs(lat) > limit) {
     const side = Math.sign(lat)
@@ -277,7 +284,10 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
   car.progress += ds
 }
 
-/** 車與車的碰撞：每台車用前後兩個圓近似，互相推開並交換一部分速度；撞擊力道也記在 `impact` */
+/**
+ * 車與車的碰撞：每台車用前後兩個圓近似，互相推開並交換一部分速度；撞擊力道也記在 `impact`。
+ * 照重量分：重的車被推開得少、速度變得少，輕的車被撞飛得多
+ */
 export function collideCars(cars: Car[]) {
   for (let i = 0; i < cars.length; i++) {
     for (let j = i + 1; j < cars.length; j++) collidePair(cars[i], cars[j])
@@ -286,8 +296,8 @@ export function collideCars(cars: Car[]) {
 
 /**
  * 線上和別人的車相撞：只動自己的車 `a`，`b` 當作推不動的障礙。
- * 自己的車整個推出重疊（畫面上不會穿進去），速度只拿兩台車對撞時自己那一半；
- * 對方該拿到的另一半加進 `kick`（速度變化，公尺／秒），送給對方的瀏覽器套到它自己的車上。
+ * 自己的車整個推出重疊（畫面上不會穿進去），速度只拿兩台車對撞時自己那一份；
+ * 對方該拿到的那一份加進 `kick`（速度變化，公尺／秒），送給對方的瀏覽器套到它自己的車上。
  * 回傳有沒有撞上（互相靠近時才算，貼著滑不算）。
  */
 export function collideRemote(a: Car, b: Car, kick: { x: number; z: number }): boolean {
@@ -296,46 +306,56 @@ export function collideRemote(a: Car, b: Car, kick: { x: number; z: number }): b
   return kick.x !== 0 || kick.z !== 0
 }
 
+/** 碰撞的反彈係數 */
+const RESTITUTION = 0.3
+
 /** `kick` 不是 null 時只動 `a`，`b` 該拿到的速度變化加進 `kick` */
 function collidePair(a: Car, b: Car, kick: { x: number; z: number } | null = null) {
   const onlyA = kick !== null
-  const r2 = CAR.radius * 2
+  const reach = a.shape.radius + b.shape.radius
   const dx0 = b.x - a.x
   const dz0 = b.z - a.z
   if (dx0 * dx0 + dz0 * dz0 > 36) return
+  // 推開和速度變化照重量分：a 拿 b 的重量佔的比例
+  const shareA = b.spec.mass / (a.spec.mass + b.spec.mass)
+  const shareB = 1 - shareA
   for (let ka = -1; ka <= 1; ka += 2) {
     for (let kb = -1; kb <= 1; kb += 2) {
-      const ax = a.x + Math.sin(a.heading) * CAR.axle * ka
-      const az = a.z + Math.cos(a.heading) * CAR.axle * ka
-      const bx = b.x + Math.sin(b.heading) * CAR.axle * kb
-      const bz = b.z + Math.cos(b.heading) * CAR.axle * kb
+      const ax = a.x + Math.sin(a.heading) * a.shape.axle * ka
+      const az = a.z + Math.cos(a.heading) * a.shape.axle * ka
+      const bx = b.x + Math.sin(b.heading) * b.shape.axle * kb
+      const bz = b.z + Math.cos(b.heading) * b.shape.axle * kb
       const dx = bx - ax
       const dz = bz - az
       const d2 = dx * dx + dz * dz
-      if (d2 >= r2 * r2 || d2 < 1e-6) continue
+      if (d2 >= reach * reach || d2 < 1e-6) continue
       const d = Math.sqrt(d2)
       const nx = dx / d
       const nz = dz / d
-      const push = onlyA ? r2 - d : (r2 - d) / 2
+      const overlap = reach - d
+      const push = onlyA ? overlap : overlap * shareA
       a.x -= nx * push
       a.z -= nz * push
       if (!onlyA) {
-        b.x += nx * push
-        b.z += nz * push
+        b.x += nx * overlap * shareB
+        b.z += nz * overlap * shareB
       }
       const rel = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz
       if (rel < 0) {
         a.impact = Math.max(a.impact, -rel)
-        const j2 = (-(1 + 0.3) * rel) / 2
-        a.vx -= nx * j2
-        a.vz -= nz * j2
+        // 兩台車的相對速度要變 (1 + 反彈係數) × rel，照重量分給兩邊（一樣重時各一半）
+        const dv = -(1 + RESTITUTION) * rel
+        const ja = dv * shareA
+        const jb = dv * shareB
+        a.vx -= nx * ja
+        a.vz -= nz * ja
         if (kick) {
-          kick.x += nx * j2
-          kick.z += nz * j2
+          kick.x += nx * jb
+          kick.z += nz * jb
         } else {
           b.impact = Math.max(b.impact, -rel)
-          b.vx += nx * j2
-          b.vz += nz * j2
+          b.vx += nx * jb
+          b.vz += nz * jb
         }
       }
     }
