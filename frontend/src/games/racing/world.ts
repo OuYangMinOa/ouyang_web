@@ -35,6 +35,7 @@ import {
   type Texture,
 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { addCity } from './city'
 import { clamp, rng, smoothstep } from './noise'
 import { CURB } from './spec'
 import type { TrackPath } from './track'
@@ -253,6 +254,12 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
     water.position.set(x0 + w / 2, th.water.level, z0 + d / 2)
     scene.add(water)
   }
+  if (th.ground !== undefined) {
+    // 比地形低一截，遠處才不會和地形搶深度而閃爍
+    const ground = new Mesh(new PlaneGeometry(8000, 8000).rotateX(-Math.PI / 2), new MeshLambertMaterial({ color: th.ground }))
+    ground.position.set(x0 + w / 2, heights.reduce((a, b) => Math.min(a, b)) - 1, z0 + d / 2)
+    scene.add(ground)
+  }
 
   // 路面：柏油、白色邊線、中間的虛線（一組 12 公尺：4 公尺線、8 公尺空白）。
   // 路面、路肩、護欄都要有夠明顯、一段一段的花紋，開快的時候才看得出東西在往後衝
@@ -392,11 +399,14 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
 
   addBridges(scene, track, groundAt, new Color(th.bridge ?? th.wall))
 
+  // 真實城市的建築、街道、綠地、行道樹
+  if (def.city) addCity(scene, track, def.city, groundAt, th.night === true, tex)
+
   // 擺設
   for (const spec of def.props) addProps(scene, track, spec, groundAt, th.night === true, tex)
 
-  // 夜城的路燈
-  if (th.night) addLamps(scene, track)
+  // 夜間和黃昏的路燈
+  if (th.night || th.lamps) addLamps(scene, track)
 
   let headlight: SpotLight | null = null
   if (th.night) {

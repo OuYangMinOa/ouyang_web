@@ -10,7 +10,7 @@ import { driftTimeFor, stepVertical, type Car } from './physics'
 import { CAR_COLORS, CARS, type CarKind } from './spec'
 import type { TrackPath } from './track'
 
-export type OnlineTrack = 'coast' | 'canyon' | 'city'
+export type OnlineTrack = 'coast' | 'canyon' | 'city' | 'xinyi'
 
 export type RacingOptions = { track: OnlineTrack; laps: number; difficulty: Difficulty }
 
