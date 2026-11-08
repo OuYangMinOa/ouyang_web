@@ -400,13 +400,15 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
   addBridges(scene, track, groundAt, new Color(th.bridge ?? th.wall))
 
   // 真實城市的建築、街道、綠地、行道樹
-  if (def.city) addCity(scene, track, def.city, groundAt, th.night === true, tex)
+  const overhead = def.city
+    ? addCity(scene, track, def.city, groundAt, th.night === true, { haze: th.skyHorizon, sunDir: th.sunDir }, tex)
+    : null
 
   // 擺設
   for (const spec of def.props) addProps(scene, track, spec, groundAt, th.night === true, tex)
 
   // 夜間和黃昏的路燈
-  if (th.night || th.lamps) addLamps(scene, track)
+  if (th.night || th.lamps) addLamps(scene, track, overhead)
 
   let headlight: SpotLight | null = null
   if (th.night) {
@@ -610,7 +612,6 @@ function drawWindows(ctx: CanvasRenderingContext2D, seed: number, lit: boolean) 
   }
 }
 
-/** 路燈：兩側每 36 公尺一支，燈臂朝向路中間 */
 /** 橋的兩側比護欄多出來的寬度（路燈立在這裡） */
 const LEDGE = 1.6
 /** 橋面板的厚度 */
@@ -689,7 +690,8 @@ function blocksRoad(track: TrackPath, i: number, x: number, z: number): boolean 
   return false
 }
 
-function addLamps(scene: Scene, track: TrackPath) {
+/** 路燈：兩側每 36 公尺一支，燈臂朝向路中間；`overhead` 說上方有東西（人行空橋）的地方不放 */
+function addLamps(scene: Scene, track: TrackPath, overhead: ((x: number, z: number) => boolean) | null) {
   const spots: Spot[] = []
   const every = Math.round(36 / track.step)
   for (let i = 0; i < track.n; i += every) {
@@ -699,7 +701,7 @@ function addLamps(scene: Scene, track: TrackPath) {
       const z = track.pz[i] - track.tx[i] * off
       const y = track.roadY(i, off)
       // 橋下的路燈會穿過橋面，不放
-      if (track.under(x, z, y, 1)) continue
+      if (track.under(x, z, y, 1) || overhead?.(x, z)) continue
       // 燈臂沿著模型的 +z，轉向路中間（-side 的法線方向）
       const rot = Math.atan2(-track.tz[i] * side, track.tx[i] * side)
       spots.push({ x, y, z, rot, scale: 1, r: 0 })

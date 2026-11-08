@@ -5,7 +5,7 @@
 // 純計算，不碰畫面，電腦對手和玩家用同一套。
 import { clamp, wrapAngle } from './noise'
 import { CAR, CARS, carShape, CURB, type CarSpec } from './spec'
-import { BANK_GRIP, GRAVITY, newLoc, type TrackLoc, type TrackPath } from './track'
+import { AIR_GRAVITY, BANK_GRIP, GRAVITY, newLoc, type TrackLoc, type TrackPath } from './track'
 
 export type Controls = {
   /** 油門 0～1 */
@@ -29,8 +29,6 @@ const DRIFT_ANGLE = [0.2, 0.72]
 const DRIFT_EXIT = 0.45
 /** 車尾角度不夠時多轉的力道 */
 const DRIFT_SNAP = 3.5
-/** 騰空時的重力：比真的大一些，飛起來才不會飄太久 */
-const AIR_GRAVITY = 15
 /** 騰空時方向盤剩下的效果 */
 const AIR_STEER = 0.3
 /** 上下兩台車差這麼多（公尺）就撞不到（立體交叉、一台飛在空中） */

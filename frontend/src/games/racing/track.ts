@@ -8,6 +8,8 @@ import type { TrackDef } from './tracks'
 
 /** 重力（公尺／秒²） */
 export const GRAVITY = 9.8
+/** 騰空時的重力：比真的大一些，飛起來才不會飄太久 */
+export const AIR_GRAVITY = 15
 /** 傾斜的彎道幫忙過彎的倍率：照物理是重力 × 坡度，遊戲裡放大一點，才感覺得出來 */
 export const BANK_GRIP = 2
 /** 路面比這條賽道自己的地形高出這麼多，就當成橋：下面不填土，改用橋墩撐著 */
@@ -43,6 +45,8 @@ export type TrackPoint = { x: number; y: number; z: number; tx: number; tz: numb
 /** 電腦開車時預留的抓地力，不會剛好貼著極限開 */
 const AI_GRIP = 0.9
 const AI_BRAKE = CAR.brake * 0.55
+/** 電腦過坡頂最多「騰空門檻」的幾倍：還是會飛起來，但不會飛太遠（在空中不能煞車、方向盤也轉不太動） */
+const AI_AIR = 1.6
 
 export class TrackPath {
   readonly n: number
@@ -82,8 +86,11 @@ export class TrackPath {
     )
     const n = Math.max(64, Math.round(curve.getLength() / 2))
     const pts = curve.getSpacedPoints(n)
-    // 路面上的小隆起：沿著賽道的距離換算成取樣點，疊一個餘弦形狀的鼓包
     const approxStep = curve.getLength() / n
+    if (def.profile?.length) {
+      for (let i = 0; i <= n; i++) pts[i].y = profileAt(def.profile, i * approxStep, n * approxStep)
+    }
+    // 路面上的小隆起：沿著賽道的距離換算成取樣點，疊一個餘弦形狀的鼓包
     for (const [at, len, height] of def.bumps ?? []) {
       for (let i = 0; i < n; i++) {
         let d = i * approxStep - at
@@ -227,11 +234,16 @@ export class TrackPath {
       const assist = Math.max(0, -this.bank[i] * Math.sign(lineCurv[i])) * GRAVITY * BANK_GRIP
       // 不在這裡限極速：各車種的極速不同，電腦開車時再照自己的車限
       speed[i] = Math.min(CAR.maxSpeed * 2, Math.sqrt((CAR.latAcc * AI_GRIP + assist) / k))
+      // 坡頂：路面往下彎得越急，飛起來的速度越低
+      const crest = (this.grade[(i - 1 + n) % n] - this.grade[(i + 1) % n]) / (2 * this.step)
+      if (crest > 0) speed[i] = Math.min(speed[i], Math.sqrt((AIR_GRAVITY * AI_AIR) / crest))
     }
+    // 煞車距離照坡度算：下坡時重力往前推，要更早開始煞
     for (let pass = 0; pass < 2; pass++) {
       for (let i = n - 1; i >= 0; i--) {
         const next = speed[(i + 1) % n]
-        speed[i] = Math.min(speed[i], Math.sqrt(next * next + 2 * AI_BRAKE * seg[i]))
+        const brake = Math.max(AI_BRAKE * 0.3, AI_BRAKE + GRAVITY * this.grade[i])
+        speed[i] = Math.min(speed[i], Math.sqrt(next * next + 2 * brake * seg[i]))
       }
     }
     this.speed = speed
@@ -385,6 +397,18 @@ export class TrackPath {
     }
     return false
   }
+}
+
+/** `profile` 在距離 s 的高度：前後兩個點之間用餘弦接起來（兩頭的坡度都是 0），最後一點接回第一點 */
+function profileAt(profile: [number, number][], s: number, length: number): number {
+  const last = profile.length - 1
+  let k = last
+  while (k >= 0 && profile[k][0] > s) k--
+  // 在第一點之前：從最後一點（往前算一圈）接到第一點
+  const [s0, y0] = k >= 0 ? profile[k] : [profile[last][0] - length, profile[last][1]]
+  const [s1, y1] = k < last ? profile[k + 1] : [profile[0][0] + length, profile[0][1]]
+  const t = clamp((s - s0) / Math.max(1, s1 - s0), 0, 1)
+  return y0 + (y1 - y0) * (0.5 - 0.5 * Math.cos(Math.PI * t))
 }
 
 /** 每個點的車頭方向變化率，再做幾次平均去掉鋸齒 */
