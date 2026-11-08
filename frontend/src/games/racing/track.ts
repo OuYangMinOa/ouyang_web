@@ -124,7 +124,7 @@ export class TrackPath {
     }
     this.line = line
 
-    // 沿著行車線的彎度 → 能過彎的速度，再從後往前推「要在這裡開始煞車」
+    // 沿著行車線的彎度 → 綜合型能過彎的速度，再從後往前推「要在這裡開始煞車」
     const lineHeading = new Float32Array(n)
     const seg = new Float32Array(n)
     for (let i = 0; i < n; i++) {
@@ -141,7 +141,8 @@ export class TrackPath {
     const speed = new Float32Array(n)
     for (let i = 0; i < n; i++) {
       const k = Math.max(Math.abs(lineCurv[i]), 1e-5)
-      speed[i] = Math.min(CAR.maxSpeed * 1.1, Math.sqrt((CAR.latAcc * AI_GRIP) / k))
+      // 不在這裡限極速：各車種的極速不同，電腦開車時再照自己的車限
+      speed[i] = Math.min(CAR.maxSpeed * 2, Math.sqrt((CAR.latAcc * AI_GRIP) / k))
     }
     for (let pass = 0; pass < 2; pass++) {
       for (let i = n - 1; i >= 0; i--) {

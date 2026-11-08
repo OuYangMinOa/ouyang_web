@@ -95,7 +95,8 @@ export function driveAi(car: Car, ai: AiDriver, track: TrackPath, cars: Car[], d
   const alpha = wrapAngle(Math.atan2(tx - car.x, tz - car.z) - car.heading)
   const dist = Math.max(1, Math.hypot(tx - car.x, tz - car.z))
   const yawWanted = (2 * Math.max(v, 4) * Math.sin(alpha)) / dist
-  const yawLimit = Math.min(CAR.maxYaw, CAR.latAcc / Math.max(v, 1))
+  const spec = car.spec
+  const yawLimit = Math.min(spec.maxYaw, spec.latAcc / Math.max(v, 1))
   out.steer = clamp(-yawWanted / yawLimit, -1, 1)
   out.drift = false
 
@@ -106,7 +107,9 @@ export function driveAi(car: Car, ai: AiDriver, track: TrackPath, cars: Car[], d
     return
   }
 
-  let target = track.sampleArray(track.speed, s + 3 + v * 0.18) * ai.corner
+  // 建議速度是照綜合型算的：過彎速度跟側向加速度的平方根成正比，極速照自己的車
+  const grip = Math.sqrt(spec.latAcc / CAR.latAcc)
+  let target = Math.min(track.sampleArray(track.speed, s + 3 + v * 0.18) * grip, spec.maxSpeed * 1.1) * ai.corner
   // 緊跟著前車又超不過去，就鬆一點油門，不要一直撞屁股
   if (blocked < 7) target = Math.min(target, v - 1)
   if (v < target - 1) {

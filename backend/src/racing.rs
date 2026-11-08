@@ -14,12 +14,16 @@
 //! - 車子互撞在各自的瀏覽器裡算，每個人只推開自己的車；撞到別人時把對方該拿到的速度變化送過去
 //!   （`Action::Bump`，伺服器只轉給開被撞那台車的人），不然被撞的人常常看不到重疊、感覺不到被撞。
 //! - 對時（`Action::Ping`）：用戶端照來回時間對準伺服器的比賽時鐘，別人的車才推算得準。
-//! - 開局倒數 `COUNTDOWN`。第一個人跑完後，其他人還有 `GRACE` 可以跑。
+//! - 選完車倒數 `COUNTDOWN` 才起跑。第一個人跑完後，其他人還有 `GRACE` 可以跑。
 //!   時間到時，沒跑完的照圈數和進度排名；連著線的真人都跑完就提早結算（不等電腦）。
 //! - 電腦：伺服器沒有物理，所以指定一位真人（`driver`）在他的瀏覽器裡開所有電腦，
 //!   電腦的狀態跟著他自己的狀態一起送（`State::bots`），過線也由他回報，檢查規則跟真人一樣。
 //!   撞到電腦的通知轉給他。他斷線、或 `BOT_STALE` 沒送電腦的狀態（切到背景時瀏覽器不跑畫面）
 //!   就輪給下一位連著線的真人，新的人從電腦最後的位置接著開。
+//! - 選車：房主在大廳選好賽道、圈數、電腦後按開始，先有 `SELECT` 讓每個人選車種和車色（`Action::Pick`）。
+//!   車種隨便選，車色先選先贏，別的真人選走的不能選；電腦隨機配一種車，顏色讓給真人（真人選了電腦的顏色，電腦就換一個）。
+//!   連著線的真人都按了「選好了」（`Action::Ready`）或時間到，就照當時選的開始倒數。
+//!   下一局一開始是上一局開的車（跟著人走，顏色被前面的人拿走才換）。
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -32,14 +36,16 @@ use crate::{
     party::{Ctx, Parties, PartyGame, To, shuffle},
 };
 
-/// 開局倒數：前兩秒讓大家載入賽道，最後三秒才顯示 3、2、1
+/// 選車的時間：時間到了，還沒按「選好了」的人就開當時選的車
+const SELECT: Duration = Duration::from_secs(30);
+/// 選完車到起跑的倒數：前兩秒讓大家載入賽道，最後三秒才顯示 3、2、1
 const COUNTDOWN: Duration = Duration::from_secs(5);
 /// 第一個人跑完後，其他人還能跑多久
 const GRACE: Duration = Duration::from_secs(30);
 /// 平均一圈最多給多久（整局的時間上限 = 這個 × 圈數），免得有人掛著不動，房間永遠結束不了
 const LAP_LIMIT: Duration = Duration::from_secs(4 * 60);
-/// 伺服器認定的極速（公尺／秒）：噴射時的極速約 71（`spec.ts` 的 58 × 1.22），再寬鬆一點
-const MAX_SPEED: f64 = 75.0;
+/// 伺服器認定的極速（公尺／秒）：最快的車種噴射時約 76（`spec.ts` 極速型的 62.5 × 1.22），再寬鬆一點
+const MAX_SPEED: f64 = 80.0;
 /// 回報的過線時間最多可以比伺服器的時鐘早多少（毫秒）：
 /// 用戶端照「還剩幾毫秒起跑」自己計時，本來就比伺服器慢一點，訊息在路上也要時間
 const CLOCK_SLACK_MS: u64 = 3000;
@@ -75,12 +81,12 @@ impl Track {
     }
 
     /// 一圈最快幾毫秒：賽道一圈的長度（`track.ts` 算的，海岸 1805、峽谷 1508、夜城 1483 公尺）
-    /// 用 `MAX_SPEED` 跑完的時間。改了賽道記得重算
+    /// 用 `MAX_SPEED` 跑完的時間。改了賽道或極速記得重算
     fn min_lap_ms(self) -> u64 {
         match self {
-            Track::Coast => 24_000,
-            Track::Canyon => 20_000,
-            Track::City => 19_700,
+            Track::Coast => 22_500,
+            Track::Canyon => 18_800,
+            Track::City => 18_500,
         }
     }
 }
@@ -93,6 +99,35 @@ pub enum Difficulty {
     #[default]
     Normal,
     Hard,
+}
+
+/// 車種（數值在用戶端 `spec.ts` 的 `CARS`，伺服器只轉告大家誰開哪種）
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CarKind {
+    /// 綜合
+    #[default]
+    All,
+    /// 極速
+    Speed,
+    /// 加速
+    Accel,
+    /// 操控
+    Grip,
+    /// 甩尾
+    Drift,
+}
+
+const CAR_KINDS: [CarKind; 5] = [CarKind::All, CarKind::Speed, CarKind::Accel, CarKind::Grip, CarKind::Drift];
+
+/// 有幾種車色（用戶端 `spec.ts` 的 `CAR_COLORS`）；比座位數多，每個人一定分得到不同的顏色
+const COLORS: usize = 10;
+
+/// 每個座位的車：車種和車色（第幾個顏色）
+#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Pick {
+    pub car: CarKind,
+    pub color: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -133,6 +168,10 @@ pub enum Action {
     /// 撞到別人：撞人的瀏覽器算出被撞的車該拿到的速度變化。
     /// 伺服器轉給開那台車的人 `{type:"bump", from, to, v}`（被撞的是電腦就轉給負責開電腦的人），由他套到那台車上
     Bump { hits: Vec<Hit> },
+    /// 選車時換車種和車色（`color` 是第幾個顏色）；按了「選好了」之後不能換
+    Pick { car: CarKind, color: usize },
+    /// 選好車了
+    Ready,
 }
 
 #[derive(Deserialize, Debug)]
@@ -177,7 +216,11 @@ pub struct Racing {
     pids: Vec<u32>,
     /// 起跑格：`grid[seat]` 是第幾格（0 在最前面），每局重新抽
     grid: Vec<usize>,
-    /// 起跑的時間
+    /// 選車的截止時間；選完了（開始倒數）是 None
+    select_until: Option<Instant>,
+    /// 選車時每個座位按了「選好了」沒有（電腦一開始就選好了）
+    ready: Vec<bool>,
+    /// 起跑的時間（選車時先用「選車時間到才開始倒數」估，選完再定）
     go: Instant,
     /// 整局的時間上限
     limit_at: Instant,
@@ -193,6 +236,35 @@ pub struct Racing {
     driver: Option<usize>,
     /// 最後一次收到電腦狀態的時間（換人開時重算；起跑前不會早於起跑時間，讓大家有時間載入）
     bots_heard: Instant,
+    /// 每個座位的車種和車色（選車時可以換，車色不重複）
+    cars: Vec<Pick>,
+}
+
+/// 選車開始時每個座位的車：上一局開的（跟著人走）；第一次玩的真人是綜合型、電腦隨機。
+/// 真人先挑顏色、電腦拿剩下的，顏色被前面的人拿走了就換沒人用的第一個
+fn first_cars(ctx: &mut Ctx, previous: Option<&Racing>) -> Vec<Pick> {
+    let n = ctx.seats.len();
+    let last = |pid: u32| previous.and_then(|p| p.pids.iter().position(|&q| q == pid).map(|s| p.cars[s]));
+    let humans = (0..n).filter(|&s| !ctx.seats[s].bot);
+    let bots = (0..n).filter(|&s| ctx.seats[s].bot);
+    let order: Vec<usize> = humans.chain(bots).collect();
+    let mut cars: Vec<Option<Pick>> = vec![None; n];
+    for s in order {
+        let before = last(ctx.seats[s].pid);
+        let car = match before {
+            Some(p) => p.car,
+            None if ctx.seats[s].bot => CAR_KINDS[ctx.rng.below(CAR_KINDS.len())],
+            None => CarKind::All,
+        };
+        let used = |c: usize| cars.iter().flatten().any(|p| p.color == c);
+        let color = before
+            .map(|p| p.color)
+            .filter(|&c| !used(c))
+            .or_else(|| (0..COLORS).find(|&c| !used(c)))
+            .unwrap_or(s % COLORS);
+        cars[s] = Some(Pick { car, color });
+    }
+    cars.into_iter().map(Option::unwrap_or_default).collect()
 }
 
 /// 送出去的一列車子狀態：[座位, ...狀態]
@@ -273,6 +345,45 @@ impl Racing {
             target
         };
         ctx.emit(To::Seat(to), json!({ "type": "bump", "from": from, "to": target, "v": hit.v }));
+    }
+
+    /// 選車時換車：車色不能和別的真人一樣；和電腦一樣的話，電腦換一個沒人用的
+    fn pick(&mut self, seat: usize, car: CarKind, color: usize, ctx: &mut Ctx) -> Result<(), String> {
+        if color >= COLORS {
+            return Err("沒有這個顏色".into());
+        }
+        if self.ready[seat] {
+            return Err("你已經選好了，這局不能再換".into());
+        }
+        let n = self.cars.len();
+        if (0..n).any(|s| s != seat && !self.bots[s] && self.cars[s].color == color) {
+            return Err("這個顏色已經有人選了，換一個吧".into());
+        }
+        self.cars[seat] = Pick { car, color };
+        for s in 0..n {
+            if s != seat && self.bots[s] && self.cars[s].color == color {
+                if let Some(free) = (0..COLORS).find(|&c| self.cars.iter().all(|p| p.color != c)) {
+                    self.cars[s].color = free;
+                }
+            }
+        }
+        ctx.changed();
+        Ok(())
+    }
+
+    /// 選車時：連著線的真人都選好了（斷線的不等）、或時間到了，就照現在選的開始倒數
+    fn check_select(&mut self, ctx: &mut Ctx) {
+        let Some(until) = self.select_until else { return };
+        let all_ready = (0..self.ready.len()).all(|s| self.ready[s] || !ctx.seats[s].online);
+        if !all_ready && ctx.now < until {
+            return;
+        }
+        self.select_until = None;
+        self.go = ctx.now + COUNTDOWN;
+        self.limit_at = self.go + LAP_LIMIT * self.options.laps;
+        self.bots_heard = self.go;
+        ctx.system(To::All, if all_ready { "大家都選好車了，5 秒後起跑！" } else { "選車時間到，5 秒後起跑！" });
+        ctx.changed();
     }
 
     /// 名次：跑完的照完賽時間，沒跑完的照圈數、再照進度；同樣的照座位
@@ -379,20 +490,29 @@ impl PartyGame for Racing {
         let n = ctx.seats.len();
         let mut grid: Vec<usize> = (0..n).collect();
         shuffle(ctx.rng, &mut grid);
-        let go = ctx.now + COUNTDOWN;
+        let select_until = ctx.now + SELECT;
+        let go = select_until + COUNTDOWN;
         ctx.system(
             To::All,
-            format!("新的一局：{}，{} 圈，起跑位置抽好了。5 秒後起跑！", options.track.name(), options.laps),
+            format!(
+                "新的一局：{}，{} 圈。{} 秒內選好車，大家都選好就開始！",
+                options.track.name(),
+                options.laps,
+                SELECT.as_secs()
+            ),
         );
         ctx.changed();
         let bots: Vec<bool> = ctx.seats.iter().map(|s| s.bot).collect();
         let driver = if bots.contains(&true) { (0..n).find(|&s| !bots[s] && ctx.seats[s].online) } else { None };
+        let cars = first_cars(ctx, previous);
         Self {
             game: previous.map_or(1, |p| p.game + 1),
             options: options.clone(),
             racers: (0..n).map(|_| Racer::new()).collect(),
             pids: ctx.seats.iter().map(|s| s.pid).collect(),
             grid,
+            select_until: Some(select_until),
+            ready: bots.clone(),
             go,
             limit_at: go + LAP_LIMIT * options.laps,
             grace_at: None,
@@ -401,6 +521,7 @@ impl PartyGame for Racing {
             bots,
             driver,
             bots_heard: go,
+            cars,
         }
     }
 
@@ -410,7 +531,25 @@ impl PartyGame for Racing {
             ctx.quiet();
             return Ok(());
         }
+        let selecting = self.select_until.is_some();
         match action {
+            Action::Pick { car, color } if selecting => self.pick(seat, car, color, ctx),
+            Action::Pick { .. } => Err("已經開始了，這局不能換車".into()),
+            Action::Ready => {
+                if selecting && !self.ready[seat] {
+                    self.ready[seat] = true;
+                    ctx.changed();
+                    self.check_select(ctx);
+                } else {
+                    ctx.quiet();
+                }
+                Ok(())
+            }
+            // 選車時還沒有車在跑
+            Action::State { .. } | Action::Bump { .. } if selecting => {
+                ctx.quiet();
+                Ok(())
+            }
             Action::State { d, bots } => {
                 // 狀態只靠 tick 合併轉送，不重送 view；格式不對的直接丟掉（每秒 20 則，不要每則都回錯誤）
                 ctx.quiet();
@@ -461,6 +600,10 @@ impl PartyGame for Racing {
 
     fn tick(&mut self, ctx: &mut Ctx) {
         if self.ended.is_some() {
+            return;
+        }
+        if self.select_until.is_some() {
+            self.check_select(ctx);
             return;
         }
         // 這段時間有更新的車合併成一則：[座位, ...狀態]
@@ -550,6 +693,12 @@ impl PartyGame for Racing {
             "driver": self.driver,
             // 負責開電腦的人才拿得到：電腦最後的狀態（重新整理後從這裡接著開），每列是 [座位, ...狀態]
             "botStates": bot_states,
+            "cars": self.cars,
+            // 選車時：還剩幾毫秒、每個座位選好了沒有；選完了是 null
+            "select": self.select_until.map(|until| json!({
+                "endsIn": until.saturating_duration_since(now).as_millis() as u64,
+                "ready": self.ready,
+            })),
         })
     }
 
@@ -587,6 +736,8 @@ mod tests {
             let mut ctx = test_ctx(now, &mut rng, &seats, &mut out);
             Racing::start(&Options { track: Track::City, laps, ..Options::default() }, None, &mut ctx)
         };
+        // 跳過選車
+        game.select_until = None;
         game.go = now - ago;
         game.limit_at = game.go + LAP_LIMIT * laps;
         game.bots_heard = now;
@@ -874,5 +1025,101 @@ mod tests {
         assert!(Racing::check_options(options(5)).is_ok());
         assert!(Racing::check_options(options(2)).is_err());
         assert!(Racing::check_options(options(0)).is_err());
+    }
+
+    /// 開一局，停在選車
+    fn selecting(seats: Vec<SeatInfo>, previous: Option<&Racing>) -> (Racing, Vec<SeatInfo>, Rng) {
+        let mut rng = Rng::new();
+        let mut out = Outbox::default();
+        let game = {
+            let mut ctx = test_ctx(Instant::now(), &mut rng, &seats, &mut out);
+            Racing::start(&Options::default(), previous, &mut ctx)
+        };
+        (game, seats, rng)
+    }
+
+    fn pick(car: CarKind, color: usize) -> Action {
+        Action::Pick { car, color }
+    }
+
+    #[test]
+    fn colors_go_to_whoever_picks_first() {
+        let (mut g, s, mut rng) = selecting(seats(3), None);
+        assert!(g.select_until.is_some(), "開局先選車");
+        // 第一局都是綜合型，顏色照座位
+        let start: Vec<Pick> = (0..3).map(|color| Pick { car: CarKind::All, color }).collect();
+        assert_eq!(g.cars, start);
+        act(&mut g, &s, &mut rng, 0, pick(CarKind::Speed, 5)).unwrap();
+        assert_eq!(act(&mut g, &s, &mut rng, 1, pick(CarKind::Drift, 5)), Err("這個顏色已經有人選了，換一個吧".into()));
+        assert!(act(&mut g, &s, &mut rng, 1, pick(CarKind::Drift, 0)).is_ok(), "0 號換掉的顏色空出來了");
+        assert!(act(&mut g, &s, &mut rng, 2, pick(CarKind::All, COLORS)).is_err(), "沒有這個顏色");
+        // 選好了就不能換
+        act(&mut g, &s, &mut rng, 0, Action::Ready).unwrap();
+        assert!(act(&mut g, &s, &mut rng, 0, pick(CarKind::Grip, 7)).is_err());
+        assert_eq!(g.cars[0], Pick { car: CarKind::Speed, color: 5 });
+        let view = g.view(Some(1), Instant::now());
+        assert_eq!(view["cars"][1], json!({ "car": "drift", "color": 0 }));
+        assert_eq!(view["select"]["ready"], json!([true, false, false]));
+        assert!(view["select"]["endsIn"].as_u64().unwrap() > 29_000);
+    }
+
+    #[test]
+    fn bots_give_their_color_to_people() {
+        let (mut g, s, mut rng) = selecting(mixed(1, 2), None);
+        // 真人先拿第一個顏色，電腦拿剩下的
+        assert_eq!(g.cars[0].color, 0);
+        assert_eq!(g.cars[1].color, 1);
+        assert_eq!(g.ready, vec![false, true, true], "電腦一開始就選好了");
+        act(&mut g, &s, &mut rng, 0, pick(CarKind::Grip, 1)).unwrap();
+        assert_eq!(g.cars[0], Pick { car: CarKind::Grip, color: 1 });
+        let mut colors: Vec<usize> = g.cars.iter().map(|c| c.color).collect();
+        colors.sort();
+        colors.dedup();
+        assert_eq!(colors.len(), 3, "顏色不重複：{:?}", g.cars);
+    }
+
+    #[test]
+    fn the_countdown_starts_once_everyone_online_is_ready() {
+        let (mut g, mut s, mut rng) = selecting(mixed(3, 1), None);
+        assert!(act(&mut g, &s, &mut rng, 0, lap(1, 30_000)).is_err(), "選車時還不能跑");
+        act(&mut g, &s, &mut rng, 0, Action::Ready).unwrap();
+        tick(&mut g, &s, &mut rng, Instant::now());
+        assert!(g.select_until.is_some(), "還有人在選");
+        // 斷線的人不用等
+        s[2].online = false;
+        act(&mut g, &s, &mut rng, 1, Action::Ready).unwrap();
+        assert!(g.select_until.is_none());
+        let starts_in = g.go.saturating_duration_since(Instant::now());
+        assert!(starts_in <= COUNTDOWN && starts_in > COUNTDOWN - Duration::from_secs(1), "倒數 {starts_in:?}");
+        assert_eq!(g.limit_at, g.go + LAP_LIMIT * g.options.laps);
+        assert!(g.view(Some(0), Instant::now())["select"].is_null());
+        assert!(act(&mut g, &s, &mut rng, 0, pick(CarKind::Grip, 6)).is_err(), "開始倒數就不能換");
+    }
+
+    #[test]
+    fn time_up_goes_with_what_was_picked() {
+        let (mut g, s, mut rng) = selecting(seats(2), None);
+        act(&mut g, &s, &mut rng, 1, pick(CarKind::Accel, 4)).unwrap();
+        tick(&mut g, &s, &mut rng, Instant::now() + Duration::from_secs(20));
+        assert!(g.select_until.is_some());
+        tick(&mut g, &s, &mut rng, Instant::now() + SELECT + Duration::from_millis(100));
+        assert!(g.select_until.is_none(), "時間到了，沒按選好了也開始");
+        assert_eq!(g.cars[1], Pick { car: CarKind::Accel, color: 4 });
+    }
+
+    #[test]
+    fn the_next_game_starts_with_the_same_cars() {
+        let (mut g, s, mut rng) = selecting(mixed(2, 1), None);
+        act(&mut g, &s, &mut rng, 0, pick(CarKind::Drift, 7)).unwrap();
+        act(&mut g, &s, &mut rng, 1, pick(CarKind::Speed, 3)).unwrap();
+        let bot = g.cars[2];
+        // 下一局座位換了，車跟著人走
+        let next_seats = vec![s[1].clone(), s[0].clone(), s[2].clone()];
+        let (next, _, _) = selecting(next_seats, Some(&g));
+        assert_eq!(next.game, 2);
+        assert_eq!(next.cars[0], Pick { car: CarKind::Speed, color: 3 });
+        assert_eq!(next.cars[1], Pick { car: CarKind::Drift, color: 7 });
+        assert_eq!(next.cars[2], bot);
+        assert_eq!(next.ready, vec![false, false, true], "每一局都要重新按選好了");
     }
 }

@@ -20,27 +20,11 @@ import {
   type BumpHit,
 } from './online'
 import { collideCars, collideRemote, driftLevel, newCar, placeCar, stepCar, type Car, type Controls } from './physics'
-import { CAR } from './spec'
+import { CAR, CAR_COLORS, CARS, carSpec, type CarKind } from './spec'
 import { SpeedBlur, WindLines } from './speedfx'
 import { TrackPath } from './track'
 import type { TrackDef } from './tracks'
 import { buildWorld, type World } from './world'
-
-export const CAR_COLORS = [
-  { name: '紅', hex: 0xe0393e },
-  { name: '藍', hex: 0x2f6fe0 },
-  { name: '黃', hex: 0xf2b705 },
-  { name: '綠', hex: 0x1f9d55 },
-  { name: '紫', hex: 0x8b46d8 },
-  { name: '橘', hex: 0xf26b1d },
-  { name: '白', hex: 0xe8e8e8 },
-  { name: '黑', hex: 0x2b2b30 },
-]
-
-/** 線上每個座位的車色：照座位輪流，大家看到的一樣 */
-export function seatColor(seat: number): number {
-  return CAR_COLORS[seat % CAR_COLORS.length].hex
-}
 
 const AI_NAMES = ['疾風', '雷霆', '閃電', '旋風', '流星', '烈焰', '追風']
 
@@ -67,10 +51,16 @@ const FX_FULL = 1.0
 
 /** 停著時的視角（度）；開到極速再廣 `FOV_SPEED` 度，噴射時再加 `FOV_BOOST` 度 */
 const BASE_FOV = 58
+/** 選車畫面的視角：窄一點，車子比較不會變形 */
+const SHOWROOM_FOV = 32
 const FOV_SPEED = 16
 const FOV_BOOST = 9
 
-export type Phase = 'preview' | 'countdown' | 'racing' | 'finished'
+/** preview 是選單背景（電腦在跑），showroom 是選車畫面（選的車停著、鏡頭繞著轉） */
+export type Phase = 'preview' | 'showroom' | 'countdown' | 'racing' | 'finished'
+
+/** 畫面上的一塊（相對遊戲畫面的 CSS 像素） */
+export type Rect = { x: number; y: number; w: number; h: number }
 
 export type Hint = 'wrongWay' | 'stuck' | null
 
@@ -80,14 +70,15 @@ export type RaceSetup = {
   opponents: number
   difficulty: Difficulty
   color: number
+  car: CarKind
 }
 
 /** 線上比賽：伺服器的 view 和房間名單整理出來的開局資料（index.tsx 組） */
 export type OnlineSetup = {
   track: TrackDef
   laps: number
-  /** 每個座位的名字和車色，索引就是座位 */
-  seats: { name: string; color: number }[]
+  /** 每個座位的名字、車色和車種，索引就是座位 */
+  seats: { name: string; color: number; car: CarKind }[]
   /** `grid[seat]` 是第幾個起跑格 */
   grid: number[]
   /** 自己的座位；觀戰是 null */
@@ -120,7 +111,7 @@ export type OnlineLink = {
 /** 伺服器記的每個座位的成績（RacingView.players） */
 export type OnlineResult = { lapTimes: number[]; finish: number | null }
 
-export type RacerInfo = { name: string; color: number; player: boolean }
+export type RacerInfo = { name: string; color: number; car: CarKind; player: boolean }
 
 export type Standing = RacerInfo & {
   position: number
@@ -199,6 +190,14 @@ const CRASH = new Color(0xffd27a)
 
 /** 兩個座位配成一個數字（座位最多 8 個），碰撞去重用 */
 const pairKey = (a: number, b: number) => a * 16 + b
+
+function shuffled<T>(items: T[]): T[] {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[items[i], items[j]] = [items[j], items[i]]
+  }
+  return items
+}
 
 export class RaceGame {
   private readonly host: HTMLElement
@@ -294,8 +293,16 @@ export class RaceGame {
   private hold = false
   /** 線上這局已經結算：不再送狀態、不再計圈（沒跑完的車交給電腦開，過線也不算成績） */
   private closed = false
+  /** 選車畫面上車子要畫在哪一塊（選單蓋住的地方以外）；null 是整個畫面 */
+  private stage: Rect | null = null
 
-  constructor(host: HTMLElement, emit: (e: RaceEvent) => void, onFrame: (f: HudFrame) => void, sound: boolean) {
+  constructor(
+    host: HTMLElement,
+    emit: (e: RaceEvent) => void,
+    onFrame: (f: HudFrame) => void,
+    sound: boolean,
+    music: boolean,
+  ) {
     this.host = host
     this.emit = emit
     this.onFrame = onFrame
@@ -307,7 +314,7 @@ export class RaceGame {
     host.appendChild(this.renderer.domElement)
     this.speedBlur = new SpeedBlur(Math.min(4, this.renderer.capabilities.maxSamples))
     this.parts = createCarParts()
-    this.audio = new RaceAudio(sound)
+    this.audio = new RaceAudio(sound, music)
     this.frame = {
       speedKmh: 0,
       raceMs: 0,
@@ -343,8 +350,46 @@ export class RaceGame {
     this.paused = false
     this.input.capture = false
     this.audio.setActive(false)
+    this.audio.setMusicPaused(false)
+    this.audio.setSong(def.id)
+    this.audio.setMood('menu')
     this.setPhase('preview')
     this.resume()
+  }
+
+  /** 選車畫面：選的車停在起跑線上，鏡頭慢慢繞著轉。換車種、車色時再呼叫一次，只換車 */
+  showroom(def: TrackDef, kind: CarKind, color: number) {
+    const same = this.phase === 'showroom' && this.def?.id === def.id
+    if (same && this.player?.info.car === kind && this.player.info.color === color) return
+    if (!same) {
+      this.online = null
+      this.driving = false
+      this.hold = false
+      this.closed = false
+      this.setup = null
+      this.paused = false
+      this.input.capture = false
+      this.loadTrack(def)
+      this.smoke.clear()
+      this.glow.clear()
+      this.wind.clear()
+      this.audio.setActive(false)
+      this.audio.setMusicPaused(false)
+      this.audio.setSong(def.id)
+      this.audio.setMood('menu')
+    }
+    this.spawn({ color, car: kind }, 0, 'normal')
+    const track = this.track!
+    placeCar(this.player!.car, track, track.length - 16, 0)
+    if (!same) {
+      this.setPhase('showroom')
+      this.resume()
+    }
+  }
+
+  /** 選車畫面上車子要畫在哪一塊（相對遊戲畫面的 CSS 像素）；null 是整個畫面 */
+  setStage(rect: Rect | null) {
+    this.stage = rect
   }
 
   startRace(setup: RaceSetup) {
@@ -354,7 +399,7 @@ export class RaceGame {
     this.closed = false
     this.loadTrack(setup.track)
     this.setup = setup
-    this.spawn(setup.color, setup.opponents, setup.difficulty)
+    this.spawn({ color: setup.color, car: setup.car }, setup.opponents, setup.difficulty)
     this.countdown = 3
     this.lastCount = 4
     this.raceTime = 0
@@ -368,6 +413,9 @@ export class RaceGame {
     this.glow.clear()
     this.wind.clear()
     this.audio.setActive(true)
+    this.audio.setMusicPaused(false)
+    this.audio.setSong(setup.track.id)
+    this.audio.setMood('menu')
     this.setPhase('countdown')
     this.resume()
   }
@@ -380,8 +428,15 @@ export class RaceGame {
   startOnline(setup: OnlineSetup, link: OnlineLink) {
     this.loadTrack(setup.track)
     const me = setup.me
-    const color = me !== null ? setup.seats[me].color : CAR_COLORS[0].hex
-    this.setup = { track: setup.track, laps: setup.laps, opponents: setup.seats.length - 1, difficulty: 'normal', color }
+    const mine = me !== null ? setup.seats[me] : null
+    this.setup = {
+      track: setup.track,
+      laps: setup.laps,
+      opponents: setup.seats.length - 1,
+      difficulty: 'normal',
+      color: mine?.color ?? CAR_COLORS[0].hex,
+      car: mine?.car ?? 'all',
+    }
     this.online = {
       goAt: setup.goAt,
       link,
@@ -413,6 +468,9 @@ export class RaceGame {
     this.glow.clear()
     this.wind.clear()
     this.audio.setActive(true)
+    this.audio.setMusicPaused(false)
+    this.audio.setSong(setup.track.id)
+    this.audio.setMood(this.clock < 0 ? 'menu' : 'race')
     this.setPhase(this.clock < 0 ? 'countdown' : 'racing')
     this.resume()
   }
@@ -519,6 +577,7 @@ export class RaceGame {
     }
     this.input.capture = false
     this.hold = false
+    this.audio.setMood('menu')
     if (this.hint) {
       this.hint = null
       this.emit({ type: 'hint', hint: null })
@@ -556,6 +615,10 @@ export class RaceGame {
     this.audio.setEnabled(on)
   }
 
+  setMusic(on: boolean) {
+    this.audio.setMusic(on)
+  }
+
   setAutoGas(on: boolean) {
     this.input.autoGas = on
   }
@@ -571,6 +634,7 @@ export class RaceGame {
     this.paused = paused
     this.input.reset()
     this.audio.setActive(!paused && this.phase !== 'preview')
+    this.audio.setMusicPaused(paused)
     if (paused) {
       cancelAnimationFrame(this.raf)
       this.raf = 0
@@ -684,27 +748,26 @@ export class RaceGame {
     this.localCars = []
   }
 
-  /** 排起跑格：電腦在前面（越前面越弱），玩家在最後一排 */
-  private spawn(playerColor: number | null, opponents: number, difficulty: Difficulty) {
+  /** 排起跑格：電腦在前面（越前面越弱），玩家在最後一排。電腦的車色不和玩家重複，車種隨機 */
+  private spawn(player: { color: number; car: CarKind } | null, opponents: number, difficulty: Difficulty) {
     this.clearRacers()
     const track = this.track!
-    const palette = CAR_COLORS.map((c) => c.hex).filter((hex) => hex !== playerColor)
-    for (let i = palette.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[palette[i], palette[j]] = [palette[j], palette[i]]
-    }
+    const palette = shuffled(CAR_COLORS.map((c) => c.hex).filter((hex) => hex !== player?.color))
     const infos: RacerInfo[] = []
-    for (let i = 0; i < opponents; i++) infos.push({ name: AI_NAMES[i], color: palette[i % palette.length], player: false })
-    if (playerColor !== null) infos.push({ name: '你', color: playerColor, player: true })
+    for (let i = 0; i < opponents; i++) {
+      const car = CARS[Math.floor(Math.random() * CARS.length)].kind
+      infos.push({ name: AI_NAMES[i], color: palette[i % palette.length], car, player: false })
+    }
+    if (player) infos.push({ name: '你', color: player.color, car: player.car, player: true })
 
     infos.forEach((info, slot) => {
-      const car = newCar()
+      const car = newCar(carSpec(info.car))
       const back = 9 + Math.floor(slot / 2) * 10 + (slot % 2) * 5
       placeCar(car, track, track.length - back, slot % 2 === 0 ? 3.4 : -3.4)
       car.progress = -back
       const ai = info.player ? null : newAi(difficulty, opponents > 1 ? 1 - slot / (opponents - 1) : 0.5)
       if (ai) car.power = ai.power
-      const model = new CarModel(this.parts, info.color)
+      const model = new CarModel(this.parts, info.car, info.color)
       this.world!.scene.add(model.root)
       const racer: Racer = {
         car,
@@ -743,13 +806,13 @@ export class RaceGame {
     const bots = new Set(setup.bots)
     const botStates = new Map(setup.botStates.map((row) => [row[0], row.slice(1)]))
     setup.seats.forEach((seat, s) => {
-      const info: RacerInfo = { name: seat.name, color: seat.color, player: s === setup.me }
-      const car = newCar()
+      const info: RacerInfo = { name: seat.name, color: seat.color, car: seat.car, player: s === setup.me }
+      const car = newCar(carSpec(seat.car))
       const slot = setup.grid[s] ?? s
       const back = 9 + Math.floor(slot / 2) * 10 + (slot % 2) * 5
       placeCar(car, track, track.length - back, slot % 2 === 0 ? 3.4 : -3.4)
       car.progress = -back
-      const model = new CarModel(this.parts, info.color)
+      const model = new CarModel(this.parts, info.car, info.color)
       this.world!.scene.add(model.root)
       const bot = bots.has(s)
       const ai = bot && setup.driving ? this.botAi(s) : null
@@ -934,10 +997,12 @@ export class RaceGame {
     this.updateVisuals(dt)
     this.updateCamera(dt)
     this.updateAudio()
-    if (this.phase !== 'preview') this.emitFrame()
+    if (this.phase !== 'preview' && this.phase !== 'showroom') this.emitFrame()
   }
 
   private tick(h: number) {
+    // 選車畫面的車停著不動
+    if (this.phase === 'showroom') return
     const track = this.track!
     const online = this.online !== null
     if (online) this.clock += h
@@ -949,7 +1014,10 @@ export class RaceGame {
         this.lastCount = n
         this.audio.countdown(n)
         this.emit({ type: 'countdown', n })
-        if (n === 0) this.setPhase('racing')
+        if (n === 0) {
+          this.audio.setMood('race')
+          this.setPhase('racing')
+        }
       }
     }
     const moving = this.phase !== 'countdown'
@@ -1046,6 +1114,7 @@ export class RaceGame {
         else {
           const final = done === laps - 1
           this.audio.lap(final)
+          if (final) this.audio.setMood('final')
           this.emit({ type: 'lap', lap: done, ms, at: this.raceTime * 1000, best: best && done > 1, final })
         }
       } else {
@@ -1065,6 +1134,7 @@ export class RaceGame {
     p.car.drift = 0
     this.input.capture = false
     this.audio.finish()
+    this.audio.setMood('menu')
     if (this.hint) {
       this.hint = null
       this.emit({ type: 'hint', hint: null })
@@ -1174,9 +1244,13 @@ export class RaceGame {
     const chance = (rate: number) => Math.random() < rate * dt
     const sliding = c.drift !== 0 || Math.abs(c.slip) > 4
     const dusty = c.offroad && Math.abs(c.speed) > 6
+    // 後輪和車尾的位置：照車子的大小
+    const rear = c.spec.length * 0.3
+    const wheels = c.spec.width * 0.47
+    const tail = c.spec.length * 0.55
     for (const side of [-1, 1]) {
-      const wx = c.x - sx * 1.3 + cz * 0.88 * side
-      const wz = c.z - cz * 1.3 - sx * 0.88 * side
+      const wx = c.x - sx * rear + cz * wheels * side
+      const wz = c.z - cz * rear - sx * wheels * side
       if ((sliding || dusty) && chance(dusty ? 40 : 30)) {
         this.smoke.emit(
           wx,
@@ -1211,9 +1285,9 @@ export class RaceGame {
     }
     if (c.boost > 0 && chance(70)) {
       this.glow.emit(
-        c.x - sx * 2.4 + (Math.random() - 0.5) * 0.6,
+        c.x - sx * tail + (Math.random() - 0.5) * 0.6,
         c.y + 0.45,
-        c.z - cz * 2.4 + (Math.random() - 0.5) * 0.6,
+        c.z - cz * tail + (Math.random() - 0.5) * 0.6,
         c.vx * 0.6 - sx * 6,
         0.5,
         c.vz * 0.6 - cz * 6,
@@ -1260,6 +1334,11 @@ export class RaceGame {
     if (!r) return
     const c = r.car
     const cam = this.camera
+    if (this.phase === 'showroom') {
+      this.showroomCamera(c, dt)
+      return
+    }
+    if (cam.view?.enabled) cam.clearViewOffset()
     const orbiting = this.phase === 'preview' || this.phase === 'finished'
     const live = this.phase === 'countdown' || this.phase === 'racing'
     const k = (rate: number) => (this.camReady ? 1 - Math.exp(-rate * dt) : 1)
@@ -1342,6 +1421,31 @@ export class RaceGame {
     cam.updateProjectionMatrix()
   }
 
+  /**
+   * 選車畫面的鏡頭：繞著車慢慢轉，照車長拉遠拉近，車子畫在 `stage` 那一塊的正中間
+   * （把投影中心移過去，車子就不會被選單蓋住）
+   */
+  private showroomCamera(c: Car, dt: number) {
+    const cam = this.camera
+    const w = Math.max(1, this.host.clientWidth)
+    const h = Math.max(1, this.host.clientHeight)
+    const st = this.stage ?? { x: 0, y: 0, w, h }
+    // 車子（看起來最長差不多是車長）最多佔那一塊的六成寬，也不要比那一塊的高度大太多
+    const px = Math.max(80, Math.min(st.w * 0.6, st.h * 1.35))
+    const dist = clamp((c.spec.length * h) / (2 * Math.tan((SHOWROOM_FOV * Math.PI) / 360) * px), 6, 80)
+    this.orbit += dt * (this.calm ? 0.12 : 0.35)
+    const a = c.heading + Math.PI * 0.8 + this.orbit
+    const lift = 0.28
+    const flat = dist * Math.cos(lift)
+    cam.position.set(c.x + Math.sin(a) * flat, c.y + 0.6 + dist * Math.sin(lift), c.z + Math.cos(a) * flat)
+    cam.lookAt(c.x, c.y + 0.6, c.z)
+    this.camPos.copy(cam.position)
+    this.fov = cam.fov = SHOWROOM_FOV
+    this.blur = this.lines = this.shake = 0
+    cam.setViewOffset(w, h, w / 2 - (st.x + st.w / 2), h / 2 - (st.y + st.h / 2), w, h)
+    this.camReady = true
+  }
+
   /** 直式螢幕放寬視角，左右才看得到路 */
   private screenFov(fov: number) {
     const aspect = this.camera.aspect
@@ -1351,7 +1455,7 @@ export class RaceGame {
   }
 
   private updateAudio() {
-    if (this.paused || this.phase === 'preview') return
+    if (this.paused || this.phase === 'preview' || this.phase === 'showroom') return
     const r = this.racers[this.focus]
     if (!r) return
     const c = r.car

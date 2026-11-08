@@ -7,11 +7,15 @@ import type { Party } from '../shared/useParty'
 import type { Difficulty } from './ai'
 import { clamp, wrapAngle } from './noise'
 import { driftTimeFor, type Car } from './physics'
+import { CAR_COLORS, CARS, type CarKind } from './spec'
 import type { TrackPath } from './track'
 
 export type OnlineTrack = 'coast' | 'canyon' | 'city'
 
 export type RacingOptions = { track: OnlineTrack; laps: number; difficulty: Difficulty }
+
+/** 每個座位的車：車種和車色（`CAR_COLORS` 的第幾個）。選車時車色先選先贏，別人選走的不能選 */
+export type RacingPick = { car: CarKind; color: number }
 
 export type RacingPlayer = {
   /** 每一圈的時間（毫秒） */
@@ -49,6 +53,10 @@ export type RacingView = {
   driver: number | null
   /** 自己負責開電腦時才有：電腦最後的狀態，每列是 [座位, ...狀態]（重新整理後接著開） */
   botStates: number[][]
+  /** 每個座位的車種和車色（選車時可以換，車色不會重複） */
+  cars: RacingPick[]
+  /** 選車時：還剩幾毫秒、每個座位選好了沒有（電腦一開始就選好了）；選完、開始倒數後是 null */
+  select: { endsIn: number; ready: boolean[] } | null
 }
 
 /** 撞到座位 `seat` 的車：`by` 是撞人的電腦（自己的車撞的不填），`v` 是被撞的車該拿到的速度變化 [vx, vz] */
@@ -62,6 +70,10 @@ export type RacingAction =
   /** 對時：`t` 是送出時的 performance.now()，伺服器原封不動送回來 */
   | { type: 'ping'; t: number }
   | { type: 'bump'; hits: BumpHit[] }
+  /** 選車時換車；車色被別的真人選走了會被擋下來，電腦的顏色會讓出來 */
+  | { type: 'pick'; car: CarKind; color: number }
+  /** 選好了（之後這局不能再換） */
+  | { type: 'ready' }
 
 export type RacingEvent =
   /** 每列是 [座位, ...狀態] */
@@ -76,6 +88,20 @@ export type RacingParty = { view: RacingView; action: RacingAction; options: Rac
 /** 座位上的人的名字（離開房間的人這局結束前還在名單上，真的找不到才用編號） */
 export function seatName(party: Party<RacingParty>, seat: number): string {
   return party.playerAt(seat)?.name ?? `車手 ${seat + 1}`
+}
+
+/** 座位選的車（車色是第幾個）；伺服器送來的資料怪怪的就當作綜合型、照座位輪流配色 */
+export function seatPick(view: RacingView, seat: number): RacingPick {
+  const pick = view.cars?.[seat]
+  const car = CARS.some((c) => c.kind === pick?.car) ? pick!.car : 'all'
+  const color = pick && Number.isInteger(pick.color) && pick.color >= 0 ? pick.color % CAR_COLORS.length : seat % CAR_COLORS.length
+  return { car, color }
+}
+
+/** 座位的車（車色是色碼，給 3D 畫面和名單用） */
+export function seatCar(view: RacingView, seat: number): { car: CarKind; color: number } {
+  const pick = seatPick(view, seat)
+  return { car: pick.car, color: CAR_COLORS[pick.color].hex }
 }
 
 /** 每秒送幾次自己的狀態 */

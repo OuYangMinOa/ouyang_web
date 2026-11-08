@@ -1,5 +1,7 @@
-// 賽車的聲音全部用 Web Audio 即時合成：引擎（跟著車速換檔）、越快越大聲的風切聲、甩尾的輪胎聲、撞牆、倒數和過線的提示音。
+// 賽車的聲音全部用 Web Audio 即時合成：引擎（跟著車速換檔）、越快越大聲的風切聲、甩尾的輪胎聲、撞牆、倒數和過線的提示音，
+// 還有背景音樂（music.ts）。音效和音樂分開開關。
 // 瀏覽器要等使用者點過畫面才肯出聲，所以第一次按「開始」時才建立 AudioContext。
+import { Music, type MusicMood } from './music'
 
 type Engine = { a: OscillatorNode; b: OscillatorNode; filter: BiquadFilterNode; gain: GainNode }
 
@@ -15,9 +17,16 @@ export class RaceAudio {
   private noise: AudioBuffer | null = null
   private enabled: boolean
   private active = false
+  private music: Music | null = null
+  /** 音樂的設定：AudioContext 建立前先記著，建立後再套上 */
+  private musicOn: boolean
+  private song = 'coast'
+  private mood: MusicMood = 'menu'
+  private musicPaused = false
 
-  constructor(enabled: boolean) {
+  constructor(enabled: boolean, music: boolean) {
     this.enabled = enabled
+    this.musicOn = music
   }
 
   /** 在使用者操作（點擊、按鍵）的事件裡呼叫 */
@@ -82,6 +91,11 @@ export class RaceAudio {
       // 從噪音中間開始，免得和輪胎聲完全同步
       windSrc.start(0, 0.5)
       this.wind = { filter: windFilter, gain: windGain }
+
+      this.music = new Music(ctx, this.noise, this.musicOn)
+      this.music.setSong(this.song)
+      this.music.setMood(this.mood)
+      this.music.setPaused(this.musicPaused)
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => {})
   }
@@ -89,6 +103,28 @@ export class RaceAudio {
   setEnabled(on: boolean) {
     this.enabled = on
     if (this.ctx && this.master) this.master.gain.setTargetAtTime(on ? 0.55 : 0, this.ctx.currentTime, 0.05)
+  }
+
+  setMusic(on: boolean) {
+    this.musicOn = on
+    this.music?.setEnabled(on)
+  }
+
+  /** 背景音樂換成這條賽道的歌 */
+  setSong(track: string) {
+    this.song = track
+    this.music?.setSong(track)
+  }
+
+  setMood(mood: MusicMood) {
+    this.mood = mood
+    this.music?.setMood(mood)
+  }
+
+  /** 暫停時音樂小聲一點 */
+  setMusicPaused(paused: boolean) {
+    this.musicPaused = paused
+    this.music?.setPaused(paused)
   }
 
   /** 比賽中才有引擎聲；選單和暫停時安靜 */
@@ -191,6 +227,8 @@ export class RaceAudio {
   }
 
   dispose() {
+    this.music?.dispose()
+    this.music = null
     void this.ctx?.close().catch(() => {})
     this.ctx = null
     this.master = null

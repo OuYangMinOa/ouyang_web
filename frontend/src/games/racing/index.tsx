@@ -6,12 +6,11 @@ import { load, save } from '../shared/storage'
 import { Segmented } from '../shared/ui'
 import { useParty } from '../shared/useParty'
 import { DIFFICULTIES, type Difficulty } from './ai'
+import { CarSelect } from './CarSelect'
 import { formatMs, hexColor } from './format'
 import {
   CAMERA_NAMES,
-  CAR_COLORS,
   RaceGame,
-  seatColor,
   type FinishResult,
   type Hint,
   type HudFrame,
@@ -19,11 +18,13 @@ import {
   type Phase,
   type RaceEvent,
   type RacerInfo,
+  type Rect,
   type Standing,
 } from './game'
 import type { TouchState } from './input'
-import { seatName, type RacingParty, type RacingView } from './online'
-import { OnlineMenu, OnlinePause, OnlineResult } from './OnlinePanels'
+import { seatCar, seatName, seatPick, type RacingParty, type RacingPick, type RacingView } from './online'
+import { OnlineMenu, OnlinePause, OnlineResult, OnlineSelect } from './OnlinePanels'
+import { CAR_COLORS, CARS, carSpec, type CarKind } from './spec'
 import { findTrack, TRACKS } from './tracks'
 import './racing.css'
 
@@ -33,6 +34,7 @@ type Settings = {
   opponents: number
   difficulty: Difficulty
   color: number
+  car: CarKind
   autoGas: boolean
   fullscreen: boolean
   camera: number
@@ -70,6 +72,7 @@ function loadSettings(): Settings {
     opponents: OPPONENTS.some((o) => o.value === raw.opponents) ? raw.opponents! : 5,
     difficulty: DIFFICULTIES.some((d) => d.value === raw.difficulty) ? raw.difficulty! : 'normal',
     color: CAR_COLORS.some((c) => c.hex === raw.color) ? raw.color! : CAR_COLORS[0].hex,
+    car: CARS.some((c) => c.kind === raw.car) ? raw.car! : 'all',
     autoGas: typeof raw.autoGas === 'boolean' ? raw.autoGas : isCoarse(),
     fullscreen: typeof raw.fullscreen === 'boolean' ? raw.fullscreen : true,
     camera: typeof raw.camera === 'number' ? raw.camera : 0,
@@ -90,7 +93,8 @@ export default function Racing() {
   const rootRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<RaceGame | null>(null)
   const [settings, setSettings] = useState(loadSettings)
-  const [screen, setScreen] = useState<'menu' | 'race'>('menu')
+  /** 選單（單人選賽道、線上的大廳）→ 選車 → 比賽 */
+  const [screen, setScreen] = useState<'menu' | 'select' | 'race'>('menu')
   const [phase, setPhase] = useState<Phase>('preview')
   const [paused, setPaused] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
@@ -104,6 +108,7 @@ export default function Racing() {
   const [standings, setStandings] = useState<Standing[] | null>(null)
   const [records, setRecords] = useState<Records>(() => load('racing:records', {}))
   const [sound, setSound] = useState(() => load('racing:sound', true))
+  const [music, setMusic] = useState(() => load('racing:music', true))
   const [touch, setTouch] = useState(isCoarse)
   const [fullscreen, setFullscreen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -114,7 +119,7 @@ export default function Racing() {
   const [mode, setMode] = useState<Mode>(() =>
     params.has('room') ? 'online' : load<Mode>('racing:mode', 'solo') === 'online' ? 'online' : 'solo',
   )
-  /** 現在這場比賽是單人還是線上的 */
+  /** 現在這場比賽（和選車畫面）是單人還是線上的 */
   const [raceKind, setRaceKind] = useState<Mode>('solo')
   /** 線上觀戰（沒有座位、或重新整理前已經跑完）時鏡頭跟著的座位；自己在跑是 null */
   const [watchSeat, setWatchSeat] = useState<number | null>(null)
@@ -151,6 +156,8 @@ export default function Racing() {
   settingsRef.current = settings
 
   const sendTouch = useCallback((patch: Partial<TouchState>) => gameRef.current?.setTouch(patch), [])
+  /** 選車畫面：車子畫在預覽那一塊 */
+  const sendStage = useCallback((rect: Rect | null) => gameRef.current?.setStage(rect), [])
 
   function update(patch: Partial<Settings>) {
     setSettings((s) => {
@@ -252,7 +259,7 @@ export default function Racing() {
 
     let game: RaceGame
     try {
-      game = new RaceGame(host, onEvent, onFrame, load('racing:sound', true))
+      game = new RaceGame(host, onEvent, onFrame, load('racing:sound', true), load('racing:music', true))
     } catch {
       setError('這個瀏覽器沒辦法顯示 3D 畫面（WebGL 沒有開啟或不支援），換個瀏覽器或更新顯示卡驅動程式再試試。')
       return
@@ -273,11 +280,41 @@ export default function Racing() {
     if (screen === 'menu') gameRef.current?.preview(findTrack(menuTrack))
   }, [screen, menuTrack])
 
-  // 線上開局：房間進入對局、收到新的一局（view.game 換了）就排起跑格。觀戰、重新整理後接著跑也從這裡進來
+  // 線上：房主按了開始，先選車（每個人有時限，選好了才開始倒數）。一局只切過去一次（在 render 裡依 view 調整 state）
+  const [selectedGame, setSelectedGame] = useState<number | null>(null)
+  if (online && roomPhase === 'playing' && view && view.select !== null && !view.ended && selectedGame !== view.game) {
+    setSelectedGame(view.game)
+    setRaceKind('online')
+    setWatchSeat(null)
+    setResult(null)
+    setStandings(null)
+    setPaused(false)
+    setHint(null)
+    setCountdown(null)
+    setToast(null)
+    setScreen('select')
+  }
+
+  // 選車畫面的背景：選到的車停在這局的賽道上（線上是自己選的；觀戰的人看第一個座位的）
+  const selectTrack = screen !== 'select' ? null : raceKind === 'online' ? (view?.track ?? null) : settings.track
+  const shownPick =
+    screen !== 'select'
+      ? null
+      : raceKind === 'online'
+        ? view && seatPick(view, view.you ?? 0)
+        : { car: settings.car, color: Math.max(0, CAR_COLORS.findIndex((c) => c.hex === settings.color)) }
+  const shownCar = shownPick?.car
+  const shownColor = shownPick?.color
+  useEffect(() => {
+    if (selectTrack === null || shownCar === undefined || shownColor === undefined) return
+    gameRef.current?.showroom(findTrack(selectTrack), shownCar, CAR_COLORS[shownColor].hex)
+  }, [selectTrack, shownCar, shownColor])
+
+  // 線上開局：選完車（view.select 變成 null）、收到新的一局（view.game 換了）就排起跑格。觀戰、重新整理後接著跑也從這裡進來
   useEffect(() => {
     const game = gameRef.current
     const room = party.room
-    if (!online || !game || !view || room?.phase !== 'playing' || view.ended) return
+    if (!online || !game || !view || room?.phase !== 'playing' || view.ended || view.select !== null) return
     if (startedGame.current === view.game) return
     startedGame.current = view.game
     const me = view.you !== null && view.players[view.you]?.finish === null ? view.you : null
@@ -296,7 +333,7 @@ export default function Racing() {
       {
         track: findTrack(view.track),
         laps: view.laps,
-        seats: view.players.map((_, seat) => ({ name: seatName(party, seat), color: seatColor(seat) })),
+        seats: view.players.map((_, seat) => ({ name: seatName(party, seat), ...seatCar(view, seat) })),
         grid: view.grid,
         me,
         goAt: goAtOf(view, party.viewAt),
@@ -329,7 +366,7 @@ export default function Racing() {
 
   // 線上：離開房間、房主中止這局（回到大廳）時回選單
   useEffect(() => {
-    if (raceKind !== 'online' || screen !== 'race') return
+    if (raceKind !== 'online' || screen === 'menu') return
     if (!online || !party.code || roomPhase === 'lobby') backToMenu()
   })
 
@@ -394,6 +431,9 @@ export default function Racing() {
         case 'KeyM':
           toggleSound()
           break
+        case 'KeyB':
+          toggleMusic()
+          break
         case 'KeyF':
           toggleFullscreen()
           break
@@ -436,6 +476,16 @@ export default function Racing() {
     })
   }
 
+  function toggleMusic() {
+    // 在按鈕、按鍵的事件裡：順便讓瀏覽器開始出聲（還沒開始比賽時，選單就聽得到音樂）
+    gameRef.current?.unlockAudio()
+    setMusic((on) => {
+      save('racing:music', !on)
+      gameRef.current?.setMusic(!on)
+      return !on
+    })
+  }
+
   function enterFullscreen() {
     const el = rootRef.current
     if (!el || !canFullscreen() || document.fullscreenElement) return
@@ -453,6 +503,14 @@ export default function Racing() {
     if (!canFullscreen()) return
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
     else enterFullscreen()
+  }
+
+  /** 單人：選好賽道後去選車 */
+  function openSelect() {
+    gameRef.current?.unlockAudio()
+    setRaceKind('solo')
+    setWatchSeat(null)
+    setScreen('select')
   }
 
   function start() {
@@ -476,13 +534,15 @@ export default function Racing() {
       opponents: settings.opponents,
       difficulty: settings.difficulty,
       color: settings.color,
+      car: settings.car,
     })
   }
 
   function backToMenu() {
     gameRef.current?.setPaused(false)
-    // 離開房間後再回來（同一局還在跑）要重新開局，從伺服器記的位置接著跑
+    // 離開房間後再回來（同一局還在跑）要重新開局，從伺服器記的位置接著跑；還在選車的話回到選車畫面
     startedGame.current = null
+    setSelectedGame(null)
     setRaceKind('solo')
     setWatchSeat(null)
     setPaused(false)
@@ -525,12 +585,20 @@ export default function Racing() {
   }
 
   const inRace = screen === 'race'
+  const selectView = screen === 'select' && raceKind === 'online' && view?.select ? view : null
   const racing = inRace && (phase === 'countdown' || phase === 'racing')
   const onlineRace = inRace && raceKind === 'online'
   const watching = onlineRace && watchSeat !== null
   const track = findTrack(settings.track)
   const record = records[track.id]
   const modeSwitch = <Segmented label="模式" value={mode} options={MODES} onChange={changeMode} />
+  const colorIndex = Math.max(
+    0,
+    CAR_COLORS.findIndex((c) => c.hex === settings.color),
+  )
+  /** 自己平常開的車（單人和線上共用，線上換車時也記下來，下次進房間先換成這台） */
+  const prefs: RacingPick = { car: settings.car, color: colorIndex }
+  const setPrefs = (p: RacingPick) => update({ car: p.car, color: CAR_COLORS[p.color].hex })
   const exitLabel = lobby.code ? '回到遊戲室' : '回到小遊戲'
 
   return (
@@ -560,6 +628,14 @@ export default function Racing() {
                 <div className="race-sub">最快 {formatMs(bestLap)}</div>
               </div>
             </div>
+          ) : selectView?.select ? (
+            <div className="race-chip race-select-timer" role="timer">
+              選車倒數 <Countdown ms={selectView.select.endsIn} stamp={selectView} />
+            </div>
+          ) : screen === 'select' ? (
+            <button type="button" className="race-icon" onClick={backToMenu} aria-label="回到選單" title="回到選單">
+              ←
+            </button>
           ) : (
             <button type="button" className="race-icon" onClick={exit} aria-label={exitLabel} title={exitLabel}>
               ←
@@ -592,11 +668,21 @@ export default function Racing() {
             )}
             <button
               type="button"
+              className={`race-icon${music ? '' : ' off'}`}
+              onClick={toggleMusic}
+              aria-pressed={music}
+              aria-label={music ? '關掉音樂' : '打開音樂'}
+              title={music ? '關掉音樂（B）' : '打開音樂（B）'}
+            >
+              🎵
+            </button>
+            <button
+              type="button"
               className="race-icon"
               onClick={toggleSound}
               aria-pressed={sound}
-              aria-label={sound ? '關掉聲音' : '打開聲音'}
-              title={sound ? '關掉聲音（M）' : '打開聲音（M）'}
+              aria-label={sound ? '關掉音效' : '打開音效'}
+              title={sound ? '關掉音效（M）' : '打開音效（M）'}
             >
               {sound ? '🔊' : '🔇'}
             </button>
@@ -748,24 +834,6 @@ export default function Racing() {
                   onChange={(difficulty) => update({ difficulty })}
                   disabled={settings.opponents === 0}
                 />
-                <div className="segmented-field">
-                  <span className="segmented-label">車色</span>
-                  <div className="race-colors" role="radiogroup" aria-label="車色">
-                    {CAR_COLORS.map((c) => (
-                      <button
-                        key={c.hex}
-                        type="button"
-                        role="radio"
-                        aria-checked={settings.color === c.hex}
-                        aria-label={c.name}
-                        title={c.name}
-                        className="race-color"
-                        style={{ '--car': hexColor(c.hex) } as CSSProperties}
-                        onClick={() => update({ color: c.hex })}
-                      />
-                    ))}
-                  </div>
-                </div>
                 <div className="race-checks">
                   {touch && (
                     <label className="race-check">
@@ -796,18 +864,51 @@ export default function Racing() {
                 <p className="race-help">
                   {touch
                     ? '左下角左右拖曳轉彎，右下角油門、煞車。轉彎時按住「甩尾」，按越久車尾甩越開、彎轉越急，放開時會加速；甩越久加速越久。'
-                    : '方向鍵或 WASD 開車，轉彎時按住空白鍵或 Shift 甩尾：按越久車尾甩越開、彎轉越急，放開時加速（甩越久越久）。C 換視角、R 回到賽道、P 暫停、F 全螢幕、M 聲音。也可以接遊戲手把。'}
+                    : '方向鍵或 WASD 開車，轉彎時按住空白鍵或 Shift 甩尾：按越久車尾甩越開、彎轉越急，放開時加速（甩越久越久）。C 換視角、R 回到賽道、P 暫停、F 全螢幕、M 音效、B 音樂。也可以接遊戲手把。'}
                 </p>
                 {/* 選單很長時開始鈕黏在面板底部，不用捲到最下面 */}
                 <div className="race-start-bar">
-                  <button type="button" className="race-start" onClick={start}>
-                    開始比賽
+                  <button type="button" className="race-start" onClick={openSelect}>
+                    下一步：選車
                   </button>
                 </div>
               </>
             )}
           </div>
         </div>
+      )}
+
+      {screen === 'select' && raceKind === 'solo' && (
+        <CarSelect
+          title="選你的車"
+          subtitle={`${track.name}・${settings.laps} 圈・${settings.opponents ? `電腦 ${settings.opponents} 台` : '計時賽'}`}
+          car={settings.car}
+          color={colorIndex}
+          onCar={(car) => update({ car })}
+          onColor={(i) => update({ color: CAR_COLORS[i].hex })}
+          onStage={sendStage}
+          actions={
+            <>
+              <button type="button" className="secondary" onClick={backToMenu}>
+                返回
+              </button>
+              <button type="button" className="race-start" onClick={start}>
+                開始比賽
+              </button>
+            </>
+          }
+        />
+      )}
+
+      {selectView && (
+        <OnlineSelect
+          party={party}
+          view={selectView}
+          prefs={prefs}
+          onPrefs={setPrefs}
+          onStage={sendStage}
+          onLeave={leaveRoom}
+        />
       )}
 
       {/* 結算後選單收起來，換成績表 */}
@@ -929,6 +1030,7 @@ function ResultPanel({
                 <td data-label="車手" className="primary">
                   <span className="race-swatch" style={{ '--car': hexColor(s.color) } as CSSProperties} />
                   {s.name}
+                  <span className="race-car-tag">{carSpec(s.car).name}</span>
                 </td>
                 <td data-label="總時間">{s.time !== null ? formatMs(s.time) : '比賽中'}</td>
                 <td data-label="最快圈">{formatMs(s.bestLap)}</td>
