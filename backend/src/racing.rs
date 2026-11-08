@@ -80,13 +80,13 @@ impl Track {
         }
     }
 
-    /// 一圈最快幾毫秒：賽道一圈的長度（`track.ts` 算的，海岸 1805、峽谷 1508、夜城 1483 公尺）
+    /// 一圈最快幾毫秒：賽道一圈的長度（`track.ts` 算的，海岸 1808、峽谷 1513、夜城 1591 公尺）
     /// 用 `MAX_SPEED` 跑完的時間。改了賽道或極速記得重算
     fn min_lap_ms(self) -> u64 {
         match self {
             Track::Coast => 22_500,
-            Track::Canyon => 18_800,
-            Track::City => 18_500,
+            Track::Canyon => 18_900,
+            Track::City => 19_800,
         }
     }
 }

@@ -349,9 +349,14 @@ export class CarModel {
   private readonly tailMat: MeshBasicMaterial
   private readonly flames: Mesh[] = []
   private readonly wheelR: number
+  private readonly shadow: Mesh
   private spin = 0
   private roll = 0
   private pitch = 0
+  /** 路面的橫向傾斜 */
+  private tilt = 0
+  /** 落地時車身往下沉多少（慢慢彈回來） */
+  private squash = 0
 
   constructor(parts: CarParts, kind: CarKind, color: number) {
     const shape = bodyParts(parts, kind)
@@ -363,6 +368,7 @@ export class CarModel {
     const shadow = new Mesh(shape.shadow, parts.shadowMat)
     shadow.position.y = 0.04
     shadow.renderOrder = 1
+    this.shadow = shadow
     this.root.add(shadow)
     this.root.add(this.body)
     this.root.rotation.order = 'YXZ'
@@ -421,12 +427,31 @@ export class CarModel {
     }
   }
 
-  /** `slope` 是路面往車頭方向的坡度（高度／距離） */
-  sync(car: Car, slope: number, dt: number, time: number) {
+  /** 騰空後落地：車身往下一沉再彈回來 */
+  land(strength: number) {
+    this.squash = Math.max(this.squash, Math.min(0.16, strength * 0.018))
+  }
+
+  /** `slope`、`side` 是路面往車頭方向、往車子左邊的坡度（高度／距離） */
+  sync(car: Car, slope: number, side: number, dt: number, time: number) {
     this.root.position.set(car.x, car.y, car.z)
     const k = 1 - Math.exp(-10 * dt)
-    this.pitch += (-Math.atan(slope) - this.pitch) * k
-    this.root.rotation.set(this.pitch, car.heading, 0)
+    // 在空中：車頭跟著飛的方向慢慢點下去，車身慢慢擺平；影子留在路面上、離越高越小
+    const height = Math.max(0, car.y - car.loc.y)
+    const flying = car.air > 0 && height > 0.08
+    if (flying) {
+      const dive = -Math.atan2(car.vy, Math.max(Math.abs(car.speed), 8)) * 0.6
+      this.pitch += (dive - this.pitch) * (1 - Math.exp(-3 * dt))
+      this.tilt *= Math.exp(-2 * dt)
+    } else {
+      this.pitch += (-Math.atan(slope) - this.pitch) * k
+      this.tilt += (Math.atan(side) - this.tilt) * k
+    }
+    this.root.rotation.set(this.pitch, car.heading, this.tilt)
+    this.shadow.position.y = 0.04 - height
+    this.shadow.scale.setScalar(1 / (1 + height * 0.15))
+    this.squash *= Math.exp(-9 * dt)
+    this.body.position.y = -this.squash
     // 過彎時車身往外傾：側向加速度 ≈ 轉向角速度 × 速度
     const lean = Math.max(-0.07, Math.min(0.07, car.yawRate * car.speed * 0.0035))
     this.roll += (lean - this.roll) * k
