@@ -6,6 +6,7 @@ import { cruiseAi, driveAi, newAi, type AiDriver, type Difficulty } from './ai'
 import { RaceAudio } from './audio'
 import { CarModel, createCarParts, disposeCarParts, type CarParts } from './car'
 import { Particles } from './effects'
+import { SkidMarks } from './skids'
 import { Input, type PadAction, type TouchState } from './input'
 import { clamp, smoothstep, wrapAngle } from './noise'
 import {
@@ -109,7 +110,7 @@ export type OnlineLink = {
 }
 
 /** 伺服器記的每個座位的成績（RacingView.players） */
-export type OnlineResult = { lapTimes: number[]; finish: number | null }
+export type OnlineResult = { lapTimes: number[]; finish: number | null; retired?: boolean }
 
 export type RacerInfo = { name: string; color: number; car: CarKind; player: boolean }
 
@@ -159,6 +160,8 @@ export type RaceEvent =
   | { type: 'finish'; result: FinishResult }
   | { type: 'standings'; standings: Standing[] }
   | { type: 'pad'; action: PadAction }
+  /** 觀戰時看的那台車不見了（回到房間、斷線），自動換成座位 `seat` */
+  | { type: 'focus'; seat: number }
 
 type Racer = {
   car: Car
@@ -192,6 +195,8 @@ const CRASH = new Color(0xffd27a)
 
 /** 兩個座位配成一個數字（座位最多 8 個），碰撞去重用 */
 const pairKey = (a: number, b: number) => a * 16 + b
+/** 胎痕比路面的中心線高多少（路面本身墊高了 0.02） */
+const SKID_LIFT = 0.05
 
 function shuffled<T>(items: T[]): T[] {
   for (let i = items.length - 1; i > 0; i--) {
@@ -212,6 +217,7 @@ export class RaceGame {
   private readonly audio: RaceAudio
   private readonly smoke = new Particles(600, false)
   private readonly glow = new Particles(500, true)
+  private readonly skids = new SkidMarks()
   private readonly resize: ResizeObserver
   private readonly playerCtl: Controls = { throttle: 0, brake: 0, steer: 0, drift: false }
   private readonly frame: HudFrame
@@ -295,6 +301,8 @@ export class RaceGame {
   private hold = false
   /** 線上這局已經結算：不再送狀態、不再計圈（沒跑完的車交給電腦開，過線也不算成績） */
   private closed = false
+  /** 線上自己跑完後在看別人跑：鏡頭跟著 `focus` 那台車，畫面上的速度、圈數也是那台的 */
+  private spectating = false
   /** 選車畫面上車子要畫在哪一塊（選單蓋住的地方以外）；null 是整個畫面 */
   private stage: Rect | null = null
 
@@ -531,12 +539,14 @@ export class RaceGame {
     }
   }
 
-  /** 伺服器記的每個座位的圈數和完賽時間（別人的車靠這個排名次） */
+  /** 伺服器記的每個座位的圈數和完賽時間（別人的車靠這個排名次）；回到房間的人的車馬上拿掉 */
   onlineResults(results: OnlineResult[]) {
     if (!this.online) return
     results.forEach((res, seat) => {
       const r = this.racers[this.seatIndex[seat] ?? -1]
-      if (r?.remote) this.setLaps(r, res.lapTimes, res.finish)
+      if (!r?.remote) return
+      this.setLaps(r, res.lapTimes, res.finish)
+      if (res.retired) r.remote.drop()
     })
   }
 
@@ -566,10 +576,11 @@ export class RaceGame {
     this.refreshLocals()
   }
 
-  /** 線上這局結算了：還沒跑完的話交給電腦開、鏡頭繞著車轉 */
+  /** 線上這局結算了：還沒跑完的話交給電腦開、鏡頭繞著車轉（在看別人跑的話回到自己的車） */
   endOnline() {
     if (!this.online || this.phase === 'preview') return
     this.closed = true
+    if (this.spectating) this.spectate(false)
     if (this.phase === 'finished') return
     const p = this.player
     if (p) {
@@ -587,20 +598,55 @@ export class RaceGame {
     this.setPhase('finished')
   }
 
-  /** 觀戰時換下一台車；回傳現在看的座位 */
+  /** 觀戰時換下一台車（看得到的，自己跑完的車不算）；回傳現在看的座位 */
   cycleFocus(): number | null {
-    if (!this.online || this.player || this.racers.length === 0) return null
+    if (!this.online || (this.player && !this.spectating) || this.racers.length === 0) return null
     const now = performance.now()
     for (let k = 1; k <= this.racers.length; k++) {
       const i = (this.focus + k) % this.racers.length
-      const remote = this.racers[i].remote
-      if (!remote || remote.visible(now) || k === this.racers.length) {
+      const r = this.racers[i]
+      if (r === this.player) continue
+      if (!r.remote || r.remote.visible(now) || k === this.racers.length) {
         this.focus = i
         break
       }
     }
     this.camReady = false
     return this.seatOf[this.focus] ?? null
+  }
+
+  /**
+   * 線上自己跑完後：看別人跑（`on`）或回到自己的車。先看還在跑的車裡跑最前面的；
+   * 沒有別的車可以看就不切換，回傳 null
+   */
+  spectate(on: boolean): number | null {
+    const p = this.player
+    if (!this.online || !p || p.finish === null) return null
+    if (!on) {
+      this.spectating = false
+      this.focus = this.racers.indexOf(p)
+      this.camReady = false
+      this.audio.setMood('menu')
+      return null
+    }
+    const now = performance.now()
+    let best = -1
+    for (let i = 0; i < this.racers.length; i++) {
+      const r = this.racers[i]
+      if (r === p || (r.remote && !r.remote.visible(now))) continue
+      const running = r.finish === null
+      const b = best < 0 ? null : this.racers[best]
+      // 還在跑的優先，再來看進度
+      if (!b || (running && b.finish !== null) || (running === (b.finish === null) && r.car.progress > b.car.progress)) {
+        best = i
+      }
+    }
+    if (best < 0) return null
+    this.spectating = true
+    this.focus = best
+    this.camReady = false
+    this.audio.setMood('race')
+    return this.seatOf[best] ?? null
   }
 
   /** 線上時鏡頭跟著的座位（觀戰時用） */
@@ -671,12 +717,13 @@ export class RaceGame {
     this.audio.dispose()
     this.clearRacers()
     if (this.world) {
-      this.world.scene.remove(this.smoke.points, this.glow.points, this.wind.mesh)
+      this.world.scene.remove(this.smoke.points, this.glow.points, this.wind.mesh, this.skids.mesh)
       this.world.dispose()
     }
     this.smoke.dispose()
     this.glow.dispose()
     this.wind.dispose()
+    this.skids.dispose()
     disposeCarParts(this.parts)
     this.speedBlur.dispose()
     this.renderer.dispose()
@@ -710,13 +757,13 @@ export class RaceGame {
     if (this.world && this.def?.id === def.id) return
     this.clearRacers()
     if (this.world) {
-      this.world.scene.remove(this.smoke.points, this.glow.points, this.wind.mesh)
+      this.world.scene.remove(this.smoke.points, this.glow.points, this.wind.mesh, this.skids.mesh)
       this.world.dispose()
     }
     this.def = def
     this.track = new TrackPath(def)
     this.world = buildWorld(this.track, def, this.renderer.capabilities.getMaxAnisotropy())
-    this.world.scene.add(this.smoke.points, this.glow.points, this.wind.mesh)
+    this.world.scene.add(this.smoke.points, this.glow.points, this.wind.mesh, this.skids.mesh)
     this.dust.setHex(def.theme.dust)
     this.smoke.clear()
     this.glow.clear()
@@ -744,6 +791,8 @@ export class RaceGame {
     this.racers = []
     this.cars = []
     this.player = null
+    this.spectating = false
+    this.skids.clear()
     this.seatIndex = []
     this.seatOf = []
     this.locals = []
@@ -909,6 +958,9 @@ export class RaceGame {
 
   private reset(r: Racer) {
     const track = this.track!
+    const k = this.racers.indexOf(r)
+    this.skids.lift(k * 2)
+    this.skids.lift(k * 2 + 1)
     const lat = clamp(r.car.loc.lat, -(track.halfWidth - 2), track.halfWidth - 2)
     const progress = r.car.progress
     placeCar(r.car, track, r.car.loc.s, lat)
@@ -1233,7 +1285,10 @@ export class RaceGame {
       const side = grade * (cosH * tx - sinH * tz) + bank * (cosH * tz + sinH * tx)
       r.model.sync(c, slope, side, dt, this.time)
       this.spawnParticles(r, dt, night, i === this.focus)
+      this.markSkids(r, i)
     }
+    this.skids.flush()
+    this.keepWatching(now)
     const scale = this.renderer.domElement.height / (2 * Math.tan((this.camera.fov * Math.PI) / 360))
     this.smoke.update(dt, scale)
     this.glow.update(dt, scale)
@@ -1245,6 +1300,43 @@ export class RaceGame {
       const cz = Math.cos(f.heading)
       light.position.set(f.x + sx * 1.8, f.y + 1.1, f.z + cz * 1.8)
       light.target.position.set(f.x + sx * 30, f.y, f.z + cz * 30)
+    }
+  }
+
+  /** 觀戰時（沒有座位、或跑完後在看別人）看的那台車不見了：換下一台，通知畫面換名字 */
+  private keepWatching(now: number) {
+    if (!this.online || (this.player && !this.spectating)) return
+    const watched = this.racers[this.focus]
+    if (!watched?.remote?.started || watched.remote.visible(now)) return
+    const seat = this.cycleFocus()
+    if (seat !== null && this.racers[this.focus] !== watched) this.emit({ type: 'focus', seat })
+  }
+
+  /** 胎痕：甩尾、側滑時兩個後輪在路面留下黑線；騰空、輪子開出柏油路面時不畫。`index` 是第幾台車 */
+  private markSkids(r: Racer, index: number) {
+    const c = r.car
+    const loc = c.loc
+    const track = this.track!
+    const airborne = c.air > 0 && c.y > loc.y + 0.08
+    let strength = 0
+    if (!airborne && Math.abs(c.speed) > 4) {
+      // 甩尾集氣越多越深；沒按甩尾、只是轉太急側滑時淡一點
+      strength = c.drift !== 0 ? 0.55 + driftLevel(c) * 0.1 : smoothstep(4, 9, Math.abs(c.slip)) * 0.45
+    }
+    const sx = Math.sin(c.heading)
+    const cz = Math.cos(c.heading)
+    const rear = c.spec.length * 0.3
+    const wheels = c.spec.width * 0.42
+    for (let side = 0; side < 2; side++) {
+      const w = side === 0 ? -wheels : wheels
+      const dx = -sx * rear + cz * w
+      const dz = -cz * rear - sx * w
+      // 輪子離中心線多遠、沿著賽道差多少：路面高度照車子那裡的傾斜和坡度推過去
+      const lat = loc.lat + dx * loc.tz - dz * loc.tx
+      const along = dx * loc.tx + dz * loc.tz
+      const y = loc.y + loc.bank * (lat - loc.lat) + loc.grade * along + SKID_LIFT
+      const on = strength > 0 && Math.abs(lat) < track.halfWidth - 0.1
+      this.skids.mark(index * 2 + side, c.x + dx, y, c.z + dz, on ? strength : 0)
     }
   }
 
@@ -1377,8 +1469,9 @@ export class RaceGame {
       return
     }
     if (cam.view?.enabled) cam.clearViewOffset()
-    const orbiting = this.phase === 'preview' || this.phase === 'finished'
-    const live = this.phase === 'countdown' || this.phase === 'racing'
+    // 跑完後看別人跑：和觀戰一樣用追車的鏡頭
+    const orbiting = this.phase === 'preview' || (this.phase === 'finished' && !this.spectating)
+    const live = this.phase === 'countdown' || this.phase === 'racing' || this.spectating
     const k = (rate: number) => (this.camReady ? 1 - Math.exp(-rate * dt) : 1)
     const speedT = clamp(Math.abs(c.speed) / CAR.maxSpeed, 0, 1.3)
     const boosting = c.boost > 0
@@ -1503,7 +1596,7 @@ export class RaceGame {
   }
 
   private emitFrame() {
-    const r = this.player ?? this.racers[this.focus]
+    const r = this.player && !this.spectating ? this.player : this.racers[this.focus]
     const c = r.car
     const f = this.frame
     f.speedKmh = Math.abs(c.speed) * 3.6

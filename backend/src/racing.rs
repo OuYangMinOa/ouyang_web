@@ -24,6 +24,9 @@
 //!   車種隨便選，車色先選先贏，別的真人選走的不能選；電腦隨機配一種車，顏色讓給真人（真人選了電腦的顏色，電腦就換一個）。
 //!   連著線的真人都按了「選好了」（`Action::Ready`）或時間到，就照當時選的開始倒數。
 //!   下一局一開始是上一局開的車（跟著人走，顏色被前面的人拿走才換）。
+//! - 回到房間（`Action::Retire`）：比賽中不想跑了、或跑完不想看了，人留在房間裡等下一局。
+//!   還沒跑完的算沒跑完（照圈數和進度排名），之後送的狀態、過線都不算，也不再負責開電腦。
+//!   結算不用等他；所有真人都跑完、回到房間或斷線就結算。
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -175,6 +178,8 @@ pub enum Action {
     Pick { car: CarKind, color: usize },
     /// 選好車了
     Ready,
+    /// 回到房間：這局不跑了（還沒跑完就算沒跑完），也不再負責開電腦
+    Retire,
 }
 
 #[derive(Deserialize, Debug)]
@@ -203,11 +208,22 @@ struct Racer {
     finish: Option<u64>,
     /// 結算後的名次
     place: Option<usize>,
+    /// 回到房間了（`Action::Retire`）
+    retired: bool,
 }
 
 impl Racer {
     fn new() -> Self {
-        Self { state: None, fresh: false, progress: 0.0, lap_times: Vec::new(), lap_at: 0, finish: None, place: None }
+        Self {
+            state: None,
+            fresh: false,
+            progress: 0.0,
+            lap_times: Vec::new(),
+            lap_at: 0,
+            finish: None,
+            place: None,
+            retired: false,
+        }
     }
 }
 
@@ -297,11 +313,12 @@ impl Racing {
         self.bots.get(seat).copied().unwrap_or(false)
     }
 
-    /// 換人開電腦：從 `after` 的下一個座位開始輪，找連著線的真人（輪一圈都沒有別人就還是 `after` 自己）
+    /// 換人開電腦：從 `after` 的下一個座位開始輪，找連著線、還在看這局的真人（輪一圈都沒有別人就還是 `after` 自己）
     fn hand_over(&mut self, after: Option<usize>, ctx: &mut Ctx) {
         let n = self.bots.len();
         let first = after.map_or(0, |s| s + 1);
-        let next = (0..n).map(|k| (first + k) % n).find(|&s| !self.bots[s] && ctx.seats[s].online);
+        let next =
+            (0..n).map(|k| (first + k) % n).find(|&s| !self.bots[s] && ctx.seats[s].online && !self.racers[s].retired);
         self.bots_heard = ctx.now.max(self.go);
         if next != self.driver {
             self.driver = next;
@@ -535,6 +552,11 @@ impl PartyGame for Racing {
             return Ok(());
         }
         let selecting = self.select_until.is_some();
+        if self.racers[seat].retired {
+            // 回到房間以後還在路上的狀態、過線都不算
+            ctx.quiet();
+            return Ok(());
+        }
         match action {
             Action::Pick { car, color } if selecting => self.pick(seat, car, color, ctx),
             Action::Pick { .. } => Err("已經開始了，這局不能換車".into()),
@@ -579,6 +601,22 @@ impl PartyGame for Racing {
                 if self.driver != Some(seat) || !self.is_bot(bot) || self.lap(bot, lap, time, ctx).is_err() {
                     ctx.quiet();
                 }
+                Ok(())
+            }
+            Action::Retire if selecting => {
+                ctx.quiet();
+                Ok(())
+            }
+            Action::Retire => {
+                self.racers[seat].retired = true;
+                self.racers[seat].state = None;
+                if self.racers[seat].finish.is_none() {
+                    ctx.system(To::All, format!("{} 回到房間，這局不跑了", ctx.seats[seat].name));
+                }
+                if self.driver == Some(seat) {
+                    self.hand_over(Some(seat), ctx);
+                }
+                ctx.changed();
                 Ok(())
             }
             Action::Ping { t } => {
@@ -630,11 +668,11 @@ impl PartyGame for Racing {
                 self.hand_over(self.driver, ctx);
             }
         }
-        // 有人跑完、而且連著線的真人都跑完了（斷線的、電腦都不等），或時間到了就結算
-        let someone_done = self.racers.iter().any(|r| r.finish.is_some());
-        let all_done =
-            (0..self.racers.len()).all(|s| self.racers[s].finish.is_some() || !ctx.seats[s].online || self.bots[s]);
-        if (someone_done && all_done) || ctx.now >= self.deadline() {
+        // 有人跑完（或回到房間）、而且連著線的真人都跑完或回到房間了（斷線的、電腦都不等），或時間到了就結算
+        let out = |r: &Racer| r.finish.is_some() || r.retired;
+        let someone_out = self.racers.iter().any(out);
+        let all_out = (0..self.racers.len()).all(|s| out(&self.racers[s]) || !ctx.seats[s].online || self.bots[s]);
+        if (someone_out && all_out) || ctx.now >= self.deadline() {
             self.end(ctx);
         }
     }
@@ -662,6 +700,7 @@ impl PartyGame for Racing {
                     "finish": r.finish,
                     "place": r.place,
                     "points": self.scores.get(&self.pids[s]).copied().unwrap_or(0),
+                    "retired": r.retired,
                 })
             })
             .collect();
@@ -1020,6 +1059,51 @@ mod tests {
         assert_eq!(g.racers[0].place, Some(1));
         assert_eq!(g.racers[1].place, Some(2), "沒跑完的電腦照進度排");
         assert_eq!(g.scores[&2], 1, "電腦也拿分");
+    }
+
+    #[test]
+    fn retiring_counts_as_unfinished_and_does_not_hold_up_the_end() {
+        let (mut g, seats, mut rng) = game(3, 1, Duration::from_secs(40));
+        act(&mut g, &seats, &mut rng, 1, state(900.0)).unwrap();
+        act(&mut g, &seats, &mut rng, 2, state(1200.0)).unwrap();
+        act(&mut g, &seats, &mut rng, 2, Action::Retire).unwrap();
+        assert!(g.racers[2].retired);
+        // 回到房間以後送的都不算
+        act(&mut g, &seats, &mut rng, 2, lap(1, 39_000)).unwrap();
+        assert!(g.racers[2].lap_times.is_empty());
+        act(&mut g, &seats, &mut rng, 2, state(1300.0)).unwrap();
+        assert_eq!(g.racers[2].progress, 1200.0);
+        assert!(g.racers[2].state.is_none(), "不再轉送他的車");
+        act(&mut g, &seats, &mut rng, 0, lap(1, 39_000)).unwrap();
+        tick(&mut g, &seats, &mut rng, Instant::now());
+        assert!(g.ended.is_none(), "1 號還在跑");
+        act(&mut g, &seats, &mut rng, 1, lap(1, 39_500)).unwrap();
+        tick(&mut g, &seats, &mut rng, Instant::now());
+        assert!(g.ended.is_some(), "回到房間的人不用等");
+        let places: Vec<_> = g.racers.iter().map(|r| r.place.unwrap()).collect();
+        assert_eq!(places, vec![1, 2, 3], "回到房間的算沒跑完，排在跑完的後面");
+        assert_eq!(g.view(Some(0), Instant::now())["players"][2]["retired"], true);
+    }
+
+    #[test]
+    fn the_race_ends_when_nobody_is_left_racing() {
+        let (mut g, seats, mut rng) = start_with(mixed(2, 1), 3, Duration::from_secs(30));
+        assert_eq!(g.driver, Some(0));
+        act(&mut g, &seats, &mut rng, 0, Action::Retire).unwrap();
+        assert_eq!(g.driver, Some(1), "回到房間的人不再開電腦");
+        tick(&mut g, &seats, &mut rng, Instant::now());
+        assert!(g.ended.is_none(), "1 號還在跑");
+        act(&mut g, &seats, &mut rng, 1, Action::Retire).unwrap();
+        assert_eq!(g.driver, None);
+        tick(&mut g, &seats, &mut rng, Instant::now());
+        assert!(g.ended.is_some(), "真人都回到房間就結算，不用等電腦");
+    }
+
+    #[test]
+    fn retiring_while_picking_cars_does_nothing() {
+        let (mut g, s, mut rng) = selecting(seats(2), None);
+        act(&mut g, &s, &mut rng, 0, Action::Retire).unwrap();
+        assert!(!g.racers[0].retired);
     }
 
     #[test]

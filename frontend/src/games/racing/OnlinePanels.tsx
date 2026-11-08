@@ -174,8 +174,45 @@ export function OnlineSelect({
   )
 }
 
-/** 選單畫面的線上部分：還沒進房間時建立／加入，進了房間是大廳和聊天 */
-export function OnlineMenu({ party, modeSwitch }: { party: RacingRoom; modeSwitch: ReactNode }) {
+/** 房間裡有一局正在跑、自己回到了房間：可以進去看，房主可以中止 */
+function RaceInProgress({ party, onWatch }: { party: RacingRoom; onWatch: () => void }) {
+  const options = party.room?.options
+  return (
+    <section className="party-lobby">
+      <h2>比賽進行中</h2>
+      {options && (
+        <p>
+          {findTrack(options.track).name}・{options.laps} 圈。這局結束後就可以開下一局。
+        </p>
+      )}
+      <div className="race-actions">
+        <button type="button" onClick={onWatch}>
+          觀看比賽
+        </button>
+        {party.isHost && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => window.confirm('中止這一局，大家回到大廳？') && party.abort()}
+          >
+            中止這局
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
+/** 選單畫面的線上部分：還沒進房間時建立／加入，進了房間是大廳和聊天（有一局正在跑時可以進去看） */
+export function OnlineMenu({
+  party,
+  modeSwitch,
+  onWatch,
+}: {
+  party: RacingRoom
+  modeSwitch: ReactNode
+  onWatch: () => void
+}) {
   if (!party.code) {
     return (
       <>
@@ -193,7 +230,12 @@ export function OnlineMenu({ party, modeSwitch }: { party: RacingRoom; modeSwitc
       {modeSwitch}
       <PartyHeader party={party} shareTitle="一起來玩 3D 賽車" />
       <PartyNotice party={party} />
-      {party.room ? (
+      {party.room?.phase === 'playing' ? (
+        <>
+          <RaceInProgress party={party} onWatch={onWatch} />
+          <ChatBox party={party} />
+        </>
+      ) : party.room ? (
         <>
           <PartyLobby
             party={party}
@@ -224,6 +266,7 @@ type Row = {
   lapsDone: number
   bestLap: number | null
   points: number
+  retired: boolean
   me: boolean
 }
 
@@ -238,6 +281,7 @@ function standings(party: RacingRoom, view: RacingView): Row[] {
     lapsDone: p.lapTimes.length,
     bestLap: p.lapTimes.length ? Math.min(...p.lapTimes) : null,
     points: p.points,
+    retired: p.retired === true,
     me: seat === view.you,
   }))
   rows.sort((a, b) => {
@@ -253,21 +297,27 @@ function standings(party: RacingRoom, view: RacingView): Row[] {
   return rows
 }
 
-/** 自己跑完（等別人）和結算時的成績；結算後下面接著「再來一局」的大廳 */
+/**
+ * 自己跑完（等別人）和結算時的成績；結算後下面接著「再來一局」的大廳。
+ * 還有人在跑時可以看別人跑（`onWatch`）；回到房間是留在房間裡等下一局，離開房間才是真的走
+ */
 export function OnlineResult({
   party,
   view,
+  onWatch,
+  onRoom,
   onLeave,
-  onExit,
 }: {
   party: RacingRoom
   view: RacingView
+  onWatch: () => void
+  onRoom: () => void
   onLeave: () => void
-  onExit: () => void
 }) {
   const rows = standings(party, view)
   const me = rows.find((r) => r.me) ?? null
   const ended = view.ended
+  const othersRunning = rows.some((r) => !r.me && r.finish === null && !r.retired)
   let title: string
   if (!ended) title = me ? '跑完了！' : '觀戰中'
   else if (!me) title = '比賽結束'
@@ -314,7 +364,7 @@ export function OnlineResult({
                 <span className="race-car-tag">{carSpec(r.car).name}</span>
               </td>
               <td data-label="總時間">
-                {r.finish !== null ? formatMs(r.finish) : ended ? '沒跑完' : '比賽中'}
+                {r.finish !== null ? formatMs(r.finish) : r.retired ? '回到房間' : ended ? '沒跑完' : '比賽中'}
               </td>
               <td data-label="最快圈">{formatMs(r.bestLap)}</td>
               <td data-label="積分">{r.points}</td>
@@ -331,28 +381,33 @@ export function OnlineResult({
         <ChatBox party={party} />
       </details>
       <div className="race-actions">
+        {!ended && othersRunning && (
+          <button type="button" onClick={onWatch}>
+            看別人跑
+          </button>
+        )}
+        <button type="button" className="secondary" onClick={onRoom}>
+          回到房間
+        </button>
         <button type="button" className="secondary" onClick={onLeave}>
           離開房間
-        </button>
-        <button type="button" className="secondary" onClick={onExit}>
-          離開遊戲
         </button>
       </div>
     </div>
   )
 }
 
-/** 線上比賽中按暫停：比賽不會停，只是打開選單（聊天、離開） */
+/** 線上比賽中按暫停：比賽不會停，只是打開選單（聊天、回到房間、離開房間） */
 export function OnlinePause({
   party,
   onResume,
+  onRoom,
   onLeave,
-  onExit,
 }: {
   party: RacingRoom
   onResume: () => void
+  onRoom: () => void
   onLeave: () => void
-  onExit: () => void
 }) {
   return (
     <div className="race-panel race-pause race-online-pause">
@@ -371,11 +426,11 @@ export function OnlinePause({
           中止這局
         </button>
       )}
+      <button type="button" className="secondary" onClick={onRoom}>
+        回到房間
+      </button>
       <button type="button" className="secondary" onClick={onLeave}>
         離開房間
-      </button>
-      <button type="button" className="secondary" onClick={onExit}>
-        離開遊戲
       </button>
     </div>
   )
