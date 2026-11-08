@@ -26,6 +26,8 @@ export type RacingPlayer = {
   place: number | null
   /** 這個房間累計的分數 */
   points: number
+  /** 回到房間了，這局不跑了（還沒跑完就算沒跑完） */
+  retired: boolean
 }
 
 export type RacingView = {
@@ -74,6 +76,8 @@ export type RacingAction =
   | { type: 'pick'; car: CarKind; color: number }
   /** 選好了（之後這局不能再換） */
   | { type: 'ready' }
+  /** 回到房間：這局不跑了（還沒跑完就算沒跑完），也不再負責開電腦 */
+  | { type: 'retire' }
 
 export type RacingEvent =
   /** 每列是 [座位, ...狀態] */
@@ -184,6 +188,11 @@ export class RemoteDriver {
   /** 有在畫面上：收過狀態而且沒有太久沒更新 */
   visible(now: number): boolean {
     return this.d !== null && now - this.seen < STALE_MS
+  }
+
+  /** 這台車不會再有狀態進來了（那個人回到房間）：馬上不畫、不撞 */
+  drop() {
+    this.seen = -Infinity
   }
 
   /** 已經收過狀態了（還沒收過的車停在起跑格上） */
