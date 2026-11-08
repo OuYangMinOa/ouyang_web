@@ -33,6 +33,13 @@ export default function GamePage() {
   }
 
   const Game = game.component
+  if (game.fullscreen) {
+    return (
+      <Suspense fallback={<p className="game-fullscreen-loading">載入中…</p>}>
+        <Game key={`${game.id}:${follow}`} />
+      </Suspense>
+    )
+  }
   return (
     <div className="game-page" ref={page}>
       <header className="game-head" ref={head}>

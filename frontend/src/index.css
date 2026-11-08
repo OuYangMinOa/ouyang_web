@@ -141,6 +141,9 @@
   --uno-blue: #1e5fbf;
   --uno-wild: #1c1a17;
   --uno-oval: #fffdf8;
+  /* 3D 賽車：甩尾集氣的第一段（藍）、第二段（橘） */
+  --race-drift-1: #1d8fd8;
+  --race-drift-2: #e8590c;
   /* 德州撲克：籌碼、桌邊木框 */
   --chip: #d4a72c;
   --chip-edge: #fffaf0;
@@ -325,6 +328,8 @@
     --uno-blue: #3b7ff0;
     --uno-wild: #0c0a09;
     --uno-oval: #f6efe3;
+    --race-drift-1: #4cc9ff;
+    --race-drift-2: #ff9a3c;
     --chip: #e8c050;
     --chip-edge: #3a2d12;
     --felt-rim: #4a3322;
@@ -495,6 +500,8 @@
   --uno-blue: #3b7ff0;
   --uno-wild: #0c0a09;
   --uno-oval: #f6efe3;
+  --race-drift-1: #4cc9ff;
+  --race-drift-2: #ff9a3c;
   --chip: #e8c050;
   --chip-edge: #3a2d12;
   --felt-rim: #4a3322;

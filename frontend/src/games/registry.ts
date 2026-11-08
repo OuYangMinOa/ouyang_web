@@ -22,6 +22,8 @@ export type GameInfo = {
    * `party`、`arena` 所有人一起去。`players` 是給房主看的人數說明。
    */
   lobby?: { kind: 'duel' | 'party' | 'arena'; players: string }
+  /** 遊戲自己蓋住整個畫面（3D 賽車）：遊戲頁不放標題列，遊戲畫面要自己放離開的按鈕 */
+  fullscreen?: boolean
 }
 
 // 每個遊戲各自打包，進到那一頁才下載
@@ -177,6 +179,17 @@ export const GAMES: GameInfo[] = [
     component: lazyPage(() => import('./chinesecheckers')),
     lobby: { kind: 'party', players: '2～6 人，可以加電腦' },
     music: () => import('./chinesecheckers/song'),
+  },
+  {
+    id: 'racing',
+    name: '3D 賽車',
+    icon: '🏎️',
+    blurb: '整個畫面都是賽道的 3D 賽車：海岸、峽谷、夜城三條賽道，五種性能不同的車，甩尾集氣還能加速，每條賽道都有自己的背景音樂。可以和電腦對手比，也能開房間和朋友連線，2～8 人同場、車子會互撞，人不夠可以加電腦。鍵盤、手機觸控、遊戲手把都能玩。',
+    tags: ['單人', '線上', '電腦', '3D'],
+    category: '多人對戰',
+    component: lazyPage(() => import('./racing')),
+    lobby: { kind: 'party', players: '2～8 人' },
+    fullscreen: true,
   },
   {
     id: 'snake',

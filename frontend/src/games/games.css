@@ -897,3 +897,15 @@ button.music-volume-toggle {
 :root[data-style='doodle'] .game-card-icon {
   border-radius: var(--radius-round);
 }
+
+/* 蓋住整個畫面的遊戲（3D 賽車）還在下載時，先用同樣的全螢幕底色擋著 */
+.game-fullscreen-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
