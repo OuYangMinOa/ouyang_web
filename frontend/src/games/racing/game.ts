@@ -179,6 +179,8 @@ type Racer = {
   finish: number | null
   /** 這個畫面裡最大的撞擊力道（物理一個畫面跑好幾步） */
   impact: number
+  /** 這個畫面裡最重的一次落地（騰空後落回路面的速度） */
+  landing: number
   boosting: boolean
 }
 
@@ -784,6 +786,7 @@ export class RaceGame {
         bestLap: null,
         finish: null,
         impact: 0,
+        landing: 0,
         boosting: false,
       }
       this.racers.push(racer)
@@ -832,6 +835,7 @@ export class RaceGame {
         bestLap: null,
         finish: null,
         impact: 0,
+        landing: 0,
         boosting: false,
       }
       // 重新整理後接著跑：自己的車、自己負責開的電腦放回最後送出的位置（速度歸零），圈數照伺服器記的
@@ -885,6 +889,7 @@ export class RaceGame {
     car.loc.i = track.indexAt(((d[9] % track.length) + track.length) % track.length)
     track.locate(car.x, car.z, car.loc)
     car.y = car.loc.y
+    car.vy = car.air = 0
   }
 
   private encode(c: Car): number[] {
@@ -1051,7 +1056,10 @@ export class RaceGame {
     }
     if (moving && online) this.collideOnline(now)
     else if (moving) collideCars(this.cars)
-    for (const r of this.racers) r.impact = Math.max(r.impact, r.car.impact)
+    for (const r of this.racers) {
+      r.impact = Math.max(r.impact, r.car.impact)
+      r.landing = Math.max(r.landing, r.car.landing)
+    }
     if (this.phase === 'racing' || this.phase === 'finished') {
       this.raceTime = online ? Math.max(0, this.clock) : this.raceTime + h
       this.countLaps()
@@ -1206,7 +1214,6 @@ export class RaceGame {
   }
 
   private updateVisuals(dt: number) {
-    const track = this.track!
     const night = this.def!.theme.night === true
     const now = performance.now()
     for (let i = 0; i < this.racers.length; i++) {
@@ -1218,9 +1225,13 @@ export class RaceGame {
         r.model.root.visible = shown
         if (!shown) continue
       }
-      const rel = c.heading - Math.atan2(c.loc.tx, c.loc.tz)
-      const slope = (track.heightAt(c.loc.s + 2) - track.heightAt(c.loc.s - 2)) / 4
-      r.model.sync(c, slope * Math.cos(rel), dt, this.time)
+      // 路面往車頭方向、往車子左邊的坡度（斜著開過傾斜的彎道時兩個都有）
+      const sinH = Math.sin(c.heading)
+      const cosH = Math.cos(c.heading)
+      const { tx, tz, grade, bank } = c.loc
+      const slope = grade * (sinH * tx + cosH * tz) + bank * (sinH * tz - cosH * tx)
+      const side = grade * (cosH * tx - sinH * tz) + bank * (cosH * tz + sinH * tx)
+      r.model.sync(c, slope, side, dt, this.time)
       this.spawnParticles(r, dt, night, i === this.focus)
     }
     const scale = this.renderer.domElement.height / (2 * Math.tan((this.camera.fov * Math.PI) / 360))
@@ -1300,6 +1311,33 @@ export class RaceGame {
     }
     if (c.boost > 0 && !r.boosting && focus) this.audio.boost()
     r.boosting = c.boost > 0
+
+    // 騰空後落地：四個輪子揚起一圈塵土，車身往下一沉
+    if (r.landing > 2.5) {
+      r.model.land(r.landing)
+      const n = Math.min(14, Math.round(r.landing * 1.5))
+      for (let k = 0; k < n; k++) {
+        const a = Math.random() * Math.PI * 2
+        this.smoke.emit(
+          c.x + Math.sin(a) * 1.4,
+          c.loc.y + 0.2,
+          c.z + Math.cos(a) * 1.4,
+          Math.sin(a) * 3 + c.vx * 0.3,
+          0.5 + Math.random(),
+          Math.cos(a) * 3 + c.vz * 0.3,
+          night ? SMOKE_NIGHT : this.dust,
+          1,
+          3,
+          0.7,
+          0.4,
+        )
+      }
+      if (focus) {
+        this.shake = Math.min(0.45, this.shake + r.landing * 0.025)
+        this.audio.land(r.landing)
+      }
+    }
+    r.landing = 0
 
     if (r.impact > 3) {
       const side = Math.abs(c.loc.lat) > this.track!.wall - 2 ? Math.sign(c.loc.lat) : 0

@@ -42,6 +42,8 @@ type Settings = {
 
 /** 每條賽道自己的最快圈，以及各圈數的最快完賽時間（毫秒） */
 type Records = Record<string, { lap?: number; race?: Record<string, number> }>
+/** 最快紀錄存在哪裡：賽道改過（加了起伏、夜城改成 8 字形）以後舊紀錄不能比，換一個名字重新記 */
+const RECORDS_KEY = 'racing:records:v2'
 
 type Result = FinishResult & { newLap: boolean; newRace: boolean }
 
@@ -106,7 +108,7 @@ export default function Racing() {
   const [racers, setRacers] = useState<RacerInfo[]>([])
   const [result, setResult] = useState<Result | null>(null)
   const [standings, setStandings] = useState<Standing[] | null>(null)
-  const [records, setRecords] = useState<Records>(() => load('racing:records', {}))
+  const [records, setRecords] = useState<Records>(() => load(RECORDS_KEY, {}))
   const [sound, setSound] = useState(() => load('racing:sound', true))
   const [music, setMusic] = useState(() => load('racing:music', true))
   const [touch, setTouch] = useState(isCoarse)
@@ -216,7 +218,7 @@ export default function Racing() {
                 race: { ...prev.race, [String(r.laps)]: newRace ? r.time : prevRace! },
               },
             }
-            save('racing:records', next)
+            save(RECORDS_KEY, next)
             setRecords(next)
           }
           setBestLap(r.bestLap)

@@ -1,10 +1,11 @@
 // 街機式的車輛物理：不算懸吊和輪胎，只有「往前的速度」和「側滑的速度」兩個分量。
 // 一般行駛時側滑很快被抓地力吃掉；甩尾時抓地力變小，車尾甩出去滑行，放開時依甩尾時間給加速。
 // 甩尾鍵按得越久，車尾甩得越開（車身打得越橫）、彎也轉得越急，像跑跑卡丁車那樣點一下是小甩、按住是大甩。
+// 上坡會減速、下坡會加速，往彎內傾斜的彎道可以壓得更快；開快過坡頂或鼓包會飛起來，在空中不能加速、方向盤也不太有用。
 // 純計算，不碰畫面，電腦對手和玩家用同一套。
 import { clamp, wrapAngle } from './noise'
 import { CAR, CARS, carShape, CURB, type CarSpec } from './spec'
-import { newLoc, type TrackLoc, type TrackPath } from './track'
+import { BANK_GRIP, GRAVITY, newLoc, type TrackLoc, type TrackPath } from './track'
 
 export type Controls = {
   /** 油門 0～1 */
@@ -28,6 +29,12 @@ const DRIFT_ANGLE = [0.2, 0.72]
 const DRIFT_EXIT = 0.45
 /** 車尾角度不夠時多轉的力道 */
 const DRIFT_SNAP = 3.5
+/** 騰空時的重力：比真的大一些，飛起來才不會飄太久 */
+const AIR_GRAVITY = 15
+/** 騰空時方向盤剩下的效果 */
+const AIR_STEER = 0.3
+/** 上下兩台車差這麼多（公尺）就撞不到（立體交叉、一台飛在空中） */
+const COLLIDE_HEIGHT = 2.2
 
 export type Car = {
   /** 車種的數值（極速、加速、過彎、重量…） */
@@ -35,11 +42,18 @@ export type Car = {
   /** 碰撞用的車身大小（照車種算好） */
   shape: ReturnType<typeof carShape>
   x: number
+  /** 車底的高度（貼著路面時就是路面高度） */
   y: number
   z: number
   heading: number
   vx: number
   vz: number
+  /** 上下的速度：貼著路面時是路面帶著車上下的速度，騰空時照重力往下加 */
+  vy: number
+  /** 騰空了幾秒，貼著路面是 0 */
+  air: number
+  /** 這一步落地的力道（往下的速度，公尺／秒），沒落地是 0 */
+  landing: number
   /** 前進方向的速度（倒車是負的） */
   speed: number
   /** 側滑速度 */
@@ -78,6 +92,9 @@ export function newCar(spec: CarSpec = CARS[0]): Car {
     heading: 0,
     vx: 0,
     vz: 0,
+    vy: 0,
+    air: 0,
+    landing: 0,
     speed: 0,
     slip: 0,
     yawRate: 0,
@@ -102,12 +119,53 @@ export function placeCar(car: Car, track: TrackPath, s: number, lat: number) {
   const p = track.pointAt(s)
   car.x = p.x + p.tz * lat
   car.z = p.z - p.tx * lat
-  car.y = p.y
   car.heading = Math.atan2(p.tx, p.tz)
-  car.vx = car.vz = car.speed = car.slip = car.yawRate = car.steer = 0
+  car.vx = car.vz = car.vy = car.speed = car.slip = car.yawRate = car.steer = 0
   car.drift = car.driftTime = car.driftHold = car.driftExit = car.boost = 0
+  car.air = car.landing = 0
   car.loc.i = track.indexAt(s)
+  car.loc.y = p.y
   track.locate(car.x, car.z, car.loc)
+  car.y = car.loc.y
+}
+
+/** 路面帶著車上下的速度：沿著賽道的坡度 × 往前的速度，加上橫向坡度 × 往左的速度 */
+function roadVy(car: Car): number {
+  const { tx, tz } = car.loc
+  return car.loc.grade * (car.vx * tx + car.vz * tz) + car.loc.bank * (car.vx * tz - car.vz * tx)
+}
+
+/**
+ * 上下：貼著路面時跟著路面走；路面往下彎得比自由落體還快（開快過坡頂、鼓包）就飛起來，
+ * 照重力落回路面，落地的力道記在 `landing`（畫面震動、聲音），重重落地會掉一點速度。
+ * 位置（`loc`）要先更新好。線上別人的車也用這個，跳起來的樣子在每個人的畫面上都差不多
+ */
+export function stepVertical(car: Car, dt: number) {
+  const ground = car.loc.y
+  car.landing = 0
+  if (dt <= 0) return
+  if (car.air > 0) {
+    car.vy -= AIR_GRAVITY * dt
+    car.y += car.vy * dt
+    car.air += dt
+    if (car.y > ground) return
+    const vy = roadVy(car)
+    car.landing = Math.max(0, vy - car.vy)
+    // 重重落地掉一點速度（小跳不扣）
+    const loss = Math.min(0.06, Math.max(0, car.landing - 3) * 0.008)
+    car.vx *= 1 - loss
+    car.vz *= 1 - loss
+    car.speed *= 1 - loss
+    car.vy = vy
+    car.y = ground
+    car.air = 0
+    return
+  }
+  car.vy = roadVy(car)
+  car.y = ground
+  // 路面往下彎的向心加速度（速度² × 往下的彎度）超過重力，車子就貼不住路面了
+  const vt = car.vx * car.loc.tx + car.vz * car.loc.tz
+  if (vt > 15 && vt * vt * car.loc.vcurv < -AIR_GRAVITY) car.air = dt
 }
 
 function endDrift(car: Car) {
@@ -145,6 +203,8 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
   car.offroad = Math.abs(car.loc.lat) > track.halfWidth + CURB
   const spec = car.spec
   const boosting = car.boost > 0
+  // 剛離地、還貼著路面的那一兩格不算，免得坡頂一直斷斷續續地不能轉
+  const airborne = car.air > 0 && car.y > car.loc.y + 0.08
   const vmax =
     spec.maxSpeed * car.power * (boosting ? CAR.boostSpeed : 1) * (car.offroad ? CAR.offroadSpeed : 1)
 
@@ -152,7 +212,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
   let a = 0
   car.braking = false
   car.throttle = ctl.throttle
-  if (ctl.brake > 0.05) {
+  if (!airborne && ctl.brake > 0.05) {
     if (vf > 0.5) {
       a -= CAR.brake * ctl.brake
       car.braking = true
@@ -160,7 +220,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
       a -= CAR.reverse * ctl.brake
     }
   }
-  if (ctl.throttle > 0.05) {
+  if (!airborne && ctl.throttle > 0.05) {
     if (vf < -0.5) a += CAR.brake * ctl.throttle
     else {
       const r = Math.max(0, vf) / vmax
@@ -171,6 +231,11 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
     a += CAR.boostAccel * Math.max(0, 1 - Math.max(0, vf) / vmax)
     car.boost = Math.max(0, car.boost - dt)
   }
+  // 上坡減速、下坡加速：重力沿著車頭方向的分量（斜著開過傾斜的彎道也算進去）
+  if (!airborne) {
+    const { tx, tz, grade, bank } = car.loc
+    a -= GRAVITY * (grade * (sinH * tx + cosH * tz) + bank * (sinH * tz - cosH * tx))
+  }
   vf += a * dt
   // 滾動阻力與風阻；超過目前的極速（開出路面、加速結束）時多減一些
   let drag = 1.2 + 0.0006 * vf * vf
@@ -180,7 +245,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
   // 甩尾的開始與結束
   const absV = Math.abs(vf)
   if (car.drift === 0) {
-    if (ctl.drift && Math.abs(ctl.steer) > 0.3 && vf > 12 && !car.offroad) {
+    if (ctl.drift && Math.abs(ctl.steer) > 0.3 && vf > 12 && !car.offroad && !airborne) {
       car.drift = Math.sign(ctl.steer)
       car.driftTime = 0
       car.driftHold = 0
@@ -200,6 +265,10 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
   const dir = vf >= 0 ? 1 : -1
   let yaw: number
   let grip = car.offroad ? CAR.offroadGrip : CAR.grip
+  // 往彎內傾斜的路面幫忙過彎（往外打的話少一點）
+  const turnLeft = car.drift !== 0 ? -car.drift : -Math.sign(car.steer) * dir
+  const banked = -car.loc.bank * turnLeft
+  const latAcc = spec.latAcc + GRAVITY * BANK_GRIP * (banked > 0 ? banked : banked * 0.5)
   if (car.drift !== 0) {
     const into = car.steer * car.drift // 往甩尾方向打是正的
     car.driftHold += dt
@@ -207,7 +276,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
     // 按越久轉越急
     const k = 0.5 + 0.45 * into
     const turn = CAR.driftTurn * (0.8 + 0.5 * ramp)
-    const limit = Math.min(spec.maxYaw * 1.3, (spec.latAcc * turn) / Math.max(absV, 1))
+    const limit = Math.min(spec.maxYaw * 1.3, (latAcc * turn) / Math.max(absV, 1))
     const base = k * limit
     // 按越久車尾甩越開：車身轉的速度固定時，抓地力越小、滑行角越大（穩定時 tan(角度) = 轉速 / 抓地力）。
     // 反打方向盤時角度收小，用來調整走線
@@ -219,8 +288,13 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
     // 甩得越開集氣越快
     car.driftTime += dt * (0.6 + 0.4 * Math.max(0, into)) * (0.8 + 0.4 * ramp) * spec.driftCharge
   } else {
-    const limit = Math.min(spec.maxYaw, spec.latAcc / Math.max(absV, 1))
+    const limit = Math.min(spec.maxYaw, latAcc / Math.max(absV, 1))
     yaw = -car.steer * limit * lowSpeed * dir
+  }
+  // 在空中：方向盤只剩一點效果，輪胎也抓不住側滑
+  if (airborne) {
+    yaw *= AIR_STEER
+    grip = 0.3
   }
   car.yawRate = yaw
 
@@ -276,7 +350,7 @@ export function stepCar(car: Car, ctl: Controls, track: TrackPath, dt: number) {
     }
     track.locate(car.x, car.z, car.loc)
   }
-  car.y = car.loc.y
+  stepVertical(car, dt)
 
   let ds = car.loc.s - prevS
   if (ds > track.length / 2) ds -= track.length
@@ -315,7 +389,7 @@ function collidePair(a: Car, b: Car, kick: { x: number; z: number } | null = nul
   const reach = a.shape.radius + b.shape.radius
   const dx0 = b.x - a.x
   const dz0 = b.z - a.z
-  if (dx0 * dx0 + dz0 * dz0 > 36) return
+  if (dx0 * dx0 + dz0 * dz0 > 36 || Math.abs(a.y - b.y) > COLLIDE_HEIGHT) return
   // 推開和速度變化照重量分：a 拿 b 的重量佔的比例
   const shareA = b.spec.mass / (a.spec.mass + b.spec.mass)
   const shareB = 1 - shareA

@@ -226,6 +226,23 @@ export class RaceAudio {
     src.stop(t + 0.35)
   }
 
+  /** 騰空後落地：低沉的一聲「咚」 */
+  land(strength: number) {
+    const ctx = this.ctx
+    if (!ctx || !this.master) return
+    const t = ctx.currentTime
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(110, t)
+    osc.frequency.exponentialRampToValueAtTime(38, t + 0.2)
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(Math.min(0.45, 0.1 + strength * 0.03), t)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28)
+    osc.connect(gain).connect(this.master)
+    osc.start(t)
+    osc.stop(t + 0.3)
+  }
+
   dispose() {
     this.music?.dispose()
     this.music = null

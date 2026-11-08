@@ -1,4 +1,4 @@
-// 賽道的場景：天空、地形、路面、路緣石、護欄、起跑門，以及樹、仙人掌、岩石、大樓、路燈這些擺設。
+// 賽道的場景：天空、地形、路面、路緣石、護欄、起跑門、橋，以及樹、仙人掌、岩石、大樓、路燈這些擺設。
 // 貼圖都用 canvas 畫，不用下載圖檔。
 import {
   BackSide,
@@ -69,8 +69,8 @@ function makeTexture(
 }
 
 /**
- * 沿著賽道的帶狀網格：左邊緣在 latL、右邊緣在 latR（左正右負），高度各自加 yL、yR。
- * 兩邊同一個 lat、不同高度就是一面直立的牆。
+ * 沿著賽道的帶狀網格：左邊緣在 latL、右邊緣在 latR（左正右負），高度是那裡的路面（含彎道傾斜）再加 yL、yR。
+ * 兩邊同一個 lat、不同高度就是一面直立的牆。`from`、`count` 只做其中一段（橋）
  */
 function ribbon(
   track: TrackPath,
@@ -79,20 +79,24 @@ function ribbon(
   yL: number,
   yR: number,
   vScale: number,
+  from = 0,
+  count = track.n,
 ): BufferGeometry {
-  const { n, px, py, pz, tx, tz, step } = track
-  const pos = new Float32Array((n + 1) * 6)
-  const uv = new Float32Array((n + 1) * 4)
-  for (let k = 0; k <= n; k++) {
-    const i = k % n
+  const { n, px, pz, tx, tz, step } = track
+  const pos = new Float32Array((count + 1) * 6)
+  const uv = new Float32Array((count + 1) * 4)
+  for (let k = 0; k <= count; k++) {
+    const i = (from + k) % n
     const nx = tz[i]
     const nz = -tx[i]
-    pos.set([px[i] + nx * latL, py[i] + yL, pz[i] + nz * latL, px[i] + nx * latR, py[i] + yR, pz[i] + nz * latR], k * 6)
-    const v = (k * step) / vScale
+    const l = track.roadY(i, latL) + yL
+    const r = track.roadY(i, latR) + yR
+    pos.set([px[i] + nx * latL, l, pz[i] + nz * latL, px[i] + nx * latR, r, pz[i] + nz * latR], k * 6)
+    const v = ((from + k) * step) / vScale
     uv.set([0, v, 1, v], k * 4)
   }
-  const index = new Uint32Array(n * 6)
-  for (let k = 0; k < n; k++) {
+  const index = new Uint32Array(count * 6)
+  for (let k = 0; k < count; k++) {
     const a = k * 2
     index.set([a, a + 1, a + 2, a + 1, a + 3, a + 2], k * 6)
   }
@@ -186,13 +190,14 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
     scene.add(stars)
   }
 
-  // 地形：離賽道近的地方貼著路面（略低一點，免得穿過路面），遠一點才照賽道自己的起伏
+  // 地形：離賽道近的地方貼著路面（略低一點，免得穿過路面），遠一點才照賽道自己的起伏。
+  // 橋不算：橋底下的地形貼著下面那條路或原本的地面。格子大約 7 公尺一格，路面有起伏時才不會穿出來
   const margin = 480
   const x0 = track.minX - margin
   const z0 = track.minZ - margin
   const w = track.maxX - track.minX + margin * 2
   const d = track.maxZ - track.minZ + margin * 2
-  const res = 160
+  const res = clamp(Math.round(Math.max(w, d) / 7), 160, 280)
   const cols = res + 1
   const heights = new Float32Array(cols * cols)
   const tPos = new Float32Array(cols * cols * 3)
@@ -203,9 +208,9 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
     for (let c = 0; c < cols; c++) {
       const x = x0 + (c / res) * w
       const z = z0 + (r / res) * d
-      const nearest = track.nearest(x, z)
+      const nearest = track.nearest(x, z, true)
       const far = def.terrain(x, z, nearest.dist, nearest.y)
-      const y = nearest.y - 0.4 + (far - (nearest.y - 0.4)) * smoothstep(near, near + 40, nearest.dist)
+      const y = nearest.y - 0.55 + (far - (nearest.y - 0.55)) * smoothstep(near, near + 40, nearest.dist)
       const k = r * cols + c
       heights[k] = y
       tPos.set([x, y, z], k * 3)
@@ -320,8 +325,8 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
   })
   const wallMat = new MeshLambertMaterial({ map: wallTex, side: DoubleSide })
   const wh = th.wallHeight
-  scene.add(new Mesh(ribbon(track, track.wall, track.wall, wh, -0.5, 10), wallMat))
-  scene.add(new Mesh(ribbon(track, -track.wall, -track.wall, -0.5, wh, 10), wallMat))
+  scene.add(new Mesh(ribbon(track, track.wall, track.wall, wh, -1, 10), wallMat))
+  scene.add(new Mesh(ribbon(track, -track.wall, -track.wall, -1, wh, 10), wallMat))
   // 護欄頂端的蓋板（夜間是一段一段發光的燈條）
   const capTex = tex(4, 64, (ctx) => {
     ctx.fillStyle = '#ffffff'
@@ -385,6 +390,8 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
   gantry.rotation.y = startHeading
   scene.add(gantry)
 
+  addBridges(scene, track, groundAt, new Color(th.bridge ?? th.wall))
+
   // 擺設
   for (const spec of def.props) addProps(scene, track, spec, groundAt, th.night === true, tex)
 
@@ -437,6 +444,7 @@ function scatter(
     if (track.nearest(x, z).dist < track.wall + spec.near * 0.7 + r) continue
     const y = groundAt(x, z)
     if (spec.minY !== undefined && y < spec.minY) continue
+    if (track.under(x, z, y)) continue
     spots.push({ x, y, z, rot: rand() * Math.PI * 2, scale: 0.7 + rand() * 0.8, r })
   }
   return spots
@@ -593,6 +601,84 @@ function drawWindows(ctx: CanvasRenderingContext2D, seed: number, lit: boolean) 
 }
 
 /** 路燈：兩側每 36 公尺一支，燈臂朝向路中間 */
+/** 橋的兩側比護欄多出來的寬度（路燈立在這裡） */
+const LEDGE = 1.6
+/** 橋面板的厚度 */
+const DECK = 1.7
+
+/**
+ * 橋：路面底下沒有填土的那幾段，畫橋面板的側面、底面和橋墩。
+ * 橋墩大約 24 公尺一根，立在路中間；底下有另一條路經過的地方不放
+ */
+function addBridges(scene: Scene, track: TrackPath, groundAt: (x: number, z: number) => number, color: Color) {
+  const { n, bridge } = track
+  if (!bridge.some((b) => b)) return
+  const mat = new MeshLambertMaterial({ color, side: DoubleSide })
+  const edge = track.wall + LEDGE
+  // 一段一段找出來（頭尾多包幾個點，橋面板才接得上地面那段）
+  let start = 0
+  while (start < n && bridge[start]) start++
+  const runs: [number, number][] = []
+  for (let k = 0; k < n; k++) {
+    const i = (start + k) % n
+    if (!bridge[i]) continue
+    const last = runs[runs.length - 1]
+    if (last && (last[0] + last[1]) % n === i) last[1]++
+    else runs.push([i, 1])
+  }
+  const pad = 3
+  const parts: BufferGeometry[] = []
+  for (const [from0, count0] of runs) {
+    const from = (from0 - pad + n) % n
+    const count = Math.min(n, count0 + pad * 2)
+    // 護欄外面的平台、外側面、底面
+    parts.push(ribbon(track, edge, track.wall + 0.4, -0.02, -0.02, 10, from, count))
+    parts.push(ribbon(track, -track.wall - 0.4, -edge, -0.02, -0.02, 10, from, count))
+    parts.push(ribbon(track, edge, edge, -0.02, -DECK, 10, from, count))
+    parts.push(ribbon(track, -edge, -edge, -DECK, -0.02, 10, from, count))
+    parts.push(ribbon(track, -edge, edge, -DECK, -DECK, 10, from, count))
+
+    const every = Math.round(24 / track.step)
+    for (let k = Math.round(every / 2); k < count0; k += every) {
+      const i = (from0 + k) % n
+      const x = track.px[i]
+      const z = track.pz[i]
+      const top = track.py[i] - DECK
+      const ground = groundAt(x, z)
+      const h = top - ground
+      if (h < 1 || blocksRoad(track, i, x, z)) continue
+      const heading = Math.atan2(track.tx[i], track.tz[i])
+      const pier = new BoxGeometry(2.2, h + 0.5, 1.6).translate(0, ground + (h + 0.5) / 2 - 0.5, 0)
+      // 橋墩頂端橫著的蓋梁
+      const cap = new BoxGeometry(edge * 1.3, 0.9, 1.9).translate(0, top - 0.45, 0)
+      for (const g of [pier, cap]) {
+        g.rotateY(heading)
+        g.translate(x, 0, z)
+        parts.push(g)
+      }
+    }
+  }
+  const geo = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)).map((g) => {
+    g.deleteAttribute('uv')
+    return g
+  }))
+  for (const g of parts) g.dispose()
+  geo.computeVertexNormals()
+  scene.add(new Mesh(geo, mat))
+}
+
+/** 在取樣點 i 的橋下立柱子會不會擋到底下那條路 */
+function blocksRoad(track: TrackPath, i: number, x: number, z: number): boolean {
+  const r = (track.wall + 2.5) ** 2
+  for (let j = 0; j < track.n; j++) {
+    if (track.py[j] > track.py[i] - 2) continue
+    const dx = x - track.px[j]
+    const dz = z - track.pz[j]
+    if (dx * dx + dz * dz < r) return true
+  }
+  return false
+}
+
 function addLamps(scene: Scene, track: TrackPath) {
   const spots: Spot[] = []
   const every = Math.round(36 / track.step)
@@ -601,9 +687,12 @@ function addLamps(scene: Scene, track: TrackPath) {
       const off = (track.wall + 1.2) * side
       const x = track.px[i] + track.tz[i] * off
       const z = track.pz[i] - track.tx[i] * off
+      const y = track.roadY(i, off)
+      // 橋下的路燈會穿過橋面，不放
+      if (track.under(x, z, y, 1)) continue
       // 燈臂沿著模型的 +z，轉向路中間（-side 的法線方向）
       const rot = Math.atan2(-track.tz[i] * side, track.tx[i] * side)
-      spots.push({ x, y: track.py[i], z, rot, scale: 1, r: 0 })
+      spots.push({ x, y, z, rot, scale: 1, r: 0 })
     }
   }
   const pole = mergeGeometries([

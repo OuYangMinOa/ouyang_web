@@ -6,7 +6,7 @@
 import type { Party } from '../shared/useParty'
 import type { Difficulty } from './ai'
 import { clamp, wrapAngle } from './noise'
-import { driftTimeFor, type Car } from './physics'
+import { driftTimeFor, stepVertical, type Car } from './physics'
 import { CAR_COLORS, CARS, type CarKind } from './spec'
 import type { TrackPath } from './track'
 
@@ -268,6 +268,7 @@ export class RemoteDriver {
     car.progress = d[9]
     car.impact = 0
     track.locate(car.x, car.z, car.loc)
-    car.y = car.loc.y
+    // 高度不在狀態裡：照同一套物理自己算，過坡頂一樣會飛起來
+    stepVertical(car, h)
   }
 }
