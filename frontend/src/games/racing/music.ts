@@ -30,6 +30,8 @@ const SONGS: Record<string, Song> = {
   canyon: { bpm: 138, root: 45, scale: MINOR, chords: [0, 5, 2, 6, 0, 5, 6, 4], seed: 23, bass: 'drive', lead: 'sawtooth' },
   // 夜城：合成器浪潮，i–VI–III–VII 再轉到 iv–v
   city: { bpm: 108, root: 50, scale: MINOR, chords: [0, 5, 2, 6, 0, 5, 3, 4], seed: 37, bass: 'pump', lead: 'sawtooth' },
+  // 台北信義：傍晚的城市流行，IV–V–iii–vi（王道進行）再接 ii–V–I
+  xinyi: { bpm: 116, root: 53, scale: MAJOR, chords: [3, 4, 2, 5, 1, 4, 0, 4], seed: 53, bass: 'pump', lead: 'triangle' },
 }
 
 const BARS = 8

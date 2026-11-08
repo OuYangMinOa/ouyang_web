@@ -1,8 +1,11 @@
-// 三條賽道：控制點連成封閉的平滑曲線（Catmull-Rom），其餘的路面、護欄、地形、擺設都從這裡的設定長出來。
+// 四條賽道：控制點連成封閉的平滑曲線（Catmull-Rom），其餘的路面、護欄、地形、擺設都從這裡的設定長出來。
+// 「台北信義」的控制點和城市來自 OpenStreetMap（scripts/osm-xinyi.mjs 產生的 osm/xinyi.json）。
 // 座標單位是公尺：x 往東、z 往南、高度 y。起跑線在第一個控制點，前兩個控制點之間是直線，
 // 起跑線後面要留 50 公尺以上的直線排起跑格。改了賽道記得重算 racing.rs 的最短圈速（README 有寫怎麼算）。
 import { Color } from 'three'
+import type { CityData } from './city'
 import { fbm, lerp, smoothstep } from './noise'
+import xinyi from './osm/xinyi.json'
 
 export type PropKind = 'tree' | 'palm' | 'cactus' | 'rock' | 'building'
 
@@ -44,6 +47,10 @@ export type TrackTheme = {
   /** 夜間賽道：護欄頂端的霓虹燈條 */
   wallGlow?: number
   water?: { level: number; color: number }
+  /** 地形外面再鋪一大片平地（顏色），霧拉得很遠時才看不到地形的邊 */
+  ground?: number
+  /** 不是夜間也點路燈（黃昏） */
+  lamps?: boolean
   /** 甩尾、開出路面揚起的煙塵 */
   dust: number
   night?: boolean
@@ -69,6 +76,10 @@ export type TrackDef = {
   /** 地形頂點的顏色 */
   paint: (y: number, dist: number, x: number, z: number, out: Color) => void
   props: PropSpec[]
+  /** 真實城市的建築、街道、綠地（OpenStreetMap） */
+  city?: CityData
+  /** 地圖資料的出處，顯示在選賽道的地方 */
+  credit?: string
 }
 
 const c = (hex: number) => new Color(hex)
@@ -83,6 +94,9 @@ const CANYON_BANDS = [c(0xa24d2b), c(0xc96f3e), c(0xe2a46c), c(0xb85c34)]
 
 const CITY_GROUND = c(0x17181f)
 const CITY_PARK = c(0x1d2a22)
+
+const XINYI_PAVEMENT = c(0x8e8d8a)
+const XINYI_PAVEMENT_DARK = c(0x7a7a7a)
 
 export const TRACKS: TrackDef[] = [
   {
@@ -275,6 +289,44 @@ export const TRACKS: TrackDef[] = [
       if (dist > 40) out.lerp(CITY_PARK, smoothstep(0.55, 0.7, fbm(x / 90, z / 90, 4)))
     },
     props: [{ kind: 'building', count: 230, near: 8, far: 190, seed: 31 }],
+  },
+  {
+    id: 'xinyi',
+    name: '台北信義',
+    blurb: '照真實地圖做的信義區街道賽：繞著 101 和市政府跑，六個直角彎，傍晚的燈剛亮。',
+    credit: `地圖資料 ${xinyi.credit}`,
+    halfWidth: 8,
+    runoff: 3,
+    // 市府路往北起跑 → 松壽路 → 松仁路 → 松廉路 → 松智路 → 信義路，路是平的（信義計畫區本來就平）
+    points: xinyi.track.map(([x, z]): [number, number, number] => [x, z, 0]),
+    city: xinyi,
+    theme: {
+      skyTop: 0x1d2f6b,
+      skyHorizon: 0x9aa9d2,
+      skySun: 0xff9c7a,
+      fogNear: 240,
+      fogFar: 1600,
+      sunColor: 0xffc2a0,
+      sunIntensity: 1.1,
+      sunDir: [-0.85, 0.22, 0.3],
+      hemiSky: 0xb3c2ec,
+      hemiGround: 0x55525e,
+      hemiIntensity: 1.7,
+      road: 0x47484f,
+      roadLine: 0xf2f2f2,
+      curb: [0xd63a3a, 0xf0f0f0],
+      shoulder: 0x77787c,
+      wall: 0xd0d3d8,
+      wallHeight: 1.1,
+      ground: 0x82838a,
+      lamps: true,
+      dust: 0xa09ca0,
+    },
+    terrain: () => -0.55,
+    paint: (_y, _dist, x, z, out) => {
+      out.copy(XINYI_PAVEMENT).lerp(XINYI_PAVEMENT_DARK, smoothstep(0.4, 0.7, fbm(x / 40, z / 40, 9)))
+    },
+    props: [],
   },
 ]
 

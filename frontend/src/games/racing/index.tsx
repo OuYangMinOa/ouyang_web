@@ -808,6 +808,7 @@ export default function Racing() {
                         >
                           <strong>{t.name}</strong>
                           <span>{t.blurb}</span>
+                          {t.credit && <span className="race-credit">{t.credit}</span>}
                           {best !== undefined && <span className="race-record">最快圈 {formatMs(best)}</span>}
                         </button>
                       )

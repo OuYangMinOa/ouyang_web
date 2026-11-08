@@ -374,6 +374,10 @@ button.race-track.active {
   box-shadow: inset 0 0 0 1px var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
+.race-credit {
+  font-size: 12px;
+  opacity: 0.75;
+}
 .race-record {
   font-size: 13px;
   color: var(--accent);

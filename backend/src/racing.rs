@@ -69,6 +69,7 @@ pub enum Track {
     Coast,
     Canyon,
     City,
+    Xinyi,
 }
 
 impl Track {
@@ -77,16 +78,18 @@ impl Track {
             Track::Coast => "海岸環線",
             Track::Canyon => "紅岩峽谷",
             Track::City => "霓虹夜城",
+            Track::Xinyi => "台北信義",
         }
     }
 
-    /// 一圈最快幾毫秒：賽道一圈的長度（`track.ts` 算的，海岸 1808、峽谷 1513、夜城 1591 公尺）
+    /// 一圈最快幾毫秒：賽道一圈的長度（`track.ts` 算的，海岸 1808、峽谷 1513、夜城 1591、信義 1542 公尺）
     /// 用 `MAX_SPEED` 跑完的時間。改了賽道或極速記得重算
     fn min_lap_ms(self) -> u64 {
         match self {
             Track::Coast => 22_500,
             Track::Canyon => 18_900,
             Track::City => 19_800,
+            Track::Xinyi => 19_200,
         }
     }
 }
@@ -1025,6 +1028,16 @@ mod tests {
         assert!(Racing::check_options(options(5)).is_ok());
         assert!(Racing::check_options(options(2)).is_err());
         assert!(Racing::check_options(options(0)).is_err());
+    }
+
+    #[test]
+    fn track_ids_match_the_frontend() {
+        // tracks.ts 的 id（online.ts 的 OnlineTrack）
+        for (id, track) in
+            [("coast", Track::Coast), ("canyon", Track::Canyon), ("city", Track::City), ("xinyi", Track::Xinyi)]
+        {
+            assert_eq!(serde_json::from_value::<Track>(json!(id)).unwrap(), track);
+        }
     }
 
     /// 開一局，停在選車

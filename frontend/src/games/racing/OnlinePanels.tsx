@@ -46,6 +46,7 @@ function OnlineOptions({ party }: { party: RacingRoom }) {
             >
               <strong>{t.name}</strong>
               <span>{t.blurb}</span>
+              {t.credit && <span className="race-credit">{t.credit}</span>}
             </button>
           ))}
         </div>
