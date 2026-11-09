@@ -1,12 +1,15 @@
 // 從 OpenStreetMap 產生 3D 賽車「台北信義」賽道的資料 src/games/racing/osm/xinyi.json：
-// 賽道的控制點（照真實的路口）、周圍的建築輪廓和高度、街道、公園綠地、行道樹。
+// 賽道的控制點（照真實的路口）、周圍的建築輪廓和高度、街道、公園綠地、行道樹、跨過馬路的人行空橋、每個彎的路名，
+// 還有東南邊四獸山、南港山一帶的地形高度（遠景的山）。
 //
 // 只在要更新地圖資料時手動跑：node scripts/osm-xinyi.mjs [--refresh]
-// 原始資料存在 node_modules/.cache/osm-xinyi.json，加 --refresh 才重新向 Overpass 下載。
+// 原始資料存在 node_modules/.cache/osm-xinyi.json，加 --refresh 才重新向 Overpass 下載；
+// 地形高度圖（AWS 上的 Terrain Tiles）存在 node_modules/.cache/terrarium/，沒有才下載。
 // 地圖資料 © OpenStreetMap 貢獻者，以 ODbL 授權；產生的 JSON 是衍生資料庫，同樣以 ODbL 提供。
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { inflateSync } from 'node:zlib'
 import { CatmullRomCurve3, Vector3 } from 'three'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -49,6 +52,15 @@ const SKYLINE = 1500
 const SKYLINE_HEIGHT = 60
 /** 一層樓幾公尺（只有樓層數、沒標高度的建築） */
 const LEVEL = 3.3
+/** 人行空橋：離賽道多遠以內的才帶 */
+const SKYWAY_NEAR = 300
+/**
+ * 遠景的山：範圍（x 西→東、z 北→南，公尺）和格子大小。101 東南邊一公里多是四獸山（象山 183 公尺），
+ * 再過去是南港山（九五峰 375 公尺），南邊是富陽、中埔山；北邊、西邊是平的市區
+ */
+const RELIEF = { x0: -2000, z0: -800, x1: 5000, z1: 3600, cell: 50 }
+/** 高度圖的縮放層級（約 17 公尺一格） */
+const RELIEF_ZOOM = 13
 
 const QUERY = `[out:json][timeout:180];
 (
@@ -85,6 +97,94 @@ async function load() {
   await mkdir(dirname(cacheFile), { recursive: true })
   await writeFile(cacheFile, text)
   return JSON.parse(text)
+}
+
+/** PNG（8 位元 RGB、不交錯）解成像素：Terrain Tiles 的格式固定，不用另外裝套件 */
+function decodePng(buf) {
+  let p = 8
+  let w = 0
+  let h = 0
+  const chunks = []
+  while (p < buf.length) {
+    const len = buf.readUInt32BE(p)
+    const type = buf.toString('ascii', p + 4, p + 8)
+    if (type === 'IHDR') {
+      w = buf.readUInt32BE(p + 8)
+      h = buf.readUInt32BE(p + 12)
+      if (buf[p + 16] !== 8 || buf[p + 17] !== 2 || buf[p + 20] !== 0) throw new Error('只會解 8 位元 RGB 不交錯的 PNG')
+    }
+    if (type === 'IDAT') chunks.push(buf.subarray(p + 8, p + 8 + len))
+    p += 12 + len
+  }
+  const raw = inflateSync(Buffer.concat(chunks))
+  const bpp = 3
+  const stride = w * bpp
+  const px = Buffer.alloc(h * stride)
+  for (let y = 0; y < h; y++) {
+    const filter = raw[y * (stride + 1)]
+    const row = y * (stride + 1) + 1
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? px[y * stride + x - bpp] : 0
+      const b = y ? px[(y - 1) * stride + x] : 0
+      const c = x >= bpp && y ? px[(y - 1) * stride + x - bpp] : 0
+      let v = raw[row + x]
+      if (filter === 1) v += a
+      else if (filter === 2) v += b
+      else if (filter === 3) v += (a + b) >> 1
+      else if (filter === 4) {
+        const q = a + b - c
+        const pa = Math.abs(q - a)
+        const pb = Math.abs(q - b)
+        const pc = Math.abs(q - c)
+        v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c
+      }
+      px[y * stride + x] = v & 255
+    }
+  }
+  return { w, px }
+}
+
+const tiles = new Map()
+/** Terrain Tiles（terrarium 編碼：高度 = R×256 + G + B/256 − 32768）的一張圖，先找快取 */
+async function terrariumTile(tx, ty) {
+  const key = `${RELIEF_ZOOM}-${tx}-${ty}`
+  if (tiles.has(key)) return tiles.get(key)
+  const file = resolve(root, `node_modules/.cache/terrarium/${key}.png`)
+  let buf
+  try {
+    buf = await readFile(file)
+  } catch {
+    console.log(`下載地形高度圖 ${key}…`)
+    const res = await fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${RELIEF_ZOOM}/${tx}/${ty}.png`)
+    if (!res.ok) throw new Error(`Terrain Tiles ${res.status}`)
+    buf = Buffer.from(await res.arrayBuffer())
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(file, buf)
+  }
+  const tile = decodePng(buf)
+  tiles.set(key, tile)
+  return tile
+}
+
+/** (x, z) 的地面高度（公尺），雙線性內插 */
+async function elevation(x, z) {
+  const lon = ORIGIN[1] + x / KX
+  const lat = ORIGIN[0] - z / KZ
+  const scale = 2 ** RELIEF_ZOOM * 256
+  const fx = ((lon + 180) / 360) * scale - 0.5
+  const fy = ((1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / Math.PI) / 2) * scale - 0.5
+  const at = async (px, py) => {
+    const t = await terrariumTile(Math.floor(px / 256), Math.floor(py / 256))
+    const i = ((py % 256) * t.w + (px % 256)) * 3
+    return t.px[i] * 256 + t.px[i + 1] + t.px[i + 2] / 256 - 32768
+  }
+  const x0 = Math.floor(fx)
+  const y0 = Math.floor(fy)
+  const u = fx - x0
+  const v = fy - y0
+  const top = (await at(x0, y0)) * (1 - u) + (await at(x0 + 1, y0)) * u
+  const bottom = (await at(x0, y0 + 1)) * (1 - u) + (await at(x0 + 1, y0 + 1)) * u
+  return top * (1 - v) + bottom * v
 }
 
 const osm = await load()
@@ -386,6 +486,70 @@ const treePts = trees
     return d < NEAR && d > WALL + 1.5
   })
 
+// ---------- 人行空橋 ----------
+
+// 信義計畫區的空橋在二樓，把百貨公司、捷運站接起來，有幾座跨過賽道
+const skyways = []
+for (const w of ways.values()) {
+  const t = w.tags
+  if (!t || t.highway !== 'footway' || t.bridge !== 'yes' || (num(t.layer) ?? 0) < 1) continue
+  const pts = simplify(wayPoints(w), 0.5)
+  if (pts.length < 2 || !pts.some((p) => trackDist(p) < SKYWAY_NEAR)) continue
+  skyways.push({ half: Math.max(2.5, (num(t.width) ?? 6) / 2), pts })
+}
+
+// ---------- 路名牌 ----------
+
+/** 英文路名照路牌的寫法縮寫 */
+const shortEn = (name) => name.replace(/\bRoad\b/, 'Rd.').replace(/\bSection (\d+)\b/, 'Sec. $1')
+const english = new Map()
+for (const w of ways.values()) {
+  const name = w.tags?.name
+  if (w.tags?.highway && name && w.tags['name:en'] && !english.has(name)) english.set(name, shortEn(w.tags['name:en']))
+}
+// 每個彎：轉進去的那條路（這個路口和下一個路口共同的那條）
+const signs = ROUTE.map((pair, i) => {
+  const next = ROUTE[(i + 1) % ROUTE.length]
+  const road = pair.find((r) => next.includes(r))
+  const [x, z] = corners[i]
+  return [Math.round(x * 10) / 10, Math.round(z * 10) / 10, road, english.get(road) ?? '']
+})
+
+// ---------- 遠景的山 ----------
+
+// 高度圖在平地上會混到建築（上下亂跳二、三十公尺），只留連成一片、夠高的山：先取 3×3 的平均，
+// 平均不到 35 公尺的地方壓成 0，70 公尺以上照原本的高度；靠近範圍邊緣的慢慢降下來，不會切出一道牆
+const cols = Math.round((RELIEF.x1 - RELIEF.x0) / RELIEF.cell) + 1
+const rows = Math.round((RELIEF.z1 - RELIEF.z0) / RELIEF.cell) + 1
+const dem = new Float32Array(cols * rows)
+for (let r = 0; r < rows; r++) {
+  for (let c = 0; c < cols; c++) dem[r * cols + c] = await elevation(RELIEF.x0 + c * RELIEF.cell, RELIEF.z0 + r * RELIEF.cell)
+}
+const smooth01 = (lo, hi, v) => {
+  const t = Math.min(1, Math.max(0, (v - lo) / (hi - lo)))
+  return t * t * (3 - 2 * t)
+}
+const relief = new Uint8Array(cols * rows)
+for (let r = 0; r < rows; r++) {
+  for (let c = 0; c < cols; c++) {
+    let sum = 0
+    let count = 0
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const rr = r + dr
+        const cc = c + dc
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue
+        sum += dem[rr * cols + cc]
+        count++
+      }
+    }
+    const edge = Math.min(c, r, cols - 1 - c, rows - 1 - r) * RELIEF.cell
+    const h = dem[r * cols + c] * smooth01(35, 70, sum / count) * smooth01(0, 600, edge)
+    // 一格 2 公尺，存成一個位元組（最高 510 公尺）
+    relief[r * cols + c] = Math.max(0, Math.min(255, Math.round(h / 2)))
+  }
+}
+
 // ---------- 輸出 ----------
 
 const dm = (v) => Math.round(v * 10)
@@ -416,6 +580,12 @@ const body = [
   `"streets":${list(streets.map((s) => [dm(s.half), ...pack(s.pts)]))}`,
   `"parks":${list(parks.map(pack))}`,
   `"trees":${line(pack(treePts))}`,
+  // [半寬, ...中心線]
+  `"skyways":${list(skyways.map((s) => [dm(s.half), ...pack(s.pts)]))}`,
+  // [路口 x, z, 轉進去的路, 英文路名]
+  `"signs":${list(signs)}`,
+  // 高度一格一個位元組（2 公尺），base64；x0、z0 是第一格的位置
+  `"relief":${line({ credit: 'Terrain Tiles（Mapzen、SRTM）', x0: RELIEF.x0, z0: RELIEF.z0, cell: RELIEF.cell, cols, rows, data: Buffer.from(relief).toString('base64') })}`,
 ]
 await mkdir(dirname(outFile), { recursive: true })
 const text = `{\n${body.join(',\n')}\n}\n`
@@ -425,5 +595,6 @@ const guessed = kept.filter((b) => b.guessed).length
 const verts = kept.reduce((s, b) => s + b.ring.length, 0)
 console.log(
   `賽道 ${control.length} 個控制點；建築 ${kept.length} 棟（${verts} 個頂點，估高度的 ${guessed} 棟，離賽道太近拿掉 ${tooClose} 棟）；` +
-    `街道 ${streets.length} 條；綠地 ${parks.length} 塊；行道樹 ${treePts.length} 棵；${(text.length / 1024).toFixed(0)} KB → ${outFile}`,
+    `街道 ${streets.length} 條；綠地 ${parks.length} 塊；行道樹 ${treePts.length} 棵；空橋 ${skyways.length} 座；` +
+    `山最高 ${Math.max(...relief) * 2} 公尺；${(text.length / 1024).toFixed(0)} KB → ${outFile}`,
 )
