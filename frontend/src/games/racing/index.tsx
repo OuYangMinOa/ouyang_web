@@ -42,8 +42,8 @@ type Settings = {
 
 /** 每條賽道自己的最快圈，以及各圈數的最快完賽時間（毫秒） */
 type Records = Record<string, { lap?: number; race?: Record<string, number> }>
-/** 最快紀錄存在哪裡：賽道改過（加了起伏、夜城改成 8 字形）以後舊紀錄不能比，換一個名字重新記 */
-const RECORDS_KEY = 'racing:records:v2'
+/** 最快紀錄存在哪裡：賽道改到舊紀錄不能比時換一個名字重新記（v2：加了起伏、夜城改成 8 字形；v3：起伏放大好幾倍） */
+const RECORDS_KEY = 'racing:records:v3'
 
 type Result = FinishResult & { newLap: boolean; newRace: boolean }
 

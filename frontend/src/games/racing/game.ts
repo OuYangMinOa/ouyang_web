@@ -211,7 +211,8 @@ export class RaceGame {
   private readonly emit: (e: RaceEvent) => void
   private readonly onFrame: (f: HudFrame) => void
   private readonly renderer: WebGLRenderer
-  private readonly camera = new PerspectiveCamera(60, 1, 0.1, 2600)
+  // 遠到看得見信義東南邊的山（四、五公里外）
+  private readonly camera = new PerspectiveCamera(60, 1, 0.1, 6000)
   private readonly parts: CarParts
   private readonly input = new Input()
   private readonly audio: RaceAudio
@@ -245,6 +246,8 @@ export class RaceGame {
   private time = 0
   private camMode = 0
   private camH = 0
+  /** 鏡頭跟著俯仰的坡度（平滑過的） */
+  private camGrade = 0
   private camReady = false
   private fov = 60
   private shake = 0
@@ -1492,6 +1495,7 @@ export class RaceGame {
       const dist = 11 + Math.sin(this.orbit * 0.7) * 2
       this.look.set(c.x + Math.sin(a) * dist, c.y + 3.4, c.z + Math.cos(a) * dist)
       this.camPos.lerp(this.look, k(3))
+      this.keepAboveRoad(c, this.camPos, 1.5)
       cam.position.copy(this.camPos)
       cam.lookAt(c.x, c.y + 1, c.z)
     } else if (this.camMode === 2) {
@@ -1511,10 +1515,16 @@ export class RaceGame {
       this.camH = wrapAngle(this.camH + wrapAngle(want - this.camH) * k(6))
       const fx = Math.sin(this.camH)
       const fz = Math.cos(this.camH)
+      // 鏡頭跟著坡度俯仰（騰空時跟著車子往上、往下的方向）：陡坡上車子和前面的路才都在畫面裡，
+      // 下坡時鏡頭也跟著抬高，不會鑽到車子後面的路面底下
+      const along = fx * c.loc.tx + fz * c.loc.tz
+      const slope = c.air > 0 ? c.vy / Math.max(10, Math.abs(c.speed)) : c.loc.grade * along
+      if (!this.camReady) this.camGrade = slope
+      this.camGrade += (clamp(slope, -0.8, 0.8) - this.camGrade) * k(5)
       const push = zoom ** cfg.dolly
       const dist = cfg.dist * push + this.surge * 0.07
       const height = cfg.look + (cfg.height - cfg.look) * push
-      this.look.set(c.x - fx * dist, c.y + height, c.z - fz * dist)
+      this.look.set(c.x - fx * dist, c.y - this.camGrade * dist + height, c.z - fz * dist)
       // 位置平滑會讓鏡頭落後「速度 ÷ 平滑係數」那麼遠（極速時多 4 公尺，車子變很小、反而不覺得快），往前補回去
       const a = k(14)
       // 暫停後繼續的第一格 dt 是 0（a 也是 0）：不補，不然 0 ÷ 0 會讓鏡頭位置變成 NaN、畫面全黑
@@ -1522,8 +1532,9 @@ export class RaceGame {
       this.look.x += c.vx * lead
       this.look.z += c.vz * lead
       this.camPos.lerp(this.look, a)
+      this.keepAboveRoad(c, this.camPos, 1.2)
       cam.position.copy(this.camPos)
-      cam.lookAt(c.x + fx * cfg.ahead, c.y + cfg.look, c.z + fz * cfg.ahead)
+      cam.lookAt(c.x + fx * cfg.ahead, c.y + this.camGrade * cfg.ahead + cfg.look, c.z + fz * cfg.ahead)
     }
     this.camReady = true
 
@@ -1556,6 +1567,13 @@ export class RaceGame {
    * 選車畫面的鏡頭：繞著車慢慢轉，照車長拉遠拉近，車子畫在 `stage` 那一塊的正中間
    * （把投影中心移過去，車子就不會被選單蓋住）
    */
+  /** 鏡頭不要低過它底下的路面（沿著車子所在的那段賽道找，立體交叉時不會跳到另一層） */
+  private keepAboveRoad(c: Car, pos: Vector3, clear: number) {
+    const ds = (pos.x - c.x) * c.loc.tx + (pos.z - c.z) * c.loc.tz
+    const floor = this.track!.heightAt(c.loc.s + ds) + clear
+    if (pos.y < floor) pos.y = floor
+  }
+
   private showroomCamera(c: Car, dt: number) {
     const cam = this.camera
     const w = Math.max(1, this.host.clientWidth)

@@ -1,4 +1,5 @@
 // 「台北信義」賽道的城市：OpenStreetMap 的建築輪廓往上長成大樓，街道和綠地鋪在地面，大馬路兩旁種行道樹。
+// 101、人行空橋、遠景的山、路名牌在 landmarks.ts。
 // 資料是 scripts/osm-xinyi.mjs 產生的 osm/xinyi.json（© OpenStreetMap 貢獻者，ODbL）。
 import {
   BufferAttribute,
@@ -12,9 +13,11 @@ import {
   Object3D,
   ShapeUtils,
   Vector2,
+  Vector3,
   type CanvasTexture,
   type Scene,
 } from 'three'
+import { addRelief, addSigns, addSkyways, addTaipei101, type Relief, type Tower } from './landmarks'
 import { rng } from './noise'
 import type { TrackPath } from './track'
 
@@ -31,7 +34,16 @@ export type CityData = {
   streets: number[][]
   parks: number[][]
   trees: number[]
+  /** 人行空橋 [半寬, ...中心線] */
+  skyways: number[][]
+  /** 每個彎轉進去的路：[路口 x, z（公尺）, 路名, 英文路名] */
+  signs: (string | number)[][]
+  /** 遠景的山的高度 */
+  relief: Relief
 }
+
+/** 場景的光線：遠景的山自己算顏色，要知道霧的顏色和太陽從哪邊照 */
+export type CityLook = { haze: number; sunDir: [number, number, number] }
 
 type Tex = (w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void) => CanvasTexture
 type GroundAt = (x: number, z: number) => number
@@ -41,9 +53,6 @@ const CELL_W = 12
 const CELL_H = 13.2
 /** 這麼高以上的建築畫成玻璃帷幕大樓，矮的是貼磁磚的公寓 */
 const TOWER = 50
-/** 101 在座標原點附近：塔身是藍綠色的玻璃 */
-const TAIPEI_101 = 70
-const TAIPEI_101_TINT = 0x9fd6c8
 
 /** 玻璃大樓的色調（乘在藍灰色的玻璃上）、公寓的磁磚顏色 */
 const GLASS = [0xffffff, 0xdfe8f0, 0xcfe0e8, 0xeee6d8, 0xd2e2dc, 0xc4cfdc]
@@ -217,24 +226,114 @@ function drawGlass(ctx: CanvasRenderingContext2D, lit: boolean) {
   }
 }
 
-export function addCity(scene: Scene, track: TrackPath, data: CityData, groundAt: GroundAt, night: boolean, tex: Tex) {
+/**
+ * 蓋整座城市。回傳「這個位置的上方有沒有空橋」，路燈不要立在空橋底下
+ */
+export function addCity(
+  scene: Scene,
+  track: TrackPath,
+  data: CityData,
+  groundAt: GroundAt,
+  night: boolean,
+  look: CityLook,
+  tex: Tex,
+): (x: number, z: number) => boolean {
   const buildings = data.buildings.map((b) => ({ h: b[0] / 10, minH: b[1] / 10, ring: unpack(b, 2) }))
   const streets = data.streets.map((s) => ({ half: s[0] / 10, pts: unpack(s, 1) }))
 
-  addBuildings(scene, buildings, groundAt, night, tex)
+  // 101 在 OSM 是好幾個方塊疊起來的，換成照真實比例做的
+  const tower = find101(buildings)
+  addBuildings(scene, buildings, groundAt, night, tex, tower?.parts)
+  if (tower) addTaipei101(scene, tower.tower, groundAt, night, tex)
   addGround(scene, streets, data.parks.map((p) => unpack(p)), groundAt)
-  addTrees(scene, track, buildings, streets, unpack(data.trees), groundAt)
+  const overhead = addSkyways(
+    scene,
+    track,
+    data.skyways.map((s) => ({ half: s[0] / 10, pts: unpack(s, 1) })),
+    groundAt,
+    night,
+  )
+  addTrees(scene, track, buildings, streets, unpack(data.trees), groundAt, overhead)
+  addSigns(scene, track, data.signs, tex)
+  const center: [number, number] = [(track.minX + track.maxX) / 2, (track.minZ + track.maxZ) / 2]
+  addRelief(scene, data.relief, center, new Color(look.haze), new Vector3(...look.sunDir))
+  return (x, z) => overhead(x, z, 3)
+}
+
+/**
+ * 找 101：最高、貼地的那個 part 是塔身，從它的輪廓量出方向（邊的角度以 90 度為週期平均）和地面的半寬。
+ * 塔身附近 100 公尺以上的 part（觀景台、頂樓、塔尖、基座的裝飾）都不畫
+ */
+function find101(list: Building[]): { tower: Tower; parts: Set<Building> } | null {
+  const body = list.filter((b) => b.h >= 300 && b.minH === 0).sort((a, b) => b.h - a.h)[0]
+  if (!body) return null
+  const ring = body.ring
+  const m = ring.length / 2
+  let cx = 0
+  let cz = 0
+  let sx = 0
+  let sy = 0
+  for (let k = 0; k < m; k++) {
+    const ax = ring[k * 2]
+    const az = ring[k * 2 + 1]
+    const dx = ring[((k + 1) % m) * 2] - ax
+    const dz = ring[((k + 1) % m) * 2 + 1] - az
+    const len = Math.hypot(dx, dz)
+    const a = Math.atan2(dz, dx) * 4
+    sx += Math.cos(a) * len
+    sy += Math.sin(a) * len
+    cx += ax / m
+    cz += az / m
+  }
+  const angle = Math.atan2(sy, sx) / 4
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  let u0 = Infinity
+  let u1 = -Infinity
+  let v0 = Infinity
+  let v1 = -Infinity
+  for (let k = 0; k < m; k++) {
+    const dx = ring[k * 2] - cx
+    const dz = ring[k * 2 + 1] - cz
+    const u = dx * cos + dz * sin
+    const v = -dx * sin + dz * cos
+    u0 = Math.min(u0, u)
+    u1 = Math.max(u1, u)
+    v0 = Math.min(v0, v)
+    v1 = Math.max(v1, v)
+  }
+  const uc = (u0 + u1) / 2
+  const vc = (v0 + v1) / 2
+  const x = cx + uc * cos - vc * sin
+  const z = cz + uc * sin + vc * cos
+  const half = Math.max(u1 - u0, v1 - v0) / 2
+  const parts = new Set(
+    list.filter((b) => {
+      if (b.h < 100) return false
+      const n = b.ring.length / 2
+      let bx = 0
+      let bz = 0
+      for (let k = 0; k < n; k++) {
+        bx += b.ring[k * 2] / n
+        bz += b.ring[k * 2 + 1] / n
+      }
+      return Math.hypot(bx - x, bz - z) < half * 1.6
+    }),
+  )
+  return { tower: { x, z, angle, half }, parts }
 }
 
 type Building = { h: number; minH: number; ring: Float32Array }
 type Street = { half: number; pts: Float32Array }
 
-function addBuildings(scene: Scene, list: Building[], groundAt: GroundAt, night: boolean, tex: Tex) {
+function addBuildings(scene: Scene, list: Building[], groundAt: GroundAt, night: boolean, tex: Tex, skip?: Set<Building>) {
   const glass = new Builder()
   const tile = new Builder()
   const color = new Color()
   const roof = new Color()
-  list.forEach(({ h, minH, ring }, index) => {
+  list.forEach((building, index) => {
+    if (skip?.has(building)) return
+    const { h, minH, ring } = building
     const m = ring.length / 2
     let cx = 0
     let cz = 0
@@ -249,11 +348,10 @@ function addBuildings(scene: Scene, list: Building[], groundAt: GroundAt, night:
     const bottom = minH > 0 ? base + minH : base - 0.6
     const top = base + h
     const pick = rng(index * 7 + 3)
-    const is101 = Math.hypot(cx, cz) < TAIPEI_101 && h > 60
-    const tower = h >= TOWER || is101
+    const tower = h >= TOWER
     const b = tower ? glass : tile
     const palette = tower ? GLASS : TILE
-    color.setHex(is101 ? TAIPEI_101_TINT : palette[Math.floor(pick() * palette.length)])
+    color.setHex(palette[Math.floor(pick() * palette.length)])
     roof.copy(color).multiplyScalar(0.72)
 
     // 外牆：每個邊一面，法線朝外（輪廓是逆時針，往外是 (dz, -dx)）
@@ -365,7 +463,15 @@ function addGround(scene: Scene, streets: Street[], parks: Float32Array[], groun
  * 行道樹：OSM 有標的樹，加上大馬路（半寬 6 公尺以上）兩旁每 12 公尺一棵。
  * 離賽道太近、在別條路上（路口）、在建築裡面的不種
  */
-function addTrees(scene: Scene, track: TrackPath, buildings: Building[], streets: Street[], osmTrees: Float32Array, groundAt: GroundAt) {
+function addTrees(
+  scene: Scene,
+  track: TrackPath,
+  buildings: Building[],
+  streets: Street[],
+  osmTrees: Float32Array,
+  groundAt: GroundAt,
+  overhead: (x: number, z: number) => boolean,
+) {
   const near = 420
   const blocked = new Grid<Building | Street>(40)
   for (const item of [...buildings, ...streets]) {
@@ -384,6 +490,7 @@ function addTrees(scene: Scene, track: TrackPath, buildings: Building[], streets
     blocked.add(minX - pad, minZ - pad, maxX + pad, maxZ + pad, item)
   }
   const free = (x: number, z: number) => {
+    if (overhead(x, z)) return false
     for (const item of blocked.at(x, z)) {
       if ('ring' in item) {
         if (item.minH === 0 && insideRing(x, z, item.ring)) return false
