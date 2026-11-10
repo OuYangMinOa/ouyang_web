@@ -2,6 +2,7 @@
 // 101、人行空橋、遠景的山、路名牌在 landmarks.ts。
 // 資料是 scripts/osm-xinyi.mjs 產生的 osm/xinyi.json（© OpenStreetMap 貢獻者，ODbL）。
 import {
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -9,6 +10,7 @@ import {
   IcosahedronGeometry,
   InstancedMesh,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   Object3D,
   ShapeUtils,
@@ -19,6 +21,7 @@ import {
 } from 'three'
 import { addRelief, addSigns, addSkyways, addTaipei101, type Relief, type Tower } from './landmarks'
 import { rng } from './noise'
+import { Solids } from './solids'
 import type { TrackPath } from './track'
 
 /** osm/xinyi.json 的格式：座標都是公寸的整數，一串點的第一點是絕對座標、後面是和前一點的差 */
@@ -226,8 +229,144 @@ function drawGlass(ctx: CanvasRenderingContext2D, lit: boolean) {
   }
 }
 
+/** 綠色調的玻璃帷幕：每層樓一條淺色的窗間牆、細細的竪框（信義很多大樓是這種） */
+function drawGlassTeal(ctx: CanvasRenderingContext2D, lit: boolean) {
+  const rand = rng(53)
+  ctx.fillStyle = '#000000'
+  if (lit) {
+    ctx.fillRect(0, 0, 128, 128)
+    for (let floor = 0; floor < 4; floor++) {
+      for (let bay = 0; bay < 4; bay++) {
+        if (rand() > 0.4) continue
+        ctx.fillStyle = rand() < 0.6 ? '#fff1d6' : '#dcecff'
+        ctx.fillRect(bay * 32 + 1, floor * 32 + 2, 30, 23)
+      }
+    }
+    return
+  }
+  const grad = ctx.createLinearGradient(0, 0, 0, 128)
+  grad.addColorStop(0, '#4f7f7c')
+  grad.addColorStop(1, '#2c5052')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, 128, 128)
+  for (let floor = 0; floor < 4; floor++) {
+    ctx.fillStyle = '#a9b8b4'
+    ctx.fillRect(0, floor * 32 + 25, 128, 7)
+  }
+  ctx.fillStyle = 'rgba(190,210,205,0.7)'
+  for (let x = 0; x < 128; x += 32) ctx.fillRect(x, 0, 2, 128)
+  ctx.fillStyle = '#a9b8b4'
+  ctx.fillRect(0, 120, 8, 8)
+}
+
+/** 銀白色的格子框、深藍色的窗：方方正正的辦公大樓 */
+function drawGlassGrid(ctx: CanvasRenderingContext2D, lit: boolean) {
+  const rand = rng(61)
+  ctx.fillStyle = lit ? '#000000' : '#d5dadf'
+  ctx.fillRect(0, 0, 128, 128)
+  for (let floor = 0; floor < 4; floor++) {
+    for (let col = 0; col < 8; col++) {
+      const x = col * 16 + 3
+      const y = floor * 32 + 3
+      const on = rand() < 0.42
+      if (lit) {
+        if (!on) continue
+        ctx.fillStyle = rand() < 0.5 ? '#ffeccc' : '#e6f0ff'
+      } else ctx.fillStyle = col % 2 ? '#3e5670' : '#34495f'
+      ctx.fillRect(x, y, 11, 23)
+    }
+  }
+}
+
+/** 台灣的老公寓：磁磚牆、裝了鐵窗的窗戶，有的窗下掛著冷氣機 */
+function drawConcrete(ctx: CanvasRenderingContext2D, lit: boolean) {
+  const rand = rng(71)
+  ctx.fillStyle = lit ? '#000000' : '#d6d2c8'
+  ctx.fillRect(0, 0, 128, 128)
+  for (let floor = 0; floor < 4; floor++) {
+    const y = floor * 32
+    for (let col = 0; col < 4; col++) {
+      const x = col * 32 + 5
+      const on = rand() < 0.4
+      const ac = rand() < 0.45
+      if (lit) {
+        if (on) {
+          ctx.fillStyle = rand() < 0.7 ? '#ffd9a0' : '#f4f6ff'
+          ctx.fillRect(x, y + 6, 22, 15)
+          ctx.fillStyle = '#000000'
+          for (let gx = x + 2; gx < x + 22; gx += 4) ctx.fillRect(gx, y + 6, 1, 15)
+        }
+        continue
+      }
+      // 鐵窗：突出來一點的框和一根根直條
+      ctx.fillStyle = '#7d8186'
+      ctx.fillRect(x - 2, y + 4, 26, 19)
+      ctx.fillStyle = on ? '#8f8670' : '#3b4249'
+      ctx.fillRect(x, y + 6, 22, 15)
+      ctx.fillStyle = '#9ea3a8'
+      for (let gx = x + 2; gx < x + 22; gx += 4) ctx.fillRect(gx, y + 6, 1, 15)
+      if (ac) {
+        ctx.fillStyle = '#efefea'
+        ctx.fillRect(x + 6, y + 24, 12, 6)
+        ctx.fillStyle = '#b5b5b0'
+        ctx.fillRect(x + 7, y + 25, 4, 4)
+      }
+    }
+    if (!lit) {
+      ctx.fillStyle = '#c4bfb4'
+      ctx.fillRect(0, y + 30, 128, 2)
+    }
+  }
+  if (!lit) {
+    ctx.fillStyle = '#d6d2c8'
+    ctx.fillRect(0, 120, 8, 8)
+  }
+}
+
+/** 一串點的外框 */
+function bounds(pts: Float32Array): [number, number, number, number] {
+  let minX = Infinity
+  let minZ = Infinity
+  let maxX = -Infinity
+  let maxZ = -Infinity
+  for (let k = 0; k < pts.length; k += 2) {
+    minX = Math.min(minX, pts[k])
+    maxX = Math.max(maxX, pts[k])
+    minZ = Math.min(minZ, pts[k + 1])
+    maxZ = Math.max(maxZ, pts[k + 1])
+  }
+  return [minX, minZ, maxX, maxZ]
+}
+
 /**
- * 蓋整座城市。回傳「這個位置的上方有沒有空橋」，路燈不要立在空橋底下
+ * 看台、觀眾不能放的地方（scenery.ts）：`blocked` 是在貼地的建築裡面，`covered` 是在空橋底下；
+ * `skyways` 是空橋的中心線（上面站觀眾）
+ */
+export function cityObstacles(data: CityData) {
+  const grid = new Grid<Float32Array>(40)
+  for (const b of data.buildings) {
+    if (b[1] / 10 >= 3) continue
+    const ring = unpack(b, 2)
+    const [x0, z0, x1, z1] = bounds(ring)
+    grid.add(x0, z0, x1, z1, ring)
+  }
+  const skyways = data.skyways.map((s) => ({ half: s[0] / 10, pts: unpack(s, 1) }))
+  return {
+    blocked: (x: number, z: number) => grid.at(x, z).some((ring) => insideRing(x, z, ring)),
+    covered: (x: number, z: number) =>
+      skyways.some(({ half, pts }) => {
+        for (let k = 0; k + 2 < pts.length; k += 2) {
+          if (segDist(x, z, pts[k], pts[k + 1], pts[k + 2], pts[k + 3]) < half + 2) return true
+        }
+        return false
+      }),
+    skyways,
+  }
+}
+
+/**
+ * 蓋整座城市。回傳「這個位置的上方有沒有空橋」，路燈不要立在空橋底下。
+ * `occupied` 是看台、看板佔走的地方，行道樹不要種在那裡
  */
 export function addCity(
   scene: Scene,
@@ -237,13 +376,14 @@ export function addCity(
   night: boolean,
   look: CityLook,
   tex: Tex,
+  occupied: (x: number, z: number, r: number) => boolean,
 ): (x: number, z: number) => boolean {
   const buildings = data.buildings.map((b) => ({ h: b[0] / 10, minH: b[1] / 10, ring: unpack(b, 2) }))
   const streets = data.streets.map((s) => ({ half: s[0] / 10, pts: unpack(s, 1) }))
 
   // 101 在 OSM 是好幾個方塊疊起來的，換成照真實比例做的
   const tower = find101(buildings)
-  addBuildings(scene, buildings, groundAt, night, tex, tower?.parts)
+  addBuildings(scene, track, buildings, groundAt, night, tex, tower?.parts)
   if (tower) addTaipei101(scene, tower.tower, groundAt, night, tex)
   addGround(scene, streets, data.parks.map((p) => unpack(p)), groundAt)
   const overhead = addSkyways(
@@ -253,7 +393,7 @@ export function addCity(
     groundAt,
     night,
   )
-  addTrees(scene, track, buildings, streets, unpack(data.trees), groundAt, overhead)
+  addTrees(scene, track, buildings, streets, unpack(data.trees), groundAt, (x, z) => overhead(x, z) || occupied(x, z, 2.5))
   addSigns(scene, track, data.signs, tex)
   const center: [number, number] = [(track.minX + track.maxX) / 2, (track.minZ + track.maxZ) / 2]
   addRelief(scene, data.relief, center, new Color(look.haze), new Vector3(...look.sunDir))
@@ -326,11 +466,114 @@ function find101(list: Building[]): { tower: Tower; parts: Set<Building> } | nul
 type Building = { h: number; minH: number; ring: Float32Array }
 type Street = { half: number; pts: Float32Array }
 
-function addBuildings(scene: Scene, list: Building[], groundAt: GroundAt, night: boolean, tex: Tex, skip?: Set<Building>) {
-  const glass = new Builder()
-  const tile = new Builder()
+/** 外牆的樣式：玻璃大樓三種、公寓兩種 */
+const GLASS_DRAW = [drawGlass, drawGlassTeal, drawGlassGrid]
+const TILE_DRAW = [drawTile, drawConcrete]
+/** 頂樓加蓋的鐵皮屋（藍、綠、白、鏽紅…）、不鏽鋼水塔、屋頂設備 */
+const SHEET = [0x3d6fb6, 0x7fae8a, 0xd0d3d6, 0x9a5a3c, 0x4b8f8c, 0x6a86a8]
+const STEEL = 0xd5d9de
+const MACHINE = 0x9ea4aa
+/** 離賽道這麼遠以內的建築才放屋頂上的東西（再遠看不到） */
+const ROOF_NEAR = 380
+
+/** 把輪廓往上長成牆，貼圖照實際尺寸重複；`along` 是外牆貼圖的起點（每棟錯開） */
+function extrude(b: Builder, ring: Float32Array, bottom: number, top: number, base: number, color: Color, roof: Color, along: number) {
+  const m = ring.length / 2
+  const v0 = (bottom - base) / CELL_H
+  const v1 = (top - base) / CELL_H
+  // 外牆：每個邊一面，法線朝外（輪廓是逆時針，往外是 (dz, -dx)）
+  for (let k = 0; k < m; k++) {
+    const ax = ring[k * 2]
+    const az = ring[k * 2 + 1]
+    const bx = ring[((k + 1) % m) * 2]
+    const bz = ring[((k + 1) % m) * 2 + 1]
+    const len = Math.hypot(bx - ax, bz - az)
+    if (len < 0.01) continue
+    const nx = (bz - az) / len
+    const nz = -(bx - ax) / len
+    const u0 = along / CELL_W
+    const u1 = (along + len) / CELL_W
+    along += len
+    b.vert(ax, bottom, az, nx, 0, nz, u0, v0, color)
+    b.vert(bx, top, bz, nx, 0, nz, u1, v1, color)
+    b.vert(bx, bottom, bz, nx, 0, nz, u1, v0, color)
+    b.vert(ax, bottom, az, nx, 0, nz, u0, v0, color)
+    b.vert(ax, top, az, nx, 0, nz, u0, v1, color)
+    b.vert(bx, top, bz, nx, 0, nz, u1, v1, color)
+  }
+  for (const [i, j, k] of triangulate(ring)) {
+    b.flat(ring[i * 2], ring[i * 2 + 1], ring[j * 2], ring[j * 2 + 1], ring[k * 2], ring[k * 2 + 1], () => top, roof)
+  }
+}
+
+/** 輪廓的面積，和照最長的邊量出來的方向、外框的中心與長寬（屋頂上擺東西用） */
+function shape(ring: Float32Array) {
+  const m = ring.length / 2
+  let area = 0
+  let cx = 0
+  let cz = 0
+  let best = 0
+  let angle = 0
+  for (let k = 0; k < m; k++) {
+    const ax = ring[k * 2]
+    const az = ring[k * 2 + 1]
+    const bx = ring[((k + 1) % m) * 2]
+    const bz = ring[((k + 1) % m) * 2 + 1]
+    area += ax * bz - bx * az
+    cx += ax / m
+    cz += az / m
+    const len = Math.hypot(bx - ax, bz - az)
+    if (len > best) {
+      best = len
+      angle = Math.atan2(bz - az, bx - ax)
+    }
+  }
+  const ux = Math.cos(angle)
+  const uz = Math.sin(angle)
+  let u0 = Infinity
+  let u1 = -Infinity
+  let w0 = Infinity
+  let w1 = -Infinity
+  for (let k = 0; k < m; k++) {
+    const dx = ring[k * 2] - cx
+    const dz = ring[k * 2 + 1] - cz
+    const u = dx * ux + dz * uz
+    const w = -dx * uz + dz * ux
+    u0 = Math.min(u0, u)
+    u1 = Math.max(u1, u)
+    w0 = Math.min(w0, w)
+    w1 = Math.max(w1, w)
+  }
+  const mu = (u0 + u1) / 2
+  const mw = (w0 + w1) / 2
+  return {
+    area: Math.abs(area) / 2,
+    x: cx + mu * ux - mw * uz,
+    z: cz + mu * uz + mw * ux,
+    ux,
+    uz,
+    lu: u1 - u0,
+    lw: w1 - w0,
+  }
+}
+
+function addBuildings(
+  scene: Scene,
+  track: TrackPath,
+  list: Building[],
+  groundAt: GroundAt,
+  night: boolean,
+  tex: Tex,
+  skip?: Set<Building>,
+) {
+  const glass = GLASS_DRAW.map(() => new Builder())
+  const tile = TILE_DRAW.map(() => new Builder())
+  const roofs = new Solids()
+  const lights = new Solids()
   const color = new Color()
   const roof = new Color()
+  const crown = new Color()
+  const sheetTop = new Color()
   list.forEach((building, index) => {
     if (skip?.has(building)) return
     const { h, minH, ring } = building
@@ -349,58 +592,120 @@ function addBuildings(scene: Scene, list: Building[], groundAt: GroundAt, night:
     const top = base + h
     const pick = rng(index * 7 + 3)
     const tower = h >= TOWER
-    const b = tower ? glass : tile
+    const style = pick()
+    const b = tower ? glass[style < 0.45 ? 0 : style < 0.75 ? 1 : 2] : tile[style < 0.6 ? 0 : 1]
     const palette = tower ? GLASS : TILE
     color.setHex(palette[Math.floor(pick() * palette.length)])
     roof.copy(color).multiplyScalar(0.72)
+    extrude(b, ring, bottom, top, base, color, roof, pick() * CELL_W)
 
-    // 外牆：每個邊一面，法線朝外（輪廓是逆時針，往外是 (dz, -dx)）
-    let along = pick() * CELL_W
-    const v0 = (bottom - base) / CELL_H
-    const v1 = h / CELL_H
-    for (let k = 0; k < m; k++) {
-      const ax = ring[k * 2]
-      const az = ring[k * 2 + 1]
-      const bx = ring[((k + 1) % m) * 2]
-      const bz = ring[((k + 1) % m) * 2 + 1]
-      const len = Math.hypot(bx - ax, bz - az)
-      if (len < 0.01) continue
-      const nx = (bz - az) / len
-      const nz = -(bx - ax) / len
-      const u0 = along / CELL_W
-      const u1 = (along + len) / CELL_W
-      along += len
-      b.vert(ax, bottom, az, nx, 0, nz, u0, v0, color)
-      b.vert(bx, top, bz, nx, 0, nz, u1, v1, color)
-      b.vert(bx, bottom, bz, nx, 0, nz, u1, v0, color)
-      b.vert(ax, bottom, az, nx, 0, nz, u0, v0, color)
-      b.vert(ax, top, az, nx, 0, nz, u0, v1, color)
-      b.vert(bx, top, bz, nx, 0, nz, u1, v1, color)
+    // 屋頂上的東西：只放離賽道近的建築（part 不放：101 那種疊起來的）
+    if (minH > 0 || track.nearest(cx, cz).dist > ROOF_NEAR) return
+    const sh = shape(ring)
+    /** 屋頂上本地座標 (u 沿著最長的邊, w 往旁邊) 的點 */
+    const at = (u: number, w: number): [number, number] => [sh.x + u * sh.ux - w * sh.uz, sh.z + u * sh.uz + w * sh.ux]
+    const inside = (u: number, w: number) => {
+      const [x, z] = at(u, w)
+      return insideRing(x, z, ring)
     }
-    // 屋頂
-    for (const [i, j, k] of triangulate(ring)) {
-      b.flat(ring[i * 2], ring[i * 2 + 1], ring[j * 2], ring[j * 2 + 1], ring[k * 2], ring[k * 2 + 1], () => top, roof)
+    /** 中心在 (u, w)、半長 hu、半寬 hw 的方塊整個在屋頂上 */
+    const fits = (hu: number, hw: number, u = 0, w = 0) =>
+      inside(u, w) && inside(u - hu, w - hw) && inside(u + hu, w - hw) && inside(u + hu, w + hw) && inside(u - hu, w + hw)
+    // BoxGeometry 的 x 轉到 (ux, uz)
+    const heading = -Math.atan2(sh.uz, sh.ux)
+    const box = (bw: number, bh: number, bd: number, u: number, w: number, y: number, hex: number) => {
+      const [x, z] = at(u, w)
+      roofs.add(new BoxGeometry(bw, bh, bd).rotateY(heading).translate(x, y + bh / 2, z), hex)
+    }
+    if (tower) {
+      // 頂樓往內縮一圈的機房（很多大樓頂上那一截），再放幾個設備；很高的有避雷針和紅燈
+      let roofTop = top
+      if (sh.area > 150 && pick() < 0.7) {
+        const s = 0.72 + pick() * 0.12
+        const inset = new Float32Array(ring.length)
+        let ok = true
+        for (let k = 0; k < m && ok; k++) {
+          inset[k * 2] = sh.x + (ring[k * 2] - sh.x) * s
+          inset[k * 2 + 1] = sh.z + (ring[k * 2 + 1] - sh.z) * s
+          ok = insideRing(inset[k * 2], inset[k * 2 + 1], ring)
+        }
+        if (ok) {
+          const ch = 4 + pick() * 6
+          crown.copy(color).multiplyScalar(0.86)
+          extrude(b, inset, top - 0.2, top + ch, base, crown, roof, pick() * CELL_W)
+          roofTop = top + ch
+        }
+      }
+      const units = 1 + Math.floor(pick() * 3)
+      for (let k = 0; k < units; k++) {
+        const u = (pick() - 0.5) * sh.lu * 0.35
+        const w = (pick() - 0.5) * sh.lw * 0.35
+        if (fits(1.2, 1.2, u, w)) box(2.4, 1.4, 2.4, u, w, roofTop, MACHINE)
+      }
+      if (h > 110) {
+        const mast = 6 + pick() * 8
+        roofs.add(new CylinderGeometry(0.14, 0.22, mast, 6).translate(sh.x, roofTop + mast / 2, sh.z), MACHINE)
+        lights.add(new BoxGeometry(0.6, 0.6, 0.6).translate(sh.x, roofTop + mast + 0.2, sh.z), 0xff3030)
+      }
+      return
+    }
+    if (sh.area < 60) return
+    // 頂樓加蓋：佔屋頂一半左右的鐵皮屋，水塔常常再放在它上面
+    let tankY = top
+    let spread = 0.3
+    if (h < 40 && pick() < 0.38) {
+      for (const k of [0.55, 0.42]) {
+        const hu = (sh.lu * k) / 2
+        const hw = (sh.lw * k) / 2
+        if (hu < 1.5 || hw < 1.5 || !fits(hu, hw)) continue
+        const sheet = SHEET[Math.floor(pick() * SHEET.length)]
+        box(hu * 2, 2.6, hw * 2, 0, 0, top, sheet)
+        box(hu * 2 + 0.4, 0.16, hw * 2 + 0.4, 0, 0, top + 2.6, sheetTop.setHex(sheet).lerp(new Color(0xffffff), 0.35).getHex())
+        tankY = top + 2.76
+        spread = k * 0.6
+        break
+      }
+    }
+    // 不鏽鋼水塔：一兩個，站在矮矮的架子上
+    if (pick() < 0.7) {
+      const tanks = sh.area > 220 && pick() < 0.5 ? 2 : 1
+      for (let k = 0; k < tanks; k++) {
+        const u = (pick() - 0.5) * sh.lu * spread
+        const w = (pick() - 0.5) * sh.lw * spread
+        const r = 0.7 + pick() * 0.35
+        if (!fits(r, r, u, w)) continue
+        const [x, z] = at(u, w)
+        roofs.add(new BoxGeometry(r * 1.7, 0.5, r * 1.7).rotateY(heading).translate(x, tankY + 0.25, z), MACHINE)
+        roofs.add(new CylinderGeometry(r, r, 1.6, 10).translate(x, tankY + 1.3, z), STEEL)
+        roofs.add(new CylinderGeometry(r * 0.96, r, 0.25, 10).translate(x, tankY + 2.2, z), STEEL)
+      }
     }
   })
   const glow = night ? 1 : 0.8
-  for (const [b, draw] of [
-    [glass, drawGlass],
-    [tile, drawTile],
+  for (const [builders, draws] of [
+    [glass, GLASS_DRAW],
+    [tile, TILE_DRAW],
   ] as const) {
-    if (!b.pos.length) continue
-    scene.add(
-      new Mesh(
-        b.geometry(),
-        new MeshLambertMaterial({
-          map: tex(128, 128, (ctx) => draw(ctx, false)),
-          vertexColors: true,
-          emissiveMap: tex(128, 128, (ctx) => draw(ctx, true)),
-          emissive: 0xffffff,
-          emissiveIntensity: glow,
-        }),
-      ),
-    )
+    builders.forEach((b, k) => {
+      if (!b.pos.length) return
+      scene.add(
+        new Mesh(
+          b.geometry(),
+          new MeshLambertMaterial({
+            map: tex(128, 128, (ctx) => draws[k](ctx, false)),
+            vertexColors: true,
+            emissiveMap: tex(128, 128, (ctx) => draws[k](ctx, true)),
+            emissive: 0xffffff,
+            emissiveIntensity: glow,
+          }),
+        ),
+      )
+    })
   }
+  const roofMesh = roofs.mesh(new MeshLambertMaterial({ vertexColors: true }))
+  if (roofMesh) scene.add(roofMesh)
+  const lightMesh = lights.mesh(new MeshBasicMaterial({ vertexColors: true }))
+  if (lightMesh) scene.add(lightMesh)
 }
 
 /** 街道（柏油）和綠地鋪在地面上，比地形高一點點 */
@@ -477,16 +782,7 @@ function addTrees(
   for (const item of [...buildings, ...streets]) {
     const pts = 'ring' in item ? item.ring : item.pts
     const pad = 'half' in item ? item.half : 0
-    let minX = Infinity
-    let minZ = Infinity
-    let maxX = -Infinity
-    let maxZ = -Infinity
-    for (let k = 0; k < pts.length; k += 2) {
-      minX = Math.min(minX, pts[k])
-      maxX = Math.max(maxX, pts[k])
-      minZ = Math.min(minZ, pts[k + 1])
-      maxZ = Math.max(maxZ, pts[k + 1])
-    }
+    const [minX, minZ, maxX, maxZ] = bounds(pts)
     blocked.add(minX - pad, minZ - pad, maxX + pad, maxZ + pad, item)
   }
   const free = (x: number, z: number) => {
