@@ -28,6 +28,7 @@ pub mod liarsdice;
 pub mod lobby;
 pub mod lunar;
 pub mod mcp;
+pub mod mecha;
 pub mod minesrace;
 pub mod monitor;
 pub mod music;
@@ -101,6 +102,7 @@ pub struct AppState {
     pub bigtwo: Arc<party::Parties<bigtwo::BigTwo>>,
     pub minesrace: Arc<party::Parties<minesrace::MinesRace>>,
     pub racing: Arc<party::Parties<racing::Racing>>,
+    pub mecha: Arc<party::Parties<mecha::Mecha>>,
     pub draw: Arc<party::Parties<draw::Draw>>,
     pub antique: Arc<party::Parties<antique::Antique>>,
     pub uno: Arc<party::Parties<uno::Uno>>,
@@ -166,6 +168,7 @@ impl AppState {
             bigtwo: Arc::default(),
             minesrace: Arc::default(),
             racing: Arc::default(),
+            mecha: Arc::default(),
             draw: Arc::default(),
             antique: Arc::default(),
             uno: Arc::default(),
@@ -297,6 +300,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/minesrace/party/{code}/ws", get(party::connect::<minesrace::MinesRace>))
         .route("/games/racing/party", post(party::create::<racing::Racing>))
         .route("/games/racing/party/{code}/ws", get(party::connect::<racing::Racing>))
+        .route("/games/mecha/party", post(party::create::<mecha::Mecha>))
+        .route("/games/mecha/party/{code}/ws", get(party::connect::<mecha::Mecha>))
         .route("/games/draw/party", post(party::create::<draw::Draw>))
         .route("/games/draw/party/{code}/ws", get(party::connect::<draw::Draw>))
         .route("/games/draw/categories", get(draw_words::categories_list))
