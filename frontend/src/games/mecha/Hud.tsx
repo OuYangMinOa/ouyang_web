@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import type { HudFrame } from './game'
 import { BASE, MAP_X, MAP_Z, RIVER, type MapData, type Team } from './map'
 import { DRONE, MECH, MECHS, SHELL, teamClass, type MechKind } from './spec'
 
 const deg = (rad: number) => Math.round((rad * 180) / Math.PI)
+/** 仰角的刻度：每 5 度一格 */
+const ELEV_STEPS = (deg(SHELL.elevMax) - deg(SHELL.elevMin)) / 5
 
 /**
  * 每一格的儀表：準星、狙擊鏡、偵察機的畫面、血量、能量、彈藥、飛彈、偵察機、變身的狀態、迫擊砲的落點距離、砲擊警告、
@@ -87,7 +89,6 @@ export function Hud({
   const elevText = useRef<HTMLElement>(null)
   const elevMark = useRef<HTMLElement>(null)
   const mortarInfo = useRef<HTMLSpanElement>(null)
-  const shellRef = useRef<HTMLDivElement>(null)
   const reloadRef = useRef<HTMLDivElement>(null)
   const missileRefs = useRef<(HTMLSpanElement | null)[]>([])
   const rackRefs = useRef<(HTMLSpanElement | null)[]>([])
@@ -144,7 +145,7 @@ export function Hud({
       if (reloadRef.current) reloadRef.current.style.width = `${f.reload >= 0 ? f.reload * 100 : (f.ammo / Math.max(1, f.magazine)) * 100}%`
       l.reload = f.reload
       if (modeRef.current) modeRef.current.dataset.state = String(f.deploy)
-      // 迫擊砲：砲管的仰角（刻度上的指標跟著動），和照仰角算的平地上大約打多遠、飛幾秒；看不到落點
+      // 迫擊砲：砲管的仰角（刻度上的指標跟著動），和照仰角算的平地上大約打多遠、飛幾秒；沒有落點的標示
       const m = f.alive ? f.mortar : null
       const mortar = m ? `${m.elev.toFixed(1)}|${Math.round(m.range / 5) * 5}|${m.time.toFixed(1)}` : ''
       if (mortar !== l.mortar) {
@@ -153,10 +154,10 @@ export function Hud({
         if (m) {
           if (elevText.current) elevText.current.textContent = `${m.elev.toFixed(1)}°`
           if (elevMark.current) elevMark.current.style.bottom = `${(m.level * 100).toFixed(1)}%`
-          if (mortarInfo.current) mortarInfo.current.textContent = `平地約 ${Math.round(m.range / 5) * 5} m・飛 ${m.time.toFixed(1)} 秒`
+          if (mortarInfo.current) mortarInfo.current.textContent = `平地約 ${Math.round(m.range / 5) * 5} m
+飛 ${m.time.toFixed(1)} 秒`
         }
       }
-      if (shellRef.current) shellRef.current.dataset.on = String(f.shelled && f.alive)
       if (f.missiles !== l.missiles) {
         l.missiles = f.missiles
         missileRefs.current.forEach((el, i) => el && (el.dataset.on = String(i < f.missiles)))
@@ -357,11 +358,8 @@ export function Hud({
       <div className="mecha-scanned" ref={scannedRef} data-on="false" role="status">
         ◉ 被敵人的偵察機掃到了
       </div>
-      <div className="mecha-shelled" ref={shellRef} data-on="false" role="alert">
-        ⚠ 砲擊來襲！離開紅圈
-      </div>
       <div className="mecha-mortar" ref={mortarRef} data-on="false" aria-live="off">
-        <div className="mecha-elev" aria-hidden="true">
+        <div className="mecha-elev" aria-hidden="true" style={{ '--steps': ELEV_STEPS } as CSSProperties}>
           <span>{deg(SHELL.elevMax)}°</span>
           <span className="mecha-elev-track">
             <i ref={elevMark} />

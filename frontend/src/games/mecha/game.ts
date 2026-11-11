@@ -1,8 +1,8 @@
 // 機甲對戰的 3D 畫面和遊戲迴圈：three.js 畫城市和機甲，每台在自己這邊跑物理的機甲（自己的、負責開的電腦）
 // 照固定步長往前算，別人的照收到的狀態推算。開火打中、飛彈、鎖定都在這裡判斷，打中了送給伺服器算傷害。
 // 偵察型的偵察機也在這裡：放出去後鏡頭跟著偵察機，掃到的敵人標在自己這隊的畫面和小地圖上，引爆時把炸到的人送給伺服器。
-// 堡壘型、砲擊型的變身（E）也在這裡：堡壘型的盾牌擋住從正面打來的子彈、飛彈；砲擊型架砲後看著天空調砲管的仰角和左右（看不到落點），
-// 迫擊砲彈照彈道飛，落地前地上有警告圈。偵察機爆炸、迫擊砲彈炸到、狙擊型打中頭都是一發擊倒（傷害伺服器算）。
+// 堡壘型、砲擊型的變身（E）也在這裡：堡壘型的盾牌擋住從正面打來的子彈、飛彈；砲擊型架砲後調砲管的仰角和左右（鏡頭在後面微微抬頭，沒有落點的標示），
+// 迫擊砲彈照彈道飛，對方沒有任何提示（只聽得到很大的砲聲）。偵察機爆炸、迫擊砲彈炸到、狙擊型打中頭都是一發擊倒（傷害伺服器算）。
 // 選單的背景是幾台機甲站在廣場上、鏡頭繞著轉。
 import { Color, PerspectiveCamera, Vector3, WebGLRenderer, type Group } from 'three'
 import { MechAudio } from './audio'
@@ -115,8 +115,6 @@ export type HudFrame = {
    * （只是照仰角算的，不知道真正落在哪裡）；沒架砲是 null
    */
   mortar: { elev: number; level: number; range: number; time: number } | null
-  /** 有砲彈快要落在自己附近 */
-  shelled: boolean
   missiles: number
   safe: boolean
   alive: boolean
@@ -261,10 +259,7 @@ type Course = {
   uz: number
 }
 
-/**
- * 一發迫擊砲彈：照初速和重力飛（每個人自己算，同樣的砲口和初速大家看到的一樣）；`land`、`eta` 是發射時算好的落點和幾秒後落地
- * （只用來畫警告圈、叫電腦躲，開砲的人自己看不到）
- */
+/** 一發迫擊砲彈：照初速和重力飛（每個人自己算，同樣的砲口和初速大家看到的一樣）；落在哪裡沒有任何標示 */
 type Shell = {
   owner: number
   team: Team
@@ -280,12 +275,6 @@ type Shell = {
   local: boolean
   mesh: Group
   trail: number
-  land: Vector3
-  eta: number
-  /** 落點的警告圈（快落地才出現） */
-  ring: Group | null
-  /** 已經告訴過要躲的電腦 */
-  warned: Set<number>
 }
 
 const COURSE_SAMPLES = 32
@@ -373,7 +362,7 @@ function rayHead(ox: number, oy: number, oz: number, dx: number, dy: number, dz:
 const PACK_PITCH = 0.15
 
 /**
- * 瞄準的仰角可以轉到哪裡。砲擊型架砲時跟著架砲的進度換成砲管的仰角（`SHELL.elevMin`～`elevMax`，鏡頭被帶著抬頭看天空），
+ * 瞄準的仰角可以轉到哪裡。砲擊型架砲時跟著架砲的進度換成砲管的仰角（`SHELL.elevMin`～`elevMax`；鏡頭抬多高另外算，見 `viewPitch`），
  * 收砲時上限慢慢降下來（把頭放平）
  */
 function pitchRange(p: Pilot): [number, number] {
@@ -384,6 +373,18 @@ function pitchRange(p: Pilot): [number, number] {
   if (b.deployed) return [lo, PITCH_MAX + (SHELL.elevMax - PITCH_MAX) * k]
   const hi = PACK_PITCH + (SHELL.elevMax - PACK_PITCH) * k
   return [Math.min(lo, hi), hi]
+}
+
+/**
+ * 鏡頭的仰角：平常就是瞄準的仰角。砲擊型架砲時瞄準的仰角是砲管的仰角（最高 85 度），鏡頭只微微抬頭（`SHELL.view`），
+ * 照架砲的進度慢慢換過去
+ */
+function viewPitch(p: Pilot): number {
+  const b = p.body
+  if (!p.spec.deploy?.mortar || b.deploy <= 0) return b.aimPitch
+  const elev = clamp(b.aimPitch, SHELL.elevMin, SHELL.elevMax)
+  const view = SHELL.view.base + (elev - SHELL.elevMin) * SHELL.view.follow
+  return b.aimPitch + (view - b.aimPitch) * ease(b.deploy)
 }
 
 /** 盾牌變身到這個進度以上才擋得住（還在移過去的時候擋不住） */
@@ -582,7 +583,6 @@ export class MechGame {
       reload: -1,
       deploy: -1,
       mortar: null,
-      shelled: false,
       missiles: MECH.missiles,
       safe: false,
       alive: true,
@@ -1542,7 +1542,7 @@ export class MechGame {
     else if (isMe && fireEdge && busy && live) this.emit({ type: 'toast', text: b.deployed ? '變身中，等一下才能開火' : '收回中，等一下才能開火' })
 
     // 鎖定：準星附近、看得到、在鎖定距離內的敵人
-    const lockTarget = isMe ? this.findLock(p, now) : p.orders.lock
+    const lockTarget = isMe ? (mortar ? null : this.findLock(p, now)) : p.orders.lock
     if (lockTarget !== null && lockTarget === p.lockSeat) p.lockTime += dt
     else {
       p.lockSeat = lockTarget
@@ -1564,7 +1564,7 @@ export class MechGame {
       this.emit({ type: 'lock', locked: false })
     }
 
-    // 飛彈（架了砲看著天空，飛彈打不到東西：不讓發射）
+    // 飛彈（架了砲準星不是對著要打的地方，飛彈打不到東西：不讓發射）
     if (wantMissile) {
       if (mortar) {
         if (isMe) this.emit({ type: 'toast', text: '架砲時不能發射飛彈，先收砲' })
@@ -1931,7 +1931,7 @@ export class MechGame {
     if (p === this.me) this.fx.shake = Math.min(1, this.fx.shake + 0.35)
   }
 
-  /** 一發砲彈開始飛（自己的、別人的）：砲口的火光和聲音，先算好落點 */
+  /** 一發砲彈開始飛（自己的、別人的）：砲口的火光和很大的砲聲（整張地圖都聽得到，這是對方唯一的提示） */
   private addShell(p: Pilot, id: number, o: number[], v: number[], local: boolean) {
     const mesh = this.fx.shellMesh()
     mesh.position.set(o[0], o[1], o[2])
@@ -1949,61 +1949,19 @@ export class MechGame {
       local,
       mesh,
       trail: 0,
-      land: new Vector3(),
-      eta: SHELL.life,
-      ring: null,
-      warned: new Set(),
     }
-    this.predictShell(s)
     this.shells.push(s)
     const vl = Math.hypot(v[0], v[1], v[2]) || 1
     this.fx.mortarFlash(o[0], o[1], o[2], v[0] / vl, v[1] / vl, v[2] / vl)
     this.audio.mortar(p === this.me ? 0 : this.distToCam(o[0], o[1], o[2]))
   }
 
-  /** 照彈道往前算，找出撞到地圖的那一點（警告圈畫在這裡）和幾秒後落地 */
-  private predictShell(s: Shell) {
-    const h = 0.05
-    const G = SHELL.gravity
-    let x = s.x
-    let y = s.y
-    let z = s.z
-    let vy = s.vy
-    for (let t = 0; t < SHELL.life; t += h) {
-      const dx = s.vx * h
-      const dy = vy * h - 0.5 * G * h * h
-      const dz = s.vz * h
-      vy -= G * h
-      const len = Math.hypot(dx, dy, dz) || 1e-6
-      const hit = this.index.ray(x, y, z, dx / len, dy / len, dz / len, len)
-      if (hit !== Infinity) {
-        s.land.set(x + (dx / len) * hit, y + (dy / len) * hit, z + (dz / len) * hit)
-        s.eta = t + (h * hit) / len
-        return
-      }
-      x += dx
-      y += dy
-      z += dz
-    }
-    s.land.set(x, y, z)
-    s.eta = SHELL.life
-  }
-
   private removeShell(s: Shell) {
     this.fx.removeMissile(s.mesh)
-    if (s.ring) this.fx.removeMissile(s.ring)
-    s.ring = null
   }
 
-  /**
-   * 迫擊砲彈：照重力飛，撞到地圖、敵人的機甲或盾牌就爆炸；落地前 `SHELL.warn` 秒落點出現警告圈
-   * （開砲的人自己看不到：他不能知道落點在哪裡），落點在自己附近就警告。自己這邊發射的要回報炸到誰
-   */
+  /** 迫擊砲彈：照重力飛，撞到地圖、敵人的機甲或盾牌就爆炸（落點沒有任何標示、警告）。自己這邊發射的要回報炸到誰 */
   private updateShells(dt: number, now: number) {
-    let danger = false
-    const me = this.me
-    /** 看畫面的人是哪一隊（觀戰是鏡頭跟著的那隊）：落點的圈照這個分敵我 */
-    const viewer = (me ?? this.pilots[this.focus])?.team ?? 0
     const G = SHELL.gravity
     for (let i = this.shells.length - 1; i >= 0; i--) {
       const s = this.shells[i]
@@ -2046,31 +2004,11 @@ export class MechGame {
         s.trail -= 0.03
         this.fx.trail(s.x - ux * 0.6, s.y - uy * 0.6, s.z - uz * 0.6)
       }
-      // 落點的圈：落地前幾秒出現，一閃一閃；敵人的砲彈是紅色的警告，自己這隊的是隊伍的顏色（炸不到自己人，不用躲）
-      const left = s.eta - s.age
-      if (!hit && left < SHELL.warn) {
-        if (s.owner !== me?.seat) {
-          const enemy = s.team !== viewer
-          if (!s.ring) s.ring = this.fx.marker(enemy ? 0xff3b2f : TEAMS[s.team].glow)
-          s.ring.position.set(s.land.x, s.land.y + 0.15, s.land.z)
-          s.ring.scale.setScalar(SHELL.blast * (1 + 0.05 * Math.sin(now / 60)))
-        }
-        const near = (b: MechBody) => Math.hypot(b.x - s.land.x, b.z - s.land.z) < SHELL.blast + 3 && Math.abs(b.y - s.land.y) < 8
-        if (me?.alive && me.team !== s.team && near(me.body)) danger = true
-        // 自己這邊開的電腦：敵人的砲彈的警告圈出現在附近，就決定要不要躲（自己人的砲彈炸不到自己人）
-        for (const p of this.pilots) {
-          if (!p.bot || !p.local || !p.alive || s.warned.has(p.seat) || !near(p.body)) continue
-          s.warned.add(p.seat)
-          if (p.team !== s.team) p.bot.incoming(s.land.x, s.land.z, p.body.deployed || p.body.deploy > 0)
-        }
-      }
       if (!hit && s.age < SHELL.life && s.y > BED - 1) continue
       if (hit) this.explodeShell(s, direct, now)
       this.removeShell(s)
       this.shells.splice(i, 1)
     }
-    if (danger) this.audio.whistle()
-    this.frame.shelled = danger
   }
 
   /** 砲彈爆炸：爆炸半徑內、看得到爆炸點的敵人都擊倒（傷害伺服器算），自己這邊發射的送給伺服器 */
@@ -2464,10 +2402,10 @@ export class MechGame {
     const b = p.body
     const spec = p.spec
     const yaw = b.aimYaw
-    const pitch = b.aimPitch
+    const pitch = viewPitch(p)
     // 觀戰時看不到別人有沒有放大瞄準
     const z = p === me ? this.zoom : 0
-    // 變身後換一組鏡頭（堡壘型貼在正後方；砲擊型架砲時移到砲管旁邊，仰角被帶著抬起來看天空）
+    // 變身後換一組鏡頭（堡壘型貼在正後方；砲擊型架砲時拉遠到右後方，只微微抬頭）
     const dep = spec.deploy
     const dk = dep ? ease(b.deploy) : 0
     const cam = (i: number) => spec.cam[i] + ((dep?.cam[i] ?? 0) - spec.cam[i]) * dk

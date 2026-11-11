@@ -7,7 +7,6 @@
 // 堡壘型看到敵人一陣子、距離合適就變身站著打，一陣子沒看到人就收回來繼續走。
 // 砲擊型有機會先爬上自己這一隊大樓的屋頂架砲；沒有就往敵人走，看到遠處的敵人、頭上沒東西擋就架砲，照砲彈要飛多久抓提前量，
 // 敵人靠太近、太久沒目標就收砲。
-// 砲彈的警告圈出現在附近時（`incoming`），照難度決定要不要躲：往落點的反方向跑，變身了就先收回來。
 import type { DroneBody, DroneInput } from './drone'
 import { findPath, FLOORS, inBase, MAP_Z, nearestNode, RIVER, type MapIndex, type Team } from './map'
 import type { Difficulty } from './online'
@@ -82,10 +81,6 @@ export class BotBrain {
   private deployWant = false
   private deployCool = 2
   private deployIdle = 0
-  /** 躲砲彈：落點、還要跑多久 */
-  private fleeX = 0
-  private fleeZ = 0
-  private flee = 0
   /** 這條命還剩幾架偵察機（遊戲每一格告訴它） */
   drones = 0
   /** 多久沒看到目標了、下次能放偵察機還要等多久 */
@@ -166,19 +161,6 @@ export class BotBrain {
     this.deployWant = false
     this.deployCool = 2
     this.deployIdle = 0
-    this.flee = 0
-  }
-
-  /**
-   * 砲彈快落在附近（警告圈出現了）：照難度決定要不要躲，躲的話往落點的反方向跑一陣子；
-   * 變身了要先收回來（收回要一秒左右，跑的時間多給一點），比較常選擇站著硬吃
-   */
-  incoming(x: number, z: number, planted: boolean) {
-    if (this.flee > 0 || this.rand() > this.skill.dodge * (planted ? 0.5 : 1)) return
-    this.fleeX = x
-    this.fleeZ = z
-    this.flee = planted ? 2.8 : 1.8
-    if (planted) this.pack()
   }
 
   /** 收回來（之後 `DEPLOY_COOL` 秒內不會再變身） */
@@ -189,17 +171,6 @@ export class BotBrain {
 
   think(dt: number, me: MechBody, others: BotTarget[], map: MapIndex, out: BotOrders) {
     this.decide(dt, me, others, map, out)
-    // 躲砲彈：照瞄準的方向換算成前後左右，往落點的反方向衝（頭不轉，照樣可以打）
-    if (this.flee > 0) {
-      this.flee -= dt
-      if (!me.deployed && me.deploy <= 0) {
-        const d = wrapAngle(Math.atan2(me.x - this.fleeX, me.z - this.fleeZ) - me.aimYaw)
-        out.input.forward = Math.cos(d)
-        out.input.strafe = -Math.sin(d)
-        out.input.boost = me.energy > MECH.minBoost
-        out.input.jump = false
-      }
-    }
     out.deploy = (this.fortress || this.mortar) && this.deployWant
   }
 

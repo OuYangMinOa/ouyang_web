@@ -1772,7 +1772,7 @@ button.mecha-btn.fire.boom {
   background: var(--accent);
 }
 
-/* 迫擊砲（看著天空，看不到落點）：準星右邊一條仰角的刻度，準星下面是現在幾度、平地上大約打多遠 */
+/* 迫擊砲（沒有落點的標示）：準星右邊一條仰角的刻度，左邊是現在幾度、平地上大約打多遠（機甲在準星正下方，不能擋到） */
 .mecha-mortar {
   position: absolute;
   inset: 0;
@@ -1803,8 +1803,8 @@ button.mecha-btn.fire.boom {
   width: 10px;
   height: 120px;
   border-left: 2px solid var(--m-reticle);
-  /* 每 5 度一格（45～85 度共八格） */
-  background: repeating-linear-gradient(to bottom, var(--m-reticle) 0 2px, transparent 2px 12.5%) left / 8px 100% no-repeat;
+  /* 每 5 度一格（幾格照 `Hud.tsx` 給的 `--steps`） */
+  background: repeating-linear-gradient(to bottom, var(--m-reticle) 0 2px, transparent 2px calc(100% / var(--steps, 8))) left / 8px 100% no-repeat;
   filter: drop-shadow(0 0 2px var(--m-reticle-shadow));
 }
 .mecha-elev-track::after {
@@ -1829,13 +1829,14 @@ button.mecha-btn.fire.boom {
 }
 .mecha-mortar-read {
   position: absolute;
-  left: 50%;
-  top: calc(50% + 30px);
-  transform: translateX(-50%);
+  right: calc(50% + 40px);
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  white-space: nowrap;
+  align-items: flex-end;
+  text-align: right;
+  white-space: pre;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1847,31 +1848,9 @@ button.mecha-btn.fire.boom {
   opacity: 0.85;
 }
 
-/* 砲彈快落在自己附近：飛彈警告的上面 */
-.mecha-shelled {
-  position: absolute;
-  left: 50%;
-  top: calc(28% - 46px);
-  transform: translateX(-50%);
-  z-index: 4;
-  display: none;
-  pointer-events: none;
-  padding: 6px 14px;
-  border-radius: 10px;
-  font-size: 16px;
-  font-weight: 700;
-  white-space: nowrap;
-  color: #fff;
-  background: color-mix(in srgb, var(--danger) 85%, transparent);
-  animation: mecha-blink 0.4s steps(2) infinite;
-}
-.mecha-shelled[data-on='true'] {
-  display: block;
-}
 @media (prefers-reduced-motion: reduce) {
   .mecha-mode .s1,
-  .mecha-mode .s3,
-  .mecha-shelled {
+  .mecha-mode .s3 {
     animation: none;
   }
 }
