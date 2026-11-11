@@ -135,13 +135,16 @@ export class MechAudio {
     this.tone('sawtooth', 1800, 260, 0.2, 0.1 * v)
   }
 
-  /** 迫擊砲開砲：很低沉的一聲「碰」，傳得很遠 */
+  /**
+   * 迫擊砲開砲：很大、很低沉的一聲「碰」，整張地圖都聽得到（再遠也有四成的音量）。
+   * 砲彈落在哪裡對方沒有任何提示，只有這一聲
+   */
   mortar(d: number) {
     if (d >= 1 && !this.gate('mortar', 60)) return
-    const v = this.vol(d * 0.35)
-    this.burst(0.7, 260, 0.6, 'lowpass', 1.1 * v, 0.6)
-    this.tone('sine', 85, 28, 0.6, 0.9 * v)
-    this.burst(0.1, 1400, 1, 'bandpass', 0.3 * v, 0.08)
+    const v = Math.max(0.4, this.vol(d * 0.2))
+    this.burst(0.9, 260, 0.6, 'lowpass', 1.6 * v, 0.75)
+    this.tone('sine', 85, 28, 0.8, 1.3 * v)
+    this.burst(0.12, 1400, 1, 'bandpass', 0.45 * v, 0.1)
   }
 
   /** 變身、收回：液壓的嗡嗡聲加上卡榫扣上的一聲 */
@@ -151,12 +154,6 @@ export class MechAudio {
     this.tone('sawtooth', out ? 70 : 150, out ? 150 : 70, 0.7, 0.1 * v)
     this.tone('square', 46, 40, 0.5, 0.08 * v)
     this.burst(0.08, 2600, 1.6, 'bandpass', 0.4 * v, 0.07)
-  }
-
-  /** 砲彈從頭上掉下來：往下滑的哨音（落點在自己附近才放） */
-  whistle() {
-    if (!this.gate('whistle', 900)) return
-    this.tone('sine', 1500, 520, 1.4, 0.12)
   }
 
   /** 推進器：`level` 0～1（自己的），每一格呼叫 */

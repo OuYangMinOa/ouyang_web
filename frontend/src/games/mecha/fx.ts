@@ -1,13 +1,11 @@
-// 畫面效果：機槍的曳光彈、電磁砲的光束、飛彈和它的煙、迫擊砲彈和地上的落點圈、槍口火光、打中的火花、爆炸、推進器的火、腳步揚起的灰塵。
+// 畫面效果：機槍的曳光彈、電磁砲的光束、飛彈和它的煙、迫擊砲彈、槍口火光、打中的火花、爆炸、推進器的火、腳步揚起的灰塵。
 // 粒子沿用 3D 賽車的 `Particles`（固定數量輪流用）。
 import {
   AdditiveBlending,
   BoxGeometry,
-  CircleGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
-  DoubleSide,
   Group,
   InstancedMesh,
   Matrix4,
@@ -15,7 +13,6 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Quaternion,
-  RingGeometry,
   Vector3,
   type Scene,
 } from 'three'
@@ -66,9 +63,6 @@ export class Effects {
   private readonly tracerMat: MeshBasicMaterial
   private readonly shellGeo: { body: CylinderGeometry; nose: ConeGeometry }
   private readonly shellMat: MeshStandardMaterial
-  /** 地上的圈：半徑 1 的環和裡面淡淡的一片，照顏色各一份材質 */
-  private readonly ringGeo: { ring: RingGeometry; fill: CircleGeometry }
-  private readonly ringMats = new Map<number, { ring: MeshBasicMaterial; fill: MeshBasicMaterial }>()
   private readonly scene: Scene
   private readonly m = new Matrix4()
   private readonly q = new Quaternion()
@@ -105,9 +99,6 @@ export class Effects {
     this.shellGeo.nose.rotateX(Math.PI / 2)
     this.shellGeo.nose.translate(0, 0, 0.8)
     this.shellMat = new MeshStandardMaterial({ color: 0x4a4f45, roughness: 0.5, metalness: 0.5 })
-    this.ringGeo = { ring: new RingGeometry(0.88, 1, 48), fill: new CircleGeometry(1, 48) }
-    this.ringGeo.ring.rotateX(-Math.PI / 2)
-    this.ringGeo.fill.rotateX(-Math.PI / 2)
     scene.add(this.smoke.points, this.glow.points, this.tracerMesh)
   }
 
@@ -121,23 +112,6 @@ export class Effects {
     flame.scale.set(1.2, 1.2, 1.2)
     flame.position.z = -0.45
     g.add(flame)
-    this.scene.add(g)
-    return g
-  }
-
-  /** 地上的圈（迫擊砲的落點、砲彈落下前的警告）：半徑 1，用 `scale` 放大；`color` 一樣的共用材質 */
-  marker(color: number): Group {
-    let mats = this.ringMats.get(color)
-    if (!mats) {
-      const base = { color, transparent: true, depthWrite: false, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -4 }
-      mats = { ring: new MeshBasicMaterial({ ...base, opacity: 0.9 }), fill: new MeshBasicMaterial({ ...base, opacity: 0.16 }) }
-      this.ringMats.set(color, mats)
-    }
-    const g = new Group()
-    const ring = new Mesh(this.ringGeo.ring, mats.ring)
-    const fill = new Mesh(this.ringGeo.fill, mats.fill)
-    ring.renderOrder = fill.renderOrder = 2
-    g.add(fill, ring)
     this.scene.add(g)
     return g
   }
@@ -344,11 +318,5 @@ export class Effects {
     this.shellGeo.body.dispose()
     this.shellGeo.nose.dispose()
     this.shellMat.dispose()
-    this.ringGeo.ring.dispose()
-    this.ringGeo.fill.dispose()
-    for (const m of this.ringMats.values()) {
-      m.ring.dispose()
-      m.fill.dispose()
-    }
   }
 }
