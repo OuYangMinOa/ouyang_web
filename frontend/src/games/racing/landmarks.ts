@@ -246,6 +246,8 @@ export function addTaipei101(scene: Scene, t: Tower, groundAt: GroundAt, night: 
 /** 空橋：二樓高的玻璃走廊，下緣離地面這麼高 */
 const SKYWAY_LOW = 5.6
 const SKYWAY_HIGH = 9.4
+/** 空橋走道的地板離地面多高（上面站觀眾） */
+export const SKYWAY_DECK = SKYWAY_LOW + 0.8
 
 export type Skyway = { half: number; pts: Float32Array }
 

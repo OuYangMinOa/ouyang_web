@@ -9,6 +9,9 @@ import xinyi from './osm/xinyi.json'
 
 export type PropKind = 'tree' | 'palm' | 'cactus' | 'rock' | 'building'
 
+/** 每條賽道自己的點綴（scenery.ts）：海上的帆船、燈塔、沙灘傘、熱氣球、探照燈、空橋上的觀眾 */
+export type DecorKind = 'boats' | 'lighthouse' | 'umbrellas' | 'balloons' | 'searchlights' | 'skywayCrowd'
+
 export type PropSpec = {
   kind: PropKind
   count: number
@@ -81,6 +84,7 @@ export type TrackDef = {
   /** 地形頂點的顏色 */
   paint: (y: number, dist: number, x: number, z: number, out: Color) => void
   props: PropSpec[]
+  decor?: DecorKind[]
   /** 真實城市的建築、街道、綠地（OpenStreetMap） */
   city?: CityData
   /** 地圖資料的出處，顯示在選賽道的地方 */
@@ -169,6 +173,7 @@ export const TRACKS: TrackDef[] = [
       { kind: 'palm', count: 90, near: 3, far: 40, minY: 0.2, seed: 12 },
       { kind: 'rock', count: 60, near: 6, far: 120, seed: 13, color: 0x8f8b80 },
     ],
+    decor: ['boats', 'lighthouse', 'umbrellas'],
   },
   {
     id: 'canyon',
@@ -236,6 +241,7 @@ export const TRACKS: TrackDef[] = [
       { kind: 'cactus', count: 170, near: 3, far: 26, seed: 21 },
       { kind: 'rock', count: 200, near: 3, far: 16, seed: 22, color: 0xa35a3a },
     ],
+    decor: ['balloons'],
   },
   {
     id: 'city',
@@ -298,6 +304,7 @@ export const TRACKS: TrackDef[] = [
       if (dist > 40) out.lerp(CITY_PARK, smoothstep(0.55, 0.7, fbm(x / 90, z / 90, 4)))
     },
     props: [{ kind: 'building', count: 230, near: 8, far: 190, seed: 31 }],
+    decor: ['searchlights'],
   },
   {
     id: 'xinyi',
@@ -361,6 +368,7 @@ export const TRACKS: TrackDef[] = [
       out.copy(XINYI_PAVEMENT).lerp(XINYI_PAVEMENT_DARK, smoothstep(0.4, 0.7, fbm(x / 40, z / 40, 9)))
     },
     props: [],
+    decor: ['skywayCrowd'],
   },
 ]
 

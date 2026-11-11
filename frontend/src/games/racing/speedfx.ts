@@ -125,6 +125,17 @@ export class SpeedBlur {
     renderer.render(this.scene, this.camera)
   }
 
+  /**
+   * 先把 shader 編好：畫到貼圖時場景裡每個材質都要另一組 shader（輸出的色彩空間不同），
+   * 不先編的話第一次開到會模糊的速度時要一口氣編完，畫面會頓一下
+   */
+  compile(renderer: WebGLRenderer, scene: Scene, camera: Camera) {
+    renderer.setRenderTarget(this.target)
+    renderer.compile(scene, camera)
+    renderer.setRenderTarget(null)
+    renderer.compile(this.scene, this.camera)
+  }
+
   dispose() {
     this.target.dispose()
     this.material.dispose()

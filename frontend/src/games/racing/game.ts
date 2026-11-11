@@ -43,6 +43,38 @@ const CAMS = [
 const STEP = 1 / 120
 /** 一格畫面最多跑幾步物理（0.1 秒） */
 const MAX_STEPS = 12
+/**
+ * 畫面內插：物理固定每秒 120 步，畫面的格數（60、75、144 Hz…）對不上，一格裡有時跑 1 步、有時 3 步、有時 0 步，
+ * 直接畫物理的位置車子會一頓一頓的。所以每一步之前記下位置，畫的時候放在前後兩步之間。
+ * 記的是 x、y、z、車頭方向、速度、vx、vy、vz、路面高度
+ */
+const POSE = 9
+/** 一步之內移動超過這麼遠（公尺）是被放回賽道、換了位置：直接畫新的位置，不要從舊的位置滑過去 */
+const POSE_JUMP = 5
+
+function readPose(c: Car, out: Float64Array) {
+  out[0] = c.x
+  out[1] = c.y
+  out[2] = c.z
+  out[3] = c.heading
+  out[4] = c.speed
+  out[5] = c.vx
+  out[6] = c.vy
+  out[7] = c.vz
+  out[8] = c.loc.y
+}
+
+function writePose(c: Car, p: Float64Array) {
+  c.x = p[0]
+  c.y = p[1]
+  c.z = p[2]
+  c.heading = p[3]
+  c.speed = p[4]
+  c.vx = p[5]
+  c.vy = p[6]
+  c.vz = p[7]
+  c.loc.y = p[8]
+}
 
 /** 高速效果：從極速的幾成開始（風線比模糊早一點出現，集中線最晚），到極速最強 */
 const WIND_FROM = 0.5
@@ -185,7 +217,15 @@ type Racer = {
   /** 這個畫面裡最重的一次落地（騰空後落回路面的速度） */
   landing: number
   boosting: boolean
+  /** 畫面內插：最後一步物理之前的狀態（`prev`），和畫這一格時暫存的真正狀態（`pose`） */
+  prev: Float64Array
+  pose: Float64Array
+  /** `prev` 不能用（剛放到起跑格、剛放回賽道）：這一格直接畫現在的位置 */
+  fresh: boolean
 }
+
+/** Racer 裡畫面內插用的欄位 */
+const freshPose = () => ({ prev: new Float64Array(POSE), pose: new Float64Array(POSE), fresh: true })
 
 const SMOKE = new Color(0xe4e4e4)
 const SMOKE_NIGHT = new Color(0x8c8aa2)
@@ -308,6 +348,8 @@ export class RaceGame {
   private spectating = false
   /** 選車畫面上車子要畫在哪一塊（選單蓋住的地方以外）；null 是整個畫面 */
   private stage: Rect | null = null
+  /** 場景換了（賽道、車子）：下次畫之前先把 shader 編好 */
+  private warm = true
 
   constructor(
     host: HTMLElement,
@@ -840,11 +882,13 @@ export class RaceGame {
         impact: 0,
         landing: 0,
         boosting: false,
+        ...freshPose(),
       }
       this.racers.push(racer)
       if (info.player) this.player = racer
     })
     this.cars = this.racers.map((r) => r.car)
+    this.warm = true
     this.focus = this.player ? this.racers.indexOf(this.player) : 0
     this.frame.cars = new Float32Array(this.racers.length * 2)
     this.camReady = false
@@ -889,6 +933,7 @@ export class RaceGame {
         impact: 0,
         landing: 0,
         boosting: false,
+        ...freshPose(),
       }
       // 重新整理後接著跑：自己的車、自己負責開的電腦放回最後送出的位置（速度歸零），圈數照伺服器記的
       const res = setup.results[s]
@@ -901,6 +946,7 @@ export class RaceGame {
       if (info.player) this.player = racer
     })
     this.cars = this.racers.map((r) => r.car)
+    this.warm = true
     this.refreshLocals()
     // 觀戰：先看最前面那一格的車
     const front = setup.grid.indexOf(0)
@@ -968,6 +1014,7 @@ export class RaceGame {
     const progress = r.car.progress
     placeCar(r.car, track, r.car.loc.s, lat)
     r.car.progress = progress
+    r.fresh = true
     if (r.ai) r.ai.stuck = 0
   }
 
@@ -997,6 +1044,12 @@ export class RaceGame {
   private render() {
     if (!this.world) return
     this.world.follow(this.camera.position)
+    if (this.warm) {
+      // 換了賽道或車子：先把所有 shader 編好（包括還沒出現的噴火、模糊），比賽中才不會第一次用到時頓一下
+      this.warm = false
+      this.renderer.compile(this.world.scene, this.camera)
+      this.speedBlur.compile(this.renderer, this.world.scene, this.camera)
+    }
     if (this.blur > 0.02 || this.lines > 0.02) {
       this.speedBlur.render(this.renderer, this.world.scene, this.camera, this.blur, this.lines, this.linesTime)
     } else this.renderer.render(this.world.scene, this.camera)
@@ -1024,6 +1077,10 @@ export class RaceGame {
     this.acc += dt
     let steps = 0
     while (this.acc >= STEP && steps < MAX_STEPS) {
+      for (const r of this.racers) {
+        readPose(r.car, r.prev)
+        r.fresh = false
+      }
       this.tick(STEP)
       this.acc -= STEP
       steps++
@@ -1054,10 +1111,40 @@ export class RaceGame {
         online.link.ping(performance.now())
       }
     }
+    // 車子、鏡頭、特效都照前後兩步之間的位置擺好（這時已經寫進場景裡了），再把物理的狀態換回來。
+    // 換回來的是這裡內插過的那幾台（中間的事件萬一讓畫面重排了起跑格，新的車不要動）
+    const blended = this.racers
+    this.blendPoses(this.acc / STEP)
     this.updateVisuals(dt)
     this.updateCamera(dt)
     this.updateAudio()
     if (this.phase !== 'preview' && this.phase !== 'showroom') this.emitFrame()
+    for (const r of blended) writePose(r.car, r.pose)
+  }
+
+  /** 把每台車暫時放到最後一步物理的前後之間（`t` 是 0～1，走到下一步的幾成） */
+  private blendPoses(t: number) {
+    for (const r of this.racers) {
+      const c = r.car
+      const p = r.prev
+      readPose(c, r.pose)
+      const jump = (p[0] - c.x) ** 2 + (p[1] - c.y) ** 2 + (p[2] - c.z) ** 2 > POSE_JUMP * POSE_JUMP
+      if (r.fresh || jump) {
+        p.set(r.pose)
+        r.fresh = false
+        continue
+      }
+      const q = r.pose
+      c.x = p[0] + (q[0] - p[0]) * t
+      c.y = p[1] + (q[1] - p[1]) * t
+      c.z = p[2] + (q[2] - p[2]) * t
+      c.heading = p[3] + wrapAngle(q[3] - p[3]) * t
+      c.speed = p[4] + (q[4] - p[4]) * t
+      c.vx = p[5] + (q[5] - p[5]) * t
+      c.vy = p[6] + (q[6] - p[6]) * t
+      c.vz = p[7] + (q[7] - p[7]) * t
+      c.loc.y = p[8] + (q[8] - p[8]) * t
+    }
   }
 
   private tick(h: number) {
@@ -1296,8 +1383,9 @@ export class RaceGame {
     this.smoke.update(dt, scale)
     this.glow.update(dt, scale)
 
-    const light = this.world!.headlight
     const f = this.racers[this.focus]?.car
+    if (f) this.world!.update(this.time, f.x, f.z)
+    const light = this.world!.headlight
     if (light && f) {
       const sx = Math.sin(f.heading)
       const cz = Math.cos(f.heading)

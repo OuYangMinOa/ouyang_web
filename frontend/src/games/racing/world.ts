@@ -35,8 +35,10 @@ import {
   type Texture,
 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { addCity } from './city'
+import { addCity, cityObstacles } from './city'
 import { clamp, rng, smoothstep } from './noise'
+import { addScenery } from './scenery'
+import { addTowers } from './towers'
 import { CURB } from './spec'
 import type { TrackPath } from './track'
 import type { PropSpec, TrackDef } from './tracks'
@@ -47,8 +49,12 @@ export type World = {
   headlight: SpotLight | null
   /** 天空、星星跟著鏡頭移動 */
   follow: (camera: Vector3) => void
+  /** 每個畫面：觀眾、旗子、熱氣球這些會動的東西（時間、鏡頭跟著的那台車的位置） */
+  update: (time: number, x: number, z: number) => void
   dispose: () => void
 }
+
+type Occupied = (x: number, z: number, r: number) => boolean
 
 const css = (hex: number) => `#${hex.toString(16).padStart(6, '0')}`
 
@@ -399,16 +405,39 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
 
   addBridges(scene, track, groundAt, new Color(th.bridge ?? th.wall))
 
+  // 看台、觀眾、廣告看板和每條賽道的點綴：先佔好位置，樹、大樓、路燈再避開
+  const obstacles = def.city ? cityObstacles(def.city) : null
+  const scenery = addScenery(
+    scene,
+    track,
+    def,
+    groundAt,
+    {
+      night: th.night === true,
+      blocked: obstacles?.blocked,
+      covered: obstacles?.covered,
+      water: th.water?.level,
+      wallHeight: th.wallHeight,
+      skyways: obstacles?.skyways,
+    },
+    tex,
+  )
+  const occupied = scenery.occupied
+
   // 真實城市的建築、街道、綠地、行道樹
   const overhead = def.city
-    ? addCity(scene, track, def.city, groundAt, th.night === true, { haze: th.skyHorizon, sunDir: th.sunDir }, tex)
+    ? addCity(scene, track, def.city, groundAt, th.night === true, { haze: th.skyHorizon, sunDir: th.sunDir }, tex, occupied)
     : null
 
-  // 擺設
-  for (const spec of def.props) addProps(scene, track, spec, groundAt, th.night === true, tex)
+  // 擺設（大樓的航空障礙燈會閃，要每個畫面更新）
+  const animate = [scenery.update]
+  for (const spec of def.props) {
+    const update = addProps(scene, track, spec, groundAt, th.night === true, tex, occupied)
+    if (update) animate.push(update)
+  }
 
   // 夜間和黃昏的路燈
-  if (th.night || th.lamps) addLamps(scene, track, overhead)
+  if (th.night || th.lamps) addLamps(scene, track, overhead, occupied)
 
   let headlight: SpotLight | null = null
   if (th.night) {
@@ -423,6 +452,9 @@ export function buildWorld(track: TrackPath, def: TrackDef, anisotropy: number):
     follow: (camera) => {
       sky.position.copy(camera)
       stars?.position.copy(camera)
+    },
+    update: (time, x, z) => {
+      for (const f of animate) f(time, x, z)
     },
     dispose: () => {
       scene.traverse((obj) => {
@@ -443,6 +475,7 @@ function scatter(
   spec: PropSpec,
   groundAt: (x: number, z: number) => number,
   footprint: (rand: () => number) => number,
+  occupied: Occupied,
 ): Spot[] {
   const rand = rng(spec.seed)
   const spots: Spot[] = []
@@ -456,7 +489,7 @@ function scatter(
     if (track.nearest(x, z).dist < track.wall + spec.near * 0.7 + r) continue
     const y = groundAt(x, z)
     if (spec.minY !== undefined && y < spec.minY) continue
-    if (track.under(x, z, y)) continue
+    if (track.under(x, z, y) || occupied(x, z, r)) continue
     spots.push({ x, y, z, rot: rand() * Math.PI * 2, scale: 0.7 + rand() * 0.8, r })
   }
   return spots
@@ -491,14 +524,16 @@ function addProps(
   groundAt: (x: number, z: number) => number,
   night: boolean,
   tex: (w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void) => CanvasTexture,
-) {
+  occupied: Occupied,
+): ((time: number) => void) | undefined {
   const tint = rng(spec.seed + 1000)
+  const place = (footprint: (rand: () => number) => number) => scatter(track, spec, groundAt, footprint, occupied)
   const vary = (base: number, amount: number) => () =>
     new Color(base).offsetHSL((tint() - 0.5) * 0.04, (tint() - 0.5) * 0.15, (tint() - 0.5) * amount)
 
   switch (spec.kind) {
     case 'tree': {
-      const spots = scatter(track, spec, groundAt, () => 2)
+      const spots = place(() => 2)
       const trunk = new CylinderGeometry(0.22, 0.32, 2.4, 6).translate(0, 1.2, 0)
       const leaves = mergeGeometries([
         new ConeGeometry(2.1, 4.2, 7).translate(0, 3.8, 0),
@@ -510,7 +545,7 @@ function addProps(
       break
     }
     case 'palm': {
-      const spots = scatter(track, spec, groundAt, () => 2)
+      const spots = place(() => 2)
       const trunk = new CylinderGeometry(0.15, 0.26, 7.5, 6).translate(0, 3.75, 0)
       const crown = new ConeGeometry(3.4, 1.3, 9).translate(0, 7.6, 0)
       const lean = (dummy: Object3D, spot: Spot) => {
@@ -522,7 +557,7 @@ function addProps(
       break
     }
     case 'cactus': {
-      const spots = scatter(track, spec, groundAt, () => 1)
+      const spots = place(() => 1)
       const geo = mergeGeometries([
         new CylinderGeometry(0.34, 0.4, 4, 8).translate(0, 2, 0),
         new CylinderGeometry(0.2, 0.2, 0.7, 6).rotateZ(Math.PI / 2).translate(0.5, 1.7, 0),
@@ -534,7 +569,7 @@ function addProps(
       break
     }
     case 'rock': {
-      const spots = scatter(track, spec, groundAt, (rand) => 1 + rand() * 2)
+      const spots = place((rand) => 1 + rand() * 2)
       const rand = rng(spec.seed + 7)
       instanced(
         scene,
@@ -550,65 +585,8 @@ function addProps(
       )
       break
     }
-    case 'building': {
-      // 每棟大樓的窗戶要照實際尺寸重複，所以不用 instancing，直接把所有大樓合成一個網格
-      const rand = rng(spec.seed)
-      const spots = scatter(track, spec, groundAt, (r) => 8 + r() * 10)
-      const facade = tex(128, 128, (ctx) => drawWindows(ctx, 7, false))
-      const lights = tex(128, 128, (ctx) => drawWindows(ctx, 7, true))
-      const parts: BufferGeometry[] = []
-      for (const spot of spots) {
-        const bw = spot.r * 1.3
-        const bd = spot.r * (0.9 + rand() * 0.5)
-        const bh = 14 + rand() ** 1.5 * 80
-        const box = new BoxGeometry(bw, bh, bd)
-        const uv = box.getAttribute('uv') as BufferAttribute
-        // 面的順序：+x、-x、+y、-y、+z、-z，每面 4 個頂點
-        for (let face = 0; face < 6; face++) {
-          const across = face < 2 ? bd : bw
-          for (let v = 0; v < 4; v++) {
-            const k = face * 4 + v
-            if (face === 2 || face === 3) uv.setXY(k, 0.02, 0.02)
-            else uv.setXY(k, uv.getX(k) * Math.max(1, Math.round(across / 12)), uv.getY(k) * Math.max(1, Math.round(bh / 14)))
-          }
-        }
-        box.rotateY(spot.rot)
-        box.translate(spot.x, spot.y + bh / 2 - 0.5, spot.z)
-        parts.push(box)
-      }
-      if (parts.length === 0) return
-      const geo = mergeGeometries(parts)
-      parts.forEach((p) => p.dispose())
-      scene.add(
-        new Mesh(
-          geo,
-          new MeshLambertMaterial({
-            map: facade,
-            emissiveMap: lights,
-            emissive: 0xffffff,
-            emissiveIntensity: night ? 1 : 0.2,
-          }),
-        ),
-      )
-      break
-    }
-  }
-}
-
-/** 大樓外牆：一格 12 公尺寬、14 公尺高，四層樓、每層四扇窗；`lit` 只畫亮著的窗 */
-function drawWindows(ctx: CanvasRenderingContext2D, seed: number, lit: boolean) {
-  const rand = rng(seed)
-  ctx.fillStyle = lit ? '#000000' : '#262838'
-  ctx.fillRect(0, 0, 128, 128)
-  const palette = ['#ffd98a', '#fff1c9', '#9fe8ff', '#ffb3d9']
-  for (let floor = 0; floor < 4; floor++) {
-    for (let col = 0; col < 4; col++) {
-      const on = rand() < 0.55
-      const color = palette[Math.floor(rand() * palette.length)]
-      if (lit && !on) continue
-      ctx.fillStyle = lit ? color : on ? color : '#141621'
-      ctx.fillRect(6 + col * 31, 8 + floor * 31, 20, 16)
-    }
+    case 'building':
+      return addTowers(scene, track, place((r) => 8 + r() * 10), spec.seed, night, tex)
   }
 }
 
@@ -691,7 +669,7 @@ function blocksRoad(track: TrackPath, i: number, x: number, z: number): boolean 
 }
 
 /** 路燈：兩側每 36 公尺一支，燈臂朝向路中間；`overhead` 說上方有東西（人行空橋）的地方不放 */
-function addLamps(scene: Scene, track: TrackPath, overhead: ((x: number, z: number) => boolean) | null) {
+function addLamps(scene: Scene, track: TrackPath, overhead: ((x: number, z: number) => boolean) | null, occupied: Occupied) {
   const spots: Spot[] = []
   const every = Math.round(36 / track.step)
   for (let i = 0; i < track.n; i += every) {
@@ -701,7 +679,7 @@ function addLamps(scene: Scene, track: TrackPath, overhead: ((x: number, z: numb
       const z = track.pz[i] - track.tx[i] * off
       const y = track.roadY(i, off)
       // 橋下的路燈會穿過橋面，不放
-      if (track.under(x, z, y, 1) || overhead?.(x, z)) continue
+      if (track.under(x, z, y, 1) || overhead?.(x, z) || occupied(x, z, 0.3)) continue
       // 燈臂沿著模型的 +z，轉向路中間（-side 的法線方向）
       const rot = Math.atan2(-track.tz[i] * side, track.tx[i] * side)
       spots.push({ x, y, z, rot, scale: 1, r: 0 })
