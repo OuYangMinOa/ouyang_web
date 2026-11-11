@@ -1,6 +1,7 @@
 // 堡壘型「要塞」的模型：矮壯的兩條粗腿、方方正正的厚重上半身。平常右手一挺輕機槍、左手扛著摺起來的大盾，
-// 背上兩門六管重機槍朝天收著；變身（`MechBody.deploy` 從 0 到 1）時往下蹲、腰後兩支支架往外撐到地上，
-// 重機槍翻到肩上朝前，大盾移到正前方立在地上、兩片側翼張開（盾牌的大小、位置照 `spec.ts` 的 `deploy.shield`，和擋子彈的範圍一樣）。
+// 背上四門六管重機槍朝天收著（一排）；變身（`MechBody.deploy` 從 0 到 1）時往下蹲、腰後兩支支架往外撐到地上，
+// 重機槍翻到肩上朝前（左右各兩門並排，輪流開火），大盾移到正前方立在地上、兩片側翼張開
+// （盾牌的大小、位置照 `spec.ts` 的 `deploy.shield`，和擋子彈的範圍一樣）。
 // 上半身、盾牌和重機槍跟著瞄準轉；腿用兩節的反向運動學擺，腳掌踩在地上。
 import { Group, type Mesh, type Object3D, type Vector3 } from 'three'
 import type { Team } from './map'
@@ -15,12 +16,21 @@ const HIP_Y = 2.75
 const THIGH = 1.45
 const SHIN = 1.55
 const ANKLE_Y = 0.55
-const SQUAT = 0.95
+const SQUAT = SPEC.deploy!.drop
 /** 上半身的軸心在髖關節上面多高 */
 const TORSO_Y = 0.5
-/** 重機槍收著（背上朝天）和變身後（肩上朝前）的位置（上半身座標） */
-const GUN_STOW = { x: 0.78, y: 1.75, z: -1.45 }
-const GUN_UP = { x: 1.62, y: 2.42, z: 0.15 }
+/**
+ * 四門重機槍收著（背上朝天）和變身後（肩上朝前）的位置（上半身座標）：`side` 是哪一邊，`inner` 是靠裡面的那一門。
+ * 照開火的順序排：左右輪流，先裡面兩門、再外面兩門
+ */
+const GUNS = [
+  { side: -1, inner: true },
+  { side: 1, inner: true },
+  { side: -1, inner: false },
+  { side: 1, inner: false },
+]
+const GUN_STOW = { inner: 0.52, outer: 1.5, y: 1.75, z: -1.45 }
+const GUN_UP = { inner: 1.45, outer: 2.45, y: 2.42, z: 0.15 }
 /** 大盾扛在左手時的位置、大小（上半身座標） */
 const SHIELD_ARM = { x: -2.35, y: 1.05, z: 1.0, scale: 0.6 }
 /** 盾牌中間那片的寬，兩邊側翼的寬和張開的角度 */
@@ -51,7 +61,9 @@ export class FortressModel extends Rig {
   private readonly lights: Mesh[] = []
   /** 變身的進度（`pose` 記下來，`muzzle` 照這個決定從哪一把槍出來） */
   private k = 0
-  private recoil = [0, 0]
+  /** 每一門重機槍開火後退的量；`barrel` 是剛開火的那一門（`fire` 換下一門，`muzzle` 回它的槍口） */
+  private recoil = GUNS.map(() => 0)
+  private barrel = 0
   private lmgRecoil = 0
   private spin = 0
   private spinSpeed = 0
@@ -134,14 +146,19 @@ export class FortressModel extends Rig {
     }
     this.pod = pod
 
-    // 兩門六管重機槍：收著時在背上朝天，變身時翻到肩上朝前
-    for (const s of [-1, 1]) {
+    // 四門六管重機槍：收著時在背上朝天排成一排，變身時翻到肩上朝前（左右各兩門並排）；彈鼓掛在裡面那一門旁邊
+    for (const { side: s, inner } of GUNS) {
       const mount = new Group()
       this.torso.add(mount)
       part(mount, cyl, kit.metal, [0.7, 0.6, 0.7], [0, 0, 0], [0, 0, Math.PI / 2])
       part(mount, box, trim, [0.95, 0.95, 1.5], [0, 0, 0.35])
-      part(mount, box, kit.dark, [0.6, 0.55, 0.9], [-s * 0.6, -0.1, 0.2])
-      part(mount, cyl, kit.dark, [0.7, 0.4, 0.7], [-s * 0.6, -0.15, -0.35], [Math.PI / 2, 0, 0])
+      if (inner) {
+        part(mount, box, kit.dark, [0.6, 0.55, 0.9], [-s * 0.6, -0.1, 0.2])
+        part(mount, cyl, kit.dark, [0.7, 0.4, 0.7], [-s * 0.6, -0.15, -0.35], [Math.PI / 2, 0, 0])
+      } else {
+        // 外面那一門：外側一片護板
+        part(mount, box, armor, [0.14, 0.8, 1.3], [s * 0.54, 0, 0.4])
+      }
       const spinner = new Group()
       spinner.position.z = 1.1
       mount.add(spinner)
@@ -206,17 +223,19 @@ export class FortressModel extends Rig {
     }
   }
 
-  fire(side: number) {
+  /** 開一發：變身了是四門重機槍輪流（不看 `side`，自己記輪到哪一門） */
+  fire(_side: number) {
     if (this.k > 0.5) {
-      this.recoil[side] = 1
+      this.barrel = (this.barrel + 1) % GUNS.length
+      this.recoil[this.barrel] = 1
       this.spinSpeed = 40
     } else this.lmgRecoil = 1
   }
 
-  /** 槍口：變身了是兩門重機槍輪流，不然是右手的輕機槍 */
-  muzzle(side: number, out: Vector3): Vector3 {
+  /** 槍口：變身了是剛開火的那一門重機槍，不然是右手的輕機槍 */
+  muzzle(_side: number, out: Vector3): Vector3 {
     this.root.updateMatrixWorld()
-    return (this.k > 0.5 ? this.gunMuzzles[side] : this.lmgMuzzle).getWorldPosition(out)
+    return (this.k > 0.5 ? this.gunMuzzles[this.barrel] : this.lmgMuzzle).getWorldPosition(out)
   }
 
   podPosition(out: Vector3): Vector3 {
@@ -267,12 +286,13 @@ export class FortressModel extends Rig {
 
     // 重機槍：從背上朝天翻到肩上朝前，變身好了跟著仰角
     const aim = -clamp(b.aimPitch, -0.4, 0.8)
-    for (let i = 0; i < 2; i++) {
-      const s = i === 0 ? -1 : 1
+    for (let i = 0; i < GUNS.length; i++) {
+      const { side: s, inner } = GUNS[i]
       const m = this.mounts[i]
       // 先往上抬、再往前移，才不會穿過身體
       const up = Math.sin(k * Math.PI) * 0.6
-      m.position.set(s * lerp(GUN_STOW.x, GUN_UP.x, k), lerp(GUN_STOW.y, GUN_UP.y, k) + up, lerp(GUN_STOW.z, GUN_UP.z, k))
+      const x = inner ? lerp(GUN_STOW.inner, GUN_UP.inner, k) : lerp(GUN_STOW.outer, GUN_UP.outer, k)
+      m.position.set(s * x, lerp(GUN_STOW.y, GUN_UP.y, k) + up, lerp(GUN_STOW.z, GUN_UP.z, k))
       this.recoil[i] = Math.max(0, this.recoil[i] - dt * 10)
       m.rotation.x = lerp(-1.65, aim, k)
       m.position.z -= this.recoil[i] * 0.12

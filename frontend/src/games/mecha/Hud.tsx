@@ -3,6 +3,8 @@ import type { HudFrame } from './game'
 import { BASE, MAP_X, MAP_Z, RIVER, type MapData, type Team } from './map'
 import { DRONE, MECH, MECHS, SHELL, teamClass, type MechKind } from './spec'
 
+const deg = (rad: number) => Math.round((rad * 180) / Math.PI)
+
 /**
  * 每一格的儀表：準星、狙擊鏡、偵察機的畫面、血量、能量、彈藥、飛彈、偵察機、變身的狀態、迫擊砲的落點距離、砲擊警告、
  * 鎖定框、小地圖、名牌（被偵察機標記的敵人多一個記號）。全部直接改 DOM，不經過 React
@@ -82,6 +84,9 @@ export function Hud({
   const magText = useRef<HTMLSpanElement>(null)
   const modeRef = useRef<HTMLDivElement>(null)
   const mortarRef = useRef<HTMLDivElement>(null)
+  const elevText = useRef<HTMLElement>(null)
+  const elevMark = useRef<HTMLElement>(null)
+  const mortarInfo = useRef<HTMLSpanElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
   const reloadRef = useRef<HTMLDivElement>(null)
   const missileRefs = useRef<(HTMLSpanElement | null)[]>([])
@@ -139,15 +144,16 @@ export function Hud({
       if (reloadRef.current) reloadRef.current.style.width = `${f.reload >= 0 ? f.reload * 100 : (f.ammo / Math.max(1, f.magazine)) * 100}%`
       l.reload = f.reload
       if (modeRef.current) modeRef.current.dataset.state = String(f.deploy)
-      // 迫擊砲的落點：多遠、要飛幾秒；超出射程改打最遠那一點，太近打不到
-      const m = f.mortar
-      const mortar = !m || !f.alive ? '' : m.state === 'near' ? `太近了：要 ${SHELL.min} m 以外` : `${m.state === 'far' ? '最遠 ' : ''}${Math.round(m.range)} m・飛 ${m.time.toFixed(1)} 秒`
+      // 迫擊砲：砲管的仰角（刻度上的指標跟著動），和照仰角算的平地上大約打多遠、飛幾秒；看不到落點
+      const m = f.alive ? f.mortar : null
+      const mortar = m ? `${m.elev.toFixed(1)}|${Math.round(m.range / 5) * 5}|${m.time.toFixed(1)}` : ''
       if (mortar !== l.mortar) {
         l.mortar = mortar
-        if (mortarRef.current) {
-          mortarRef.current.textContent = mortar
-          mortarRef.current.dataset.on = String(mortar !== '')
-          mortarRef.current.dataset.state = m?.state ?? 'ok'
+        if (mortarRef.current) mortarRef.current.dataset.on = String(m !== null)
+        if (m) {
+          if (elevText.current) elevText.current.textContent = `${m.elev.toFixed(1)}°`
+          if (elevMark.current) elevMark.current.style.bottom = `${(m.level * 100).toFixed(1)}%`
+          if (mortarInfo.current) mortarInfo.current.textContent = `平地約 ${Math.round(m.range / 5) * 5} m・飛 ${m.time.toFixed(1)} 秒`
         }
       }
       if (shellRef.current) shellRef.current.dataset.on = String(f.shelled && f.alive)
@@ -354,7 +360,20 @@ export function Hud({
       <div className="mecha-shelled" ref={shellRef} data-on="false" role="alert">
         ⚠ 砲擊來襲！離開紅圈
       </div>
-      <div className="mecha-mortar" ref={mortarRef} data-on="false" aria-live="off" />
+      <div className="mecha-mortar" ref={mortarRef} data-on="false" aria-live="off">
+        <div className="mecha-elev" aria-hidden="true">
+          <span>{deg(SHELL.elevMax)}°</span>
+          <span className="mecha-elev-track">
+            <i ref={elevMark} />
+          </span>
+          <span>{deg(SHELL.elevMin)}°</span>
+        </div>
+        <div className="mecha-mortar-read">
+          <span className="mecha-mortar-label">仰角</span>
+          <strong ref={elevText} />
+          <span ref={mortarInfo} />
+        </div>
+      </div>
       <div className="mecha-cross" ref={crossRef} aria-hidden="true">
         <span />
         <span />

@@ -1772,31 +1772,79 @@ button.mecha-btn.fire.boom {
   background: var(--accent);
 }
 
-/* 迫擊砲的落點距離：準星下面；太近是警告的顏色 */
+/* 迫擊砲（看著天空，看不到落點）：準星右邊一條仰角的刻度，準星下面是現在幾度、平地上大約打多遠 */
 .mecha-mortar {
   position: absolute;
-  left: 50%;
-  top: calc(50% + 34px);
-  transform: translateX(-50%);
+  inset: 0;
   z-index: 4;
   display: none;
   pointer-events: none;
-  padding: 2px 10px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
   color: var(--m-reticle);
   text-shadow: 0 0 3px var(--m-reticle-shadow);
 }
 .mecha-mortar[data-on='true'] {
   display: block;
 }
-.mecha-mortar[data-state='near'] {
-  color: var(--on-accent);
-  text-shadow: none;
-  background: color-mix(in srgb, var(--warn) 88%, transparent);
+.mecha-elev {
+  position: absolute;
+  left: calc(50% + 44px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.mecha-elev-track {
+  position: relative;
+  width: 10px;
+  height: 120px;
+  border-left: 2px solid var(--m-reticle);
+  /* 每 5 度一格（45～85 度共八格） */
+  background: repeating-linear-gradient(to bottom, var(--m-reticle) 0 2px, transparent 2px 12.5%) left / 8px 100% no-repeat;
+  filter: drop-shadow(0 0 2px var(--m-reticle-shadow));
+}
+.mecha-elev-track::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 8px;
+  height: 2px;
+  background: var(--m-reticle);
+}
+.mecha-elev-track i {
+  position: absolute;
+  left: 9px;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  margin-bottom: -6px;
+  border: 6px solid transparent;
+  border-right-color: var(--accent);
+  border-left-width: 0;
+}
+.mecha-mortar-read {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 30px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+.mecha-mortar-read strong {
+  font-size: 26px;
+  line-height: 1.1;
+}
+.mecha-mortar-label {
+  opacity: 0.85;
 }
 
 /* 砲彈快落在自己附近：飛彈警告的上面 */

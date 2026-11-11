@@ -8,10 +8,11 @@
 //!   傷害由伺服器照武器和開火那台的機甲種類（`MechKind`）決定，用戶端只說「打中誰、用什麼打」。伺服器檢查：
 //!   - 兩邊都還活著、不同隊、距離在射程內（用雙方最後回報的位置算）。
 //!   - 主武器（速度型的機砲、狙擊型的電磁砲、偵察型的脈衝步槍）每秒最多幾發（多一點寬限），超過的不算。
+//!     狙擊型的電磁砲打中頭（`Hit::head`，打到哪裡由用戶端判斷）一發擊倒，不管是哪一種機甲。
 //!   - 飛彈要先發射（`Action::Missile`，每條命 `MISSILES` 發），一發飛彈只能在 `MISSILE_LIFE` 內打中，最多 `MISSILE_HITS` 台（爆風）。
 //!   - 偵察型的偵察機（每條命 `DRONES` 架）引爆時送 `Action::Boom`（爆炸的位置和炸到誰）。偵察機在外面時，它的位置和鏡頭方向
 //!     跟著機甲的狀態一起送（`STATE_LEN`）：爆炸點要在偵察機最後回報的位置附近（`DRONE_SLACK`；偵察機飛多遠都可以，
-//!     只是越遠畫面越糊，那是用戶端的事），被炸的人最後回報的位置要在爆炸點附近（`DRONE_REACH`）。
+//!     只是越遠畫面越糊，那是用戶端的事），被炸的人最後回報的位置要在爆炸點附近（`DRONE_REACH`）。炸到的一律擊倒。
 //!     掃描、標記敵人都是用戶端自己算，伺服器不管。
 //!   - 偵察機可以被主武器打下來（`Hit::drone`）：被打的那台最後回報的狀態裡要有偵察機、而且是這條命現在這一架
 //!     （旗標裡帶著第幾架，打下來、引爆之後還在路上的舊狀態不算），距離在射程內；累積 `DRONE_HP` 就擊落，
@@ -19,7 +20,7 @@
 //!   - 堡壘型「要塞」、砲擊型「隕星」可以變身（狀態旗標的 `F_DEPLOY`，變身時不能走）：堡壘型變身後換成射速快很多的重機槍，
 //!     主武器的額度照旗標算（`MechKind::gun`）；砲擊型變身後沒有主武器，改發射迫擊砲彈（`Action::Shell`，每秒最多 `SHELL_RATE` 發）：
 //!     伺服器記下砲口和初速，打中時（`Weapon::Shell`）被打的人最後回報的位置要在這發砲彈的彈道附近（`SHELL_REACH`），
-//!     一發最多炸到 `SHELL_HITS` 台。堡壘型前面的盾牌擋不擋得住由開火的人那邊判斷（和大樓擋子彈一樣），伺服器不管。
+//!     一發最多炸到 `SHELL_HITS` 台，炸到的一律擊倒。堡壘型前面的盾牌擋不擋得住由開火的人那邊判斷（和大樓擋子彈一樣），伺服器不管。
 //!   - 在自己家重生點（`in_base`）裡的人打不到、也不能開火；敵人進不去由用戶端的能量牆擋。
 //!
 //!   改用戶端還是可以作弊（例如自動瞄準），但打不出超過武器上限的傷害。
@@ -60,6 +61,8 @@ pub const FORTRESS_HP: u32 = 320;
 pub const MORTAR_HP: u32 = 220;
 /// 每條命幾發飛彈
 pub const MISSILES: u32 = 2;
+/// 一擊擊倒的傷害（偵察機爆炸、迫擊砲彈、狙擊型打中頭）：扣到剩多少血就算多少
+const KILL: u32 = u32::MAX;
 /// 速度型的機砲近距離的傷害；`GUN_FALLOFF` 公尺以外慢慢降到 `GUN_FAR_DAMAGE`
 const GUN_DAMAGE: f64 = 8.0;
 const GUN_FAR_DAMAGE: f64 = 4.0;
@@ -88,35 +91,31 @@ const MG_FALLOFF: f64 = 110.0;
 const LMG_RANGE: f64 = 230.0;
 const LMG_RATE: f64 = 6.0;
 const LMG_BURST: f64 = 10.0;
-/// 變身後的重機槍：射程（用戶端 260 公尺）、每秒幾發（用戶端 18 發）、寬限
+/// 變身後的重機槍（四門輪流）：射程（用戶端 260 公尺）、每秒幾發（用戶端 24 發）、寬限
 const HMG_RANGE: f64 = 290.0;
-const HMG_RATE: f64 = 18.0;
-const HMG_BURST: f64 = 27.0;
+const HMG_RATE: f64 = 24.0;
+const HMG_BURST: f64 = 36.0;
 /// 砲擊型一般模式的卡賓槍：一發的傷害（不分遠近）、射程（用戶端 190 公尺）、每秒幾發（用戶端 4 發）、寬限
 const CARBINE_DAMAGE: u32 = 9;
 const CARBINE_RANGE: f64 = 220.0;
 const CARBINE_RATE: f64 = 4.0;
 const CARBINE_BURST: f64 = 7.0;
-/// 迫擊砲彈（`spec.ts` 的 `SHELL`）：直接命中（爆炸點離打中範圍 3 公尺內，用戶端判斷）、爆風的傷害；
+/// 迫擊砲彈（`spec.ts` 的 `SHELL`）：爆炸半徑內炸到的一律擊倒（`KILL`）；
 /// 每秒最多幾發（用戶端 2.4 秒一發）、寬限；一發最多炸到幾台
-const SHELL_DAMAGE: u32 = 80;
-const SHELL_SPLASH: u32 = 40;
 const SHELL_RATE: f64 = 0.5;
 const SHELL_BURST: f64 = 2.0;
 const SHELL_HITS: usize = 6;
-/// 砲彈發射後多久內打中才算（射最遠大約飛 6.5 秒）
+/// 砲彈發射後多久內打中才算（仰角最高時大約飛 8 秒，從屋頂打到河床再久一點）
 const SHELL_LIFE: Duration = Duration::from_secs(14);
-/// 砲彈往下掉的加速度（用戶端 `SHELL.gravity`）、最快的初速（射程最遠 520 公尺大約 120，再寬鬆一點）
-const SHELL_GRAVITY: f64 = 24.0;
-const SHELL_SPEED: f64 = 140.0;
+/// 砲彈往下掉的加速度（用戶端 `SHELL.gravity`）、最快的初速（用戶端固定 `SHELL.speed` = 137，再寬鬆一點）
+const SHELL_GRAVITY: f64 = 36.0;
+const SHELL_SPEED: f64 = 150.0;
 /// 砲口離發射的人最後回報的位置最遠多遠（水平、垂直）
 const SHELL_ORIGIN: f64 = 16.0;
 /// 被炸的人（最後回報的腳底往上 3 公尺）離彈道最遠多遠：爆炸半徑 10 公尺加上機甲的大小、位置是一小段時間以前的
 const SHELL_REACH: f64 = 24.0;
 /// 偵察型每條命幾架偵察機（`spec.ts` 的 `MECHS.recon.drones`）
 pub const DRONES: u32 = 2;
-/// 偵察機爆炸的傷害（用戶端 `DRONE.damage`）
-const DRONE_DAMAGE: u32 = 60;
 /// 爆炸點離偵察機最後回報的位置最遠多遠（偵察機最快每秒 26 公尺、狀態每秒送 20 次，再寬鬆一點）
 const DRONE_SLACK: f64 = 30.0;
 /// 被炸的人（最後回報的腳底往上 3 公尺）離爆炸點最遠多遠：爆炸半徑 9 公尺加上機甲的大小、位置是一小段時間以前的
@@ -350,9 +349,12 @@ pub struct Hit {
     /// 飛彈、砲彈的號碼（`Action::Missile`、`Action::Shell` 的 `id`）
     #[serde(default)]
     id: Option<u32>,
-    /// 飛彈、砲彈直接命中（false 是爆風）
+    /// 飛彈直接命中（false 是爆風）
     #[serde(default)]
     direct: bool,
+    /// 主武器打中頭（只有狙擊型的電磁砲有差：一發擊倒）
+    #[serde(default)]
+    head: bool,
     /// 開火的是自己開的電腦（座位）；自己打的不用填
     #[serde(default)]
     by: Option<usize>,
@@ -737,7 +739,7 @@ impl Mecha {
         ctx.changed();
     }
 
-    /// 倒下：記擊倒、扣分、排復活，達到目標就結算；`weapon` 是擊倒訊息裡的武器（gun、missile、drone、shell）
+    /// 倒下：記擊倒、扣分、排復活，達到目標就結算；`weapon` 是擊倒訊息裡的武器（gun、head、missile、drone、shell）
     fn kill(&mut self, killer: usize, victim: usize, weapon: &str, ctx: &mut Ctx) {
         let v = &mut self.pilots[victim];
         v.alive = false;
@@ -793,7 +795,8 @@ impl Mecha {
                 if d > range || !p.take_round(ctx.now) {
                     return;
                 }
-                (mech.damage(d), 0, "gun")
+                // 狙擊型打中頭：一發擊倒
+                if hit.head && mech == MechKind::Sniper { (KILL, 0, "head") } else { (mech.damage(d), 0, "gun") }
             }
             Weapon::Missile => {
                 let now = ctx.now;
@@ -825,7 +828,7 @@ impl Mecha {
                     return;
                 }
                 shell.hits.push(target);
-                (if hit.direct { SHELL_DAMAGE } else { SHELL_SPLASH }, 4, "shell")
+                (KILL, 4, "shell")
             }
         };
         self.deal(shooter, target, amount, kind, weapon, ctx);
@@ -876,7 +879,7 @@ impl Mecha {
         }
     }
 
-    /// 引爆偵察機：要是偵察型、這條命還有偵察機、爆炸點在偵察機最後回報的位置附近；轉給其他人畫出爆炸，炸到的人扣血
+    /// 引爆偵察機：要是偵察型、這條命還有偵察機、爆炸點在偵察機最後回報的位置附近；轉給其他人畫出爆炸，炸到的人擊倒
     fn boom(
         &mut self,
         seat: usize,
@@ -931,7 +934,7 @@ impl Mecha {
                 continue;
             }
             done.push(target);
-            self.deal(shooter, target, DRONE_DAMAGE, 2, "drone", ctx);
+            self.deal(shooter, target, KILL, 2, "drone", ctx);
             if self.ended.is_some() {
                 break;
             }
@@ -1464,7 +1467,20 @@ mod tests {
     }
 
     fn gun(seat: usize) -> Hit {
-        Hit { seat, w: Weapon::Gun, id: None, direct: false, by: None, drone: false }
+        Hit { seat, w: Weapon::Gun, id: None, direct: false, head: false, by: None, drone: false }
+    }
+
+    /// 打中 `seat` 的頭
+    fn head(seat: usize) -> Hit {
+        Hit { head: true, ..gun(seat) }
+    }
+
+    /// 倒下的人馬上站起來（同一條命、血補滿），測試接著用
+    fn revive(g: &mut Mecha, seat: usize) {
+        let p = &mut g.pilots[seat];
+        p.alive = true;
+        p.hp = p.kind.max_hp();
+        p.respawn_at = None;
     }
 
     /// 打 `seat` 放出去的偵察機
@@ -1601,7 +1617,7 @@ mod tests {
         place(&mut g, &seats, &mut rng, 0, 0.0, 0.0);
         place(&mut g, &seats, &mut rng, 1, 30.0, 0.0);
         place(&mut g, &seats, &mut rng, 3, 32.0, 0.0);
-        let missile = |seat, id, direct| Hit { seat, w: Weapon::Missile, id: Some(id), direct, by: None, drone: false };
+        let missile = |seat, id, direct| Hit { w: Weapon::Missile, id: Some(id), direct, ..gun(seat) };
         // 沒發射過的飛彈打不到
         act(&mut g, &seats, &mut rng, 0, hits(vec![missile(1, 7, true)])).unwrap();
         assert_eq!(g.pilots[1].hp, SPEED_HP);
@@ -1685,10 +1701,10 @@ mod tests {
         assert!(g.pilots[2].state.is_some() && g.pilots[3].state.is_some());
         place(&mut g, &seats, &mut rng, 1, 15.0, 0.0);
         // 電腦（座位 2，紅隊）打藍隊的 1：只有負責開的人能替它回報
-        let bot_gun = Hit { seat: 1, w: Weapon::Gun, id: None, direct: false, by: Some(2), drone: false };
+        let bot_gun = Hit { by: Some(2), ..gun(1) };
         act(&mut g, &seats, &mut rng, 1, hits(vec![bot_gun])).unwrap();
         assert_eq!(g.pilots[1].hp, SPEED_HP);
-        let bot_gun = Hit { seat: 1, w: Weapon::Gun, id: None, direct: false, by: Some(2), drone: false };
+        let bot_gun = Hit { by: Some(2), ..gun(1) };
         act(&mut g, &seats, &mut rng, 0, hits(vec![bot_gun])).unwrap();
         assert_eq!(g.pilots[1].hp, SPEED_HP - 8);
         assert_eq!(g.pilots[2].damage, 8);
@@ -1787,6 +1803,32 @@ mod tests {
     }
 
     #[test]
+    fn sniper_headshot_downs_any_mech() {
+        let (mut g, seats, mut rng) = game(mixed(2, 0), Duration::from_secs(10));
+        set_kind(&mut g, 0, MechKind::Sniper);
+        set_kind(&mut g, 1, MechKind::Fortress);
+        place(&mut g, &seats, &mut rng, 0, 0.0, 100.0);
+        place(&mut g, &seats, &mut rng, 1, 150.0, 100.0);
+        // 最耐打的堡壘型滿血也是一發；傷害算到剩下的血，擊倒訊息的武器是 head
+        let out = act_out(&mut g, &seats, &mut rng, 0, hits(vec![head(1)]));
+        assert!(!g.pilots[1].alive);
+        assert_eq!(g.pilots[0].damage, FORTRESS_HP);
+        assert_eq!(g.damage.last(), Some(&[0, 1, FORTRESS_HP, 0]));
+        let kill = out.events().iter().find(|(_, e)| e["type"] == "kill").unwrap().1.clone();
+        assert_eq!(kill, json!({ "type": "kill", "killer": 0, "victim": 1, "w": "head" }));
+        // 別種機甲說打中頭：照平常的傷害算
+        revive(&mut g, 1);
+        set_kind(&mut g, 1, MechKind::Speed);
+        place(&mut g, &seats, &mut rng, 1, 50.0, 100.0);
+        act(&mut g, &seats, &mut rng, 1, hits(vec![head(0)])).unwrap();
+        assert_eq!(g.pilots[0].hp, SNIPER_HP - 8);
+        // 打太快的那一發不算，打中頭也一樣
+        g.pilots[0].ammo = 0.0;
+        act(&mut g, &seats, &mut rng, 0, hits(vec![head(1)])).unwrap();
+        assert!(g.pilots[1].alive);
+    }
+
+    #[test]
     fn recon_rifle_and_drone_blast() {
         let (mut g, seats, mut rng) = game(mixed(4, 0), Duration::from_secs(10));
         // 0、2 紅隊（0 是偵察型），1、3 藍隊
@@ -1808,41 +1850,47 @@ mod tests {
         // 偵察機沒放出去（狀態裡沒有）：引爆不算
         act(&mut g, &seats, &mut rng, 0, boom([202.0, 4.0, 1.0], vec![1])).unwrap();
         assert_eq!((g.pilots[1].hp, g.pilots[0].drones), (SPEED_HP - RIFLE_DAMAGE, DRONES));
-        // 偵察機在敵人中間爆炸：1、3 炸到，2 是自己人、9 沒這個座位、1 重複都不算；別人收到爆炸的位置
+        // 偵察機在敵人中間爆炸：1、3 炸到就倒（3 是滿血的堡壘型也一樣），2 是自己人、9 沒這個座位、1 重複都不算；
+        // 別人收到爆炸的位置，傷害算到剩下的血，擊倒訊息的武器是 drone
+        set_kind(&mut g, 3, MechKind::Fortress);
         flying(&mut g, &seats, &mut rng, 0, 0.0, 0.0, [203.0, 4.0, 1.0], 0);
         let out = act_out(&mut g, &seats, &mut rng, 0, boom([202.0, 4.0, 1.0], vec![1, 3, 2, 1, 9]));
-        assert_eq!(g.pilots[1].hp, SPEED_HP - RIFLE_DAMAGE - DRONE_DAMAGE);
-        assert_eq!(g.pilots[3].hp, SPEED_HP - DRONE_DAMAGE);
+        assert_eq!((g.pilots[1].alive, g.pilots[3].alive), (false, false));
         assert_eq!(g.pilots[2].hp, SPEED_HP);
         assert_eq!(g.pilots[0].drones, 1);
+        assert_eq!(g.pilots[0].damage, RIFLE_DAMAGE + (SPEED_HP - RIFLE_DAMAGE) + FORTRESS_HP);
+        assert_eq!(g.score, [2, 0]);
         let (to, event) = &out.events()[0];
         assert!(matches!(to, To::Except(0)));
         assert_eq!(event["type"], "boom");
         assert_eq!(event["seat"], 0);
+        let kill = out.events().iter().find(|(_, e)| e["type"] == "kill").unwrap().1.clone();
+        assert_eq!(kill, json!({ "type": "kill", "killer": 0, "victim": 1, "w": "drone" }));
         tick(&mut g, &seats, &mut rng, Instant::now());
+        revive(&mut g, 3);
+        place(&mut g, &seats, &mut rng, 3, 205.0, 4.0);
 
         // 爆炸點離偵察機最後回報的位置太遠（亂送的）：不算，也不扣偵察機
         flying(&mut g, &seats, &mut rng, 0, 0.0, 0.0, [150.0, 4.0, 0.0], 1);
         act(&mut g, &seats, &mut rng, 0, boom([300.0, 4.0, 0.0], vec![3])).unwrap();
-        assert_eq!((g.pilots[3].hp, g.pilots[0].drones), (SPEED_HP - DRONE_DAMAGE, 1));
+        assert_eq!((g.pilots[3].alive, g.pilots[0].drones), (true, 1));
         // 被炸的人離爆炸點太遠：偵察機用掉了，但沒炸到
         act(&mut g, &seats, &mut rng, 0, boom([150.0, 4.0, 0.0], vec![3])).unwrap();
-        assert_eq!((g.pilots[3].hp, g.pilots[0].drones), (SPEED_HP - DRONE_DAMAGE, 0));
+        assert_eq!((g.pilots[3].hp, g.pilots[0].drones), (FORTRESS_HP, 0));
         // 這條命的偵察機用完了
         act(&mut g, &seats, &mut rng, 0, boom([205.0, 4.0, 4.0], vec![3])).unwrap();
-        assert_eq!(g.pilots[3].hp, SPEED_HP - DRONE_DAMAGE);
+        assert_eq!(g.pilots[3].hp, FORTRESS_HP);
         // 不是偵察型不能引爆
+        revive(&mut g, 1);
+        place(&mut g, &seats, &mut rng, 1, 200.0, 0.0);
         act(&mut g, &seats, &mut rng, 1, boom([1.0, 4.0, 0.0], vec![0])).unwrap();
         assert_eq!(g.pilots[0].hp, RECON_HP);
 
-        // 炸倒（偵察機飛多遠都可以：機甲在 400 公尺外）：擊倒訊息的武器是 drone；復活後偵察機補滿
+        // 偵察機飛多遠都可以（機甲在 400 公尺外）；復活後偵察機補滿
         g.pilots[0].drones = 1;
-        g.pilots[3].hp = 30;
         flying(&mut g, &seats, &mut rng, 0, -200.0, 0.0, [204.0, 4.0, 3.0], 1);
-        let out = act_out(&mut g, &seats, &mut rng, 0, boom([205.0, 4.0, 4.0], vec![3]));
+        act(&mut g, &seats, &mut rng, 0, boom([205.0, 4.0, 4.0], vec![3])).unwrap();
         assert!(!g.pilots[3].alive);
-        let kill = out.events().iter().find(|(_, e)| e["type"] == "kill").unwrap().1.clone();
-        assert_eq!(kill, json!({ "type": "kill", "killer": 0, "victim": 3, "w": "drone" }));
         g.pilots[0].hp = 1;
         place(&mut g, &seats, &mut rng, 1, 10.0, 0.0);
         g.pilots[1].ammo = GUN_BURST;
@@ -1978,11 +2026,11 @@ mod tests {
 
     /// 從 (0, 6, 100) 往 +x 射：6 秒後落在 (250, 0, 100)
     fn lob(id: u32) -> Action {
-        Action::Shell { id, o: [0.0, 6.0, 100.0], v: [250.0 / 6.0, 71.0, 0.0], by: None }
+        Action::Shell { id, o: [0.0, 6.0, 100.0], v: [250.0 / 6.0, 107.0, 0.0], by: None }
     }
 
-    fn shell(seat: usize, id: u32, direct: bool) -> Hit {
-        Hit { seat, w: Weapon::Shell, id: Some(id), direct, by: None, drone: false }
+    fn shell(seat: usize, id: u32) -> Hit {
+        Hit { w: Weapon::Shell, id: Some(id), ..gun(seat) }
     }
 
     #[test]
@@ -2007,30 +2055,27 @@ mod tests {
             (event["type"].clone(), event["seat"].clone(), event["id"].clone()),
             (json!("shell"), json!(0), json!(1))
         );
-        // 直接命中 1、爆風炸到 3；2 是自己人、1 重複、9 沒這個座位都不算
-        act(
+        // 炸到 1、3 就倒（3 是滿血的堡壘型也一樣）；2 是自己人、1 重複、9 沒這個座位都不算；擊倒訊息的武器是 shell
+        set_kind(&mut g, 3, MechKind::Fortress);
+        let out = act_out(
             &mut g,
             &seats,
             &mut rng,
             0,
-            hits(vec![
-                shell(1, 1, true),
-                shell(3, 1, false),
-                shell(2, 1, false),
-                shell(1, 1, false),
-                shell(9, 1, false),
-            ]),
-        )
-        .unwrap();
-        assert_eq!(
-            (g.pilots[1].hp, g.pilots[2].hp, g.pilots[3].hp),
-            (SPEED_HP - SHELL_DAMAGE, SPEED_HP, SPEED_HP - SHELL_SPLASH)
+            hits(vec![shell(1, 1), shell(3, 1), shell(2, 1), shell(1, 1), shell(9, 1)]),
         );
-        // 不在彈道附近（彈道經過 x = 150 時在 100 公尺高）：不算；沒發射過的號碼也不算
+        assert_eq!((g.pilots[1].alive, g.pilots[2].hp, g.pilots[3].alive), (false, SPEED_HP, false));
+        assert_eq!(g.pilots[0].damage, SPEED_HP + FORTRESS_HP);
+        let kill = out.events().iter().find(|(_, e)| e["type"] == "kill").unwrap().1.clone();
+        assert_eq!(kill, json!({ "type": "kill", "killer": 0, "victim": 1, "w": "shell" }));
+        revive(&mut g, 1);
+        revive(&mut g, 3);
+        place(&mut g, &seats, &mut rng, 1, 250.0, 100.0);
+        // 不在彈道附近（彈道經過 x = 150 時在 150 公尺高）：不算；沒發射過的號碼也不算
         act(&mut g, &seats, &mut rng, 0, lob(2)).unwrap();
         place(&mut g, &seats, &mut rng, 3, 150.0, 100.0);
-        act(&mut g, &seats, &mut rng, 0, hits(vec![shell(3, 2, false), shell(1, 7, true)])).unwrap();
-        assert_eq!((g.pilots[1].hp, g.pilots[3].hp), (SPEED_HP - SHELL_DAMAGE, SPEED_HP - SHELL_SPLASH));
+        act(&mut g, &seats, &mut rng, 0, hits(vec![shell(3, 2), shell(1, 7)])).unwrap();
+        assert_eq!((g.pilots[1].hp, g.pilots[3].hp), (SPEED_HP, FORTRESS_HP));
         // 打太快：寬限兩發都用掉了
         act(&mut g, &seats, &mut rng, 0, lob(3)).unwrap();
         assert_eq!(g.pilots[0].shells.len(), 2);
@@ -2055,27 +2100,20 @@ mod tests {
         assert_eq!(g.pilots[0].shells.len(), 2);
         // 變身了沒有主武器；收回來才能用卡賓槍（一發 9）
         act(&mut g, &seats, &mut rng, 0, guns(1, 1)).unwrap();
-        assert_eq!(g.pilots[1].hp, SPEED_HP - SHELL_DAMAGE);
+        assert_eq!(g.pilots[1].hp, SPEED_HP);
         place(&mut g, &seats, &mut rng, 1, 100.0, 100.0);
         place(&mut g, &seats, &mut rng, 0, 0.0, 100.0);
         act(&mut g, &seats, &mut rng, 0, guns(1, 1)).unwrap();
-        assert_eq!(g.pilots[1].hp, SPEED_HP - SHELL_DAMAGE - CARBINE_DAMAGE);
+        assert_eq!(g.pilots[1].hp, SPEED_HP - CARBINE_DAMAGE);
         // 不是砲擊型不能發射
         state(&mut g, &seats, &mut rng, 1, deployed(100.0, 100.0, 1));
         act(&mut g, &seats, &mut rng, 1, lob(1)).unwrap();
         assert!(g.pilots[1].shells.is_empty());
-        // 炸倒：擊倒訊息的武器是 shell
+        // 倒下時飛在空中的砲彈不算了
         state(&mut g, &seats, &mut rng, 0, deployed(0.0, 100.0, 1));
         g.pilots[0].shell_ammo = SHELL_BURST;
         act(&mut g, &seats, &mut rng, 0, lob(6)).unwrap();
-        place(&mut g, &seats, &mut rng, 3, 248.0, 100.0);
-        g.pilots[3].hp = 30;
-        let out = act_out(&mut g, &seats, &mut rng, 0, hits(vec![shell(3, 6, false)]));
-        let kill = out.events().iter().find(|(_, e)| e["type"] == "kill").unwrap().1.clone();
-        assert_eq!(kill, json!({ "type": "kill", "killer": 0, "victim": 3, "w": "shell" }));
-        // 倒下時飛在空中的砲彈不算了
-        g.pilots[1].hp = 30;
-        place(&mut g, &seats, &mut rng, 1, 250.0, 100.0);
+        assert!(!g.pilots[0].shells.is_empty());
         let mut out = Outbox::default();
         let mut ctx = test_ctx(Instant::now(), &mut rng, &seats, &mut out);
         g.kill(1, 0, "gun", &mut ctx);

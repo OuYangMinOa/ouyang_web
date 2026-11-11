@@ -1,12 +1,12 @@
 // 砲擊型「隕星」的模型：兩條反關節的腿撐著一個矮胖的上半身，背上一個大彈藥箱，上面架著一門大口徑迫擊砲（平常往後躺著），
 // 右手一把卡賓槍、左肩是飛彈艙。架砲（`MechBody.deploy` 從 0 到 1）時跪下來、腰後兩支支架撐到地上，
-// 砲管從背後往上翻、立起來朝前（仰角照最後一發的彈道，`setElevation`），開砲時砲管往後縮一下。
+// 砲管從背後往上翻、立起來朝前（仰角就是瞄準的仰角，`SHELL.elevMin`～`elevMax`），開砲時砲管往後縮一下。
 // 上半身和砲跟著瞄準轉；腿用兩節的反向運動學擺，膝蓋往後彎。
 import { Group, type Object3D, type Vector3 } from 'three'
 import type { Team } from './map'
 import { part, Rig, type MechKit } from './mech'
 import { clamp, wrapAngle, type MechBody } from './physics'
-import { ease, MECHS } from './spec'
+import { ease, MECHS, SHELL } from './spec'
 
 const SPEC = MECHS.mortar
 /** 髖關節離地多高、大腿和小腿多長、腳踝離地多高；架砲時往下跪多少 */
@@ -14,7 +14,7 @@ const HIP_Y = 3.1
 const THIGH = 1.65
 const SHIN = 1.75
 const ANKLE_Y = 0.45
-const KNEEL = 1.5
+const KNEEL = SPEC.deploy!.drop
 /** 上半身的軸心在髖關節上面多高 */
 const TORSO_Y = 0.35
 /** 砲管的軸心（上半身座標）、收著時的角度（往後躺） */
@@ -42,8 +42,6 @@ export class MortarModel extends Rig {
   private readonly pod: Object3D
   /** 架砲的進度（`pose` 記下來，`muzzle` 照這個決定從砲口還是槍口出來） */
   private k = 0
-  /** 砲管的仰角（照最後一發的彈道） */
-  private elev = 1.15
   private tubeRecoil = 0
   private gunRecoil = 0
   private lean = 0
@@ -159,11 +157,6 @@ export class MortarModel extends Rig {
     this.gunMuzzle = gunMuzzle
   }
 
-  /** 砲管的仰角（弧度，照發射的彈道） */
-  setElevation(e: number) {
-    this.elev = clamp(e, 0.75, 1.45)
-  }
-
   fire(_side: number) {
     if (this.k > 0.5) this.tubeRecoil = 1
     else this.gunRecoil = 1
@@ -218,9 +211,9 @@ export class MortarModel extends Rig {
       this.struts[i].rotation.set(lerp(1.3, -0.72, k), s * -0.5 * k, 0, 'YXZ')
     }
 
-    // 砲管：從背後往上翻到前面，仰角照最後一發；開砲時往後縮、慢慢回來
+    // 砲管：從背後往上翻到前面，仰角照瞄準的仰角；開砲時往後縮、慢慢回來
     this.tubeRecoil = Math.max(0, this.tubeRecoil - dt * 1.6)
-    this.tube.rotation.x = lerp(STOW, -this.elev, k)
+    this.tube.rotation.x = lerp(STOW, -clamp(b.aimPitch, SHELL.elevMin, SHELL.elevMax), k)
     this.barrel.position.z = -this.tubeRecoil * this.tubeRecoil * 0.8
 
     // 右手的卡賓槍：平常跟著仰角，架砲時垂下來

@@ -66,8 +66,19 @@ export type MechaView = {
   select: { endsIn: number; ready: boolean[] } | null
 }
 
-/** `drone` 是打中 `seat` 放出去的偵察機（只有主武器打得下來）；`id` 是飛彈、砲彈的號碼 */
-export type HitReport = { seat: number; w: 'gun' | 'missile' | 'shell'; id?: number; direct?: boolean; by?: number; drone?: boolean }
+/**
+ * `drone` 是打中 `seat` 放出去的偵察機（只有主武器打得下來）；`id` 是飛彈、砲彈的號碼；`direct` 是飛彈直接命中；
+ * `head` 是主武器打中頭（狙擊型的電磁砲一發擊倒）
+ */
+export type HitReport = {
+  seat: number
+  w: 'gun' | 'missile' | 'shell'
+  id?: number
+  direct?: boolean
+  head?: boolean
+  by?: number
+  drone?: boolean
+}
 
 export type MechaAction =
   | { type: 'state'; d?: number[]; bots?: number[][] }
@@ -96,7 +107,8 @@ export type MechaEvent =
   | { type: 'kill'; killer: number; victim: number; w: KillWeapon }
   | { type: 'pong'; t: number; clock: number }
 
-export type KillWeapon = 'gun' | 'missile' | 'drone' | 'shell'
+/** `head` 是狙擊型的電磁砲打中頭 */
+export type KillWeapon = 'gun' | 'head' | 'missile' | 'drone' | 'shell'
 
 export type MechaParty = { view: MechaView; action: MechaAction; options: MechaOptions; event: MechaEvent }
 
