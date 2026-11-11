@@ -58,8 +58,10 @@ export const TRUSS_Z = 186
 export const TRUSS_W = 12
 export const AVENUE_Z = 330
 export const AVENUE_W = 14
+/** 走得進去的大樓二樓以上每一層多高（樓板到樓板；機甲六公尺高，鏡頭還要在頭上，矮了很擠） */
+const STOREY = 14
 /** 走得進去的大樓：二樓（和大橋一樣高）、三樓、四樓、屋頂的樓板高度（一樓是地面） */
-export const FLOORS = [DECK, DECK + 10, DECK + 20, DECK + 30] as const
+export const FLOORS = [DECK, DECK + STOREY, DECK + STOREY * 2, DECK + STOREY * 3] as const
 /** 東岸那兩棟走得進去的大樓佔的街廓（西岸的照原點轉 180 度）：A 在大橋北邊、二樓接著支線，B 在港口 */
 const TOWER_A = { x0: 64, x1: 151, z0: -126, z1: -52 }
 const TOWER_B = { x0: 64, x1: 140, z0: 237, z1: 321 }
@@ -379,7 +381,7 @@ export function buildMap(): MapData {
   }
 
   /**
-   * 走得進去的大樓（東岸的座標；靠河那一面朝西）：一樓挑高 7 公尺，二樓和大橋一樣高，往上每層 10 公尺，屋頂 38 公尺（`FLOORS`）。
+   * 走得進去的大樓（東岸的座標；靠河那一面朝西）：二樓和大橋一樣高（一樓淨高 7 公尺），往上每層 14 公尺，屋頂 50 公尺（`FLOORS`）。
    * 靠河那一面每一層都只有矮牆和柱子，可以在裡面往河對岸狙擊；南北兩面一段牆一段窗；離河最遠的那一面是整片牆，
    * 牆裡面兩條並排的坡道（A 在外、B 靠牆）一層一層折返往上爬（A 從南往北爬、B 從北往南爬），
    * 每條坡道上面那一層的樓板挖一個洞讓它穿上去。

@@ -23,13 +23,14 @@ type Feed = {
    * 用什麼打倒的：主武器（機砲、狙擊型的電磁砲、偵察型的脈衝步槍、堡壘型的機槍、砲擊型的卡賓槍）、飛彈、偵察機或迫擊砲彈；
    * downed 是打下偵察機
    */
-  w: 'gun' | 'cannon' | 'rifle' | 'mg' | 'carbine' | 'missile' | 'drone' | 'shell' | 'downed'
+  w: 'gun' | 'cannon' | 'head' | 'rifle' | 'mg' | 'carbine' | 'missile' | 'drone' | 'shell' | 'downed'
   mine: boolean
 }
 
 const FEED_ICON = {
   gun: ' ✦ ',
   cannon: ' 🎯 ',
+  head: ' 🎯 ',
   rifle: ' ⁘ ',
   mg: ' ⁂ ',
   carbine: ' ∙ ',
@@ -41,6 +42,7 @@ const FEED_ICON = {
 const FEED_LABEL = {
   gun: '用機砲擊倒',
   cannon: '用電磁砲擊倒',
+  head: '一砲打中頭擊倒',
   rifle: '用脈衝步槍擊倒',
   mg: '用機槍擊倒',
   carbine: '用卡賓槍擊倒',

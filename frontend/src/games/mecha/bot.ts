@@ -12,7 +12,7 @@ import type { DroneBody, DroneInput } from './drone'
 import { findPath, FLOORS, inBase, MAP_Z, nearestNode, RIVER, type MapIndex, type Team } from './map'
 import type { Difficulty } from './online'
 import { clamp, deployedReady, wrapAngle, type MechBody, type MechInput } from './physics'
-import { armsOf, DRONE, MECH, MECHS, SHELL, type MechKind, type MechSpec } from './spec'
+import { armsOf, DRONE, MECH, MECHS, SHELL, shellElevation, shellTime, type MechKind, type MechSpec } from './spec'
 
 /** `t` 是變身好了的堡壘型、盾牌正對著 (x, z)（打過去會被盾牌擋住） */
 function shieldFacing(t: MechBody, x: number, z: number): boolean {
@@ -58,7 +58,7 @@ const ROOF_CHANCE = 0.55
 const FORTRESS_WAIT = 4
 const DEPLOY_COOL = 5
 /** 砲擊型：敵人靠多近就收砲（改用卡賓槍）、多久沒目標就收砲 */
-const MORTAR_NEAR = 50
+const MORTAR_NEAR = SHELL.min + 5
 const MORTAR_WAIT = 12
 
 const SKILL: Record<Difficulty, { aim: number; react: number; turn: number; burst: number; missile: number; dodge: number }> = {
@@ -427,7 +427,9 @@ export class BotBrain {
    */
   private lob(dt: number, me: MechBody, target: BotTarget, dist: number, out: BotOrders) {
     const t = target.body
-    const flight = SHELL.time0 + dist / SHELL.timePer
+    // 砲管要抬幾度（砲口大約比腳底高 7 公尺；真正發射時遊戲照砲口的位置再算一次）、砲彈大約飛多久
+    const elev = shellElevation(dist, t.y - me.y - 7) ?? SHELL.elevMax
+    const flight = shellTime(elev, me.y + 7 - t.y)
     const lead = flight * (0.4 + this.skill.burst * 0.5)
     const ex = t.x + t.vx * lead
     const ez = t.z + t.vz * lead
@@ -438,7 +440,7 @@ export class BotBrain {
     const gz = ez - Math.sin(yaw) * side + Math.cos(yaw) * along
     const step = this.skill.turn * dt
     me.aimYaw = wrapAngle(me.aimYaw + clamp(wrapAngle(yaw - me.aimYaw), -step, step))
-    me.aimPitch += (-0.3 - me.aimPitch) * Math.min(1, dt * 3)
+    me.aimPitch += (elev - me.aimPitch) * Math.min(1, dt * 3)
     out.shell = { x: gx, y: t.y, z: gz }
     out.fire = this.seen > this.skill.react && Math.abs(wrapAngle(yaw - me.aimYaw)) < 0.15
   }
