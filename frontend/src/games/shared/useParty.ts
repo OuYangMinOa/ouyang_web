@@ -20,7 +20,7 @@ import { normalizeCode, playerId } from './useRoom'
  *                    房主才能做（其他人送了會被忽略）：
  *                    { type: 'start' }               開始／再來一局
  *                    { type: 'options', options }    改選項（不在對局中時）
- *                    { type: 'addBot' }              加一個電腦玩家（遊戲允許的話）
+ *                    { type: 'addBot', count? }      加電腦玩家（遊戲允許的話；count 沒填是 1 台，加到滿就停）
  *                    { type: 'kick', pid }           移除電腦或請人離開（被請走的人不能再進來）
  *                    { type: 'abort' }               中止這局，回到大廳
  *   server → client  { type: 'welcome', you }        you 是自己的 pid
@@ -295,7 +295,7 @@ export function useParty<T extends PartyTypes>(
   const say = useCallback((text: string) => raw({ type: 'chat', text }), [raw])
   const start = useCallback(() => raw({ type: 'start' }), [raw])
   const setOptions = useCallback((options: T['options']) => raw({ type: 'options', options }), [raw])
-  const addBot = useCallback(() => raw({ type: 'addBot' }), [raw])
+  const addBot = useCallback((count = 1) => raw({ type: 'addBot', ...(count > 1 ? { count } : {}) }), [raw])
   const kick = useCallback((pid: number) => raw({ type: 'kick', pid }), [raw])
   const watch = useCallback((on: boolean) => raw({ type: 'watch', watch: on }), [raw])
   const abort = useCallback(() => raw({ type: 'abort' }), [raw])

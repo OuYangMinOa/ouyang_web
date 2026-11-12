@@ -192,6 +192,17 @@ export const GAMES: GameInfo[] = [
     fullscreen: true,
   },
   {
+    id: 'mecha',
+    name: '機甲對戰',
+    icon: '🤖',
+    blurb: '整個畫面都是城區戰場的 3D 機甲對戰：紅藍兩隊各守一座機庫，開著速度型機甲用速射機砲和追蹤飛彈互打，背後噴火衝刺、跳起來飛過貨櫃，先擊倒對方指定次數的隊伍贏。2～8 人連線，人不夠可以加電腦。鍵盤滑鼠、手機觸控、遊戲手把都能玩。',
+    tags: ['線上', '電腦', '3D'],
+    category: '多人對戰',
+    component: lazyPage(() => import('./mecha')),
+    lobby: { kind: 'party', players: '2～8 人，可以加電腦' },
+    fullscreen: true,
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',

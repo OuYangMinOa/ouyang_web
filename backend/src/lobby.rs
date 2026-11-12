@@ -60,7 +60,7 @@ struct Game {
 }
 
 /// 遊戲室能開的遊戲；新增派對遊戲或大逃殺時記得加在這裡和 `room_table`
-const GAMES: [Game; 23] = [
+const GAMES: [Game; 24] = [
     Game { id: "undercover", name: "誰是臥底", kind: Kind::Party },
     Game { id: "bigtwo", name: "大老二", kind: Kind::Party },
     Game { id: "draw", name: "你畫我猜", kind: Kind::Party },
@@ -75,6 +75,7 @@ const GAMES: [Game; 23] = [
     Game { id: "liarsdice", name: "吹牛骰子", kind: Kind::Party },
     Game { id: "minesweeper", name: "踩地雷競速", kind: Kind::Party },
     Game { id: "racing", name: "3D 賽車", kind: Kind::Party },
+    Game { id: "mecha", name: "機甲對戰", kind: Kind::Party },
     Game { id: "tetris", name: "俄羅斯方塊 99", kind: Kind::Arena },
     Game { id: "puyo", name: "魔法氣泡", kind: Kind::Arena },
     Game { id: "gomoku", name: "五子棋", kind: Kind::Duel },
@@ -626,6 +627,7 @@ fn room_table<'a>(state: &'a AppState, game: &Game) -> Option<&'a dyn RoomTable>
         "liarsdice" => &state.liarsdice,
         "minesweeper" => &state.minesrace,
         "racing" => &state.racing,
+        "mecha" => &state.mecha,
         "tetris" => &state.tetris,
         "puyo" => &state.puyo,
         _ => return None,

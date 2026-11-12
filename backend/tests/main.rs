@@ -25,6 +25,7 @@ mod game_settings;
 mod games;
 mod honeypot;
 mod lobby;
+mod mecha;
 mod minesrace;
 mod monitor;
 mod music;

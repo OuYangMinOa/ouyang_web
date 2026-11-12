@@ -26,13 +26,14 @@ const vertex = /* glsl */ `
   }
 `
 const fragment = /* glsl */ `
+  uniform float uGain;
   varying float vAlpha;
   varying vec3 vColor;
   void main() {
     float d = length(gl_PointCoord - 0.5);
     float a = smoothstep(0.5, 0.1, d) * vAlpha;
     if (a < 0.01) discard;
-    gl_FragColor = vec4(vColor, a);
+    gl_FragColor = vec4(vColor * uGain, a);
     #include <colorspace_fragment>
   }
 `
@@ -50,10 +51,13 @@ export class Particles {
   private readonly grow: Float32Array
   private readonly opacity: Float32Array
   private readonly material: ShaderMaterial
+  private readonly gravity: number
   private next = 0
 
-  constructor(count: number, additive: boolean) {
+  /** `gravity`：每秒往下加速多少（碎塊用；煙和火光是 0） */
+  constructor(count: number, additive: boolean, gravity = 0) {
     this.count = count
+    this.gravity = gravity
     this.pos = new Float32Array(count * 3)
     this.vel = new Float32Array(count * 3)
     this.color = new Float32Array(count * 3)
@@ -71,7 +75,7 @@ export class Particles {
     this.material = new ShaderMaterial({
       vertexShader: vertex,
       fragmentShader: fragment,
-      uniforms: { uScale: { value: 400 } },
+      uniforms: { uScale: { value: 400 }, uGain: { value: 1 } },
       transparent: true,
       depthWrite: false,
       blending: additive ? AdditiveBlending : NormalBlending,
@@ -107,6 +111,11 @@ export class Particles {
     this.alpha[i] = opacity
   }
 
+  /** 顏色乘幾倍：畫面有泛光時，相加混色的粒子調得比 1 亮才暈得開 */
+  set gain(v: number) {
+    this.material.uniforms.uGain.value = v
+  }
+
   /** `scale`：畫面高度（像素）÷（2·tan(視角/2)），讓粒子大小以公尺為單位 */
   update(dt: number, scale: number) {
     this.material.uniforms.uScale.value = scale
@@ -118,6 +127,7 @@ export class Particles {
       }
       this.life[i] -= dt
       const k = i * 3
+      this.vel[k + 1] -= this.gravity * dt
       this.vel[k] *= drag
       this.vel[k + 1] *= drag
       this.vel[k + 2] *= drag

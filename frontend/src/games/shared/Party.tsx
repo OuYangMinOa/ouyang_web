@@ -229,6 +229,8 @@ export function PartyLobby({
   const bots = room.players.filter((p) => p.bot).length
   const seats = Math.min(ready.length, room.max)
   const canAddBot = room.maxBots > 0 && bots < room.maxBots && ready.length < room.max
+  // 大房間（例如機甲 30 對 30）一台一台加太慢：一次補滿空的座位
+  const fill = room.maxBots >= 10 ? Math.max(0, Math.min(room.maxBots - bots, room.max - ready.length)) : 0
   const waiting = room.min - seats
 
   function watch(on: boolean) {
@@ -270,8 +272,13 @@ export function PartyLobby({
         ))}
       </ul>
       {isHost && room.maxBots > 0 && (
-        <button type="button" className="secondary" onClick={party.addBot} disabled={!canAddBot}>
+        <button type="button" className="secondary" onClick={() => party.addBot()} disabled={!canAddBot}>
           ＋ 加電腦玩家
+        </button>
+      )}
+      {isHost && fill > 1 && (
+        <button type="button" className="secondary" onClick={() => party.addBot(fill)}>
+          ＋ 補滿電腦（{fill} 台）
         </button>
       )}
       <Segmented

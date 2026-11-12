@@ -858,7 +858,18 @@ impl<G: PartyGame> Room<G> {
                     self.options = options;
                     self.dirty_room = true;
                 }),
-            ClientMessage::AddBot if host && idle => self.add_bot(),
+            ClientMessage::AddBot { count } if host && idle => {
+                // 一次加好幾台（大房間「補滿電腦」）：加到滿或加不了為止，第一台就加不了才回錯誤
+                let result = self.add_bot();
+                if result.is_ok() {
+                    for _ in 1..count.unwrap_or(1).min(G::MAX_BOTS) {
+                        if self.add_bot().is_err() {
+                            break;
+                        }
+                    }
+                }
+                result
+            }
             ClientMessage::Kick { pid: target } if host && target != pid => self.kick(target, now),
             ClientMessage::Abort if host && self.phase == Phase::Playing => {
                 self.abort();
@@ -971,7 +982,11 @@ enum ClientMessage {
     Options {
         options: Value,
     },
-    AddBot,
+    /// 加電腦玩家：`count` 台（沒填是 1 台），座位或電腦數滿了就停
+    AddBot {
+        #[serde(default)]
+        count: Option<usize>,
+    },
     Kick {
         pid: u32,
     },
@@ -1484,6 +1499,12 @@ mod tests {
         send(&mut room, &a, json!({ "type": "start" }));
         assert_eq!(a.last("notice").unwrap()["message"], "限制 1 只能兩個人");
 
+        let bot = room.members.iter().find(|m| m.key.is_none()).unwrap().pid;
+        send(&mut room, &a, json!({ "type": "kick", "pid": bot }));
+        assert_eq!(room.bots(), 0);
+        // 一次加好幾台：加到座位滿就停，不算錯
+        send(&mut room, &a, json!({ "type": "addBot", "count": 5 }));
+        assert_eq!(room.bots(), 1);
         let bot = room.members.iter().find(|m| m.key.is_none()).unwrap().pid;
         send(&mut room, &a, json!({ "type": "kick", "pid": bot }));
         assert_eq!(room.bots(), 0);

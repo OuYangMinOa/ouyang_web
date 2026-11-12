@@ -1,0 +1,1914 @@
+/* 機甲對戰：整個畫面都是遊戲，蓋住網站的頁首和側邊欄；儀表、選單浮在 3D 畫面上。
+   兩隊的顏色用 --ev-red、--ev-blue（亮色、深色都有定義） */
+.mecha-root {
+  --m-pad: 12px;
+  --m-top: max(var(--m-pad), env(safe-area-inset-top));
+  --m-bottom: max(var(--m-pad), env(safe-area-inset-bottom));
+  --m-left: max(var(--m-pad), env(safe-area-inset-left));
+  --m-right: max(var(--m-pad), env(safe-area-inset-right));
+  /* 小地圖的寬度（地圖南北比東西長，高是寬的 920 / 660 倍）；下面的擊倒訊息照這個往下排 */
+  --m-radar: clamp(130px, 21vmin, 180px);
+  --m-glass: color-mix(in srgb, var(--surface) 82%, transparent);
+  --m-line: color-mix(in srgb, var(--border) 85%, transparent);
+  --m-red: var(--ev-red);
+  --m-blue: var(--ev-blue);
+  /* 狙擊鏡：鏡筒外面是黑的、十字線是淺色（光學儀器的顏色，亮色和深色主題都一樣） */
+  --m-scope: rgb(6 8 10 / 0.94);
+  --m-reticle: rgb(232 240 232 / 0.92);
+  --m-reticle-shadow: rgb(0 0 0 / 0.85);
+  /* 偵察機的畫面：淡淡的掃描線（攝影機畫面，亮色和深色主題都一樣） */
+  --m-feed-scan: rgb(255 255 255 / 0.05);
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text-h);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.mecha-view,
+.mecha-view canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 載入中：3D 畫面做出來之前蓋住整個畫面（做的那幾秒頁面不會動，進度條只用 transform 動，那時候還是會跑） */
+.mecha-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: var(--m-top) var(--m-right) var(--m-bottom) var(--m-left);
+  background: var(--bg);
+  color: var(--text);
+  text-align: center;
+}
+.mecha-loading strong {
+  font-size: 22px;
+  color: var(--text-h);
+}
+.mecha-loading span {
+  max-width: 28em;
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: balance;
+}
+.mecha-loading-bar {
+  width: min(260px, 70%);
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+.mecha-loading-bar::after {
+  content: '';
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: mecha-loading 1.1s ease-in-out infinite;
+}
+@keyframes mecha-loading {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mecha-loading-bar::after {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+.mecha-root .red {
+  color: var(--m-red);
+}
+.mecha-root .blue {
+  color: var(--m-blue);
+}
+
+.mecha-chip {
+  background: var(--m-glass);
+  border: 1px solid var(--m-line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* 上方：左邊離開和隊伍，中間比分，右邊按鈕 */
+.mecha-top {
+  position: absolute;
+  top: var(--m-top);
+  left: var(--m-left);
+  right: var(--m-right);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 6;
+}
+.mecha-top > * {
+  pointer-events: auto;
+}
+.mecha-top-start,
+.mecha-top-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mecha-top-end {
+  justify-content: flex-end;
+}
+button.mecha-icon {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 18px;
+  line-height: 1;
+  background: var(--m-glass);
+  color: var(--text-h);
+  border: 1px solid var(--m-line);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+button.mecha-icon:hover,
+button.mecha-icon.on {
+  border-color: var(--accent);
+}
+.mecha-you {
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.mecha-you.red {
+  border-color: var(--m-red);
+}
+.mecha-you.blue {
+  border-color: var(--m-blue);
+}
+
+.mecha-score {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 16px;
+  font-variant-numeric: tabular-nums;
+}
+.mecha-score-team {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.mecha-score-team strong {
+  font-size: 30px;
+  line-height: 1;
+}
+.mecha-score-team em {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 14px;
+}
+.mecha-score-mid {
+  display: grid;
+  justify-items: center;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.mecha-clock {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+.mecha-clock.urgent {
+  color: var(--danger);
+}
+
+/* 小地圖：右上按鈕下面 */
+.mecha-radar {
+  position: absolute;
+  top: calc(var(--m-top) + 54px);
+  right: var(--m-right);
+  width: var(--m-radar);
+  aspect-ratio: 660 / 920;
+  z-index: 4;
+  pointer-events: none;
+  padding: 4px;
+  box-sizing: border-box;
+}
+.mecha-radar-block {
+  fill: color-mix(in srgb, var(--text) 45%, transparent);
+}
+.mecha-radar-river {
+  fill: color-mix(in srgb, var(--ev-teal) 30%, transparent);
+}
+.mecha-radar-bridge {
+  fill: color-mix(in srgb, var(--text) 25%, transparent);
+}
+.mecha-radar-base.red {
+  fill: color-mix(in srgb, var(--m-red) 35%, transparent);
+}
+.mecha-radar-base.blue {
+  fill: color-mix(in srgb, var(--m-blue) 35%, transparent);
+}
+.mecha-radar-dot path {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.mecha-radar-dot.red path {
+  fill: var(--m-red);
+}
+.mecha-radar-dot.blue path {
+  fill: var(--m-blue);
+}
+.mecha-radar-dot[data-state='hidden'] {
+  display: none;
+}
+.mecha-radar-dot[data-state='me'] path {
+  fill: var(--accent);
+  transform: scale(1.5);
+}
+
+/* 擊倒紀錄：小地圖下面 */
+.mecha-feed {
+  position: absolute;
+  top: calc(var(--m-top) + 64px + var(--m-radar) * 1.394);
+  right: var(--m-right);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+  max-width: calc(100% - var(--m-left) - var(--m-right));
+}
+.mecha-feed li {
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  animation: mecha-in 0.2s ease-out;
+}
+.mecha-feed li.mine {
+  border-color: var(--accent);
+}
+
+/* 準星：四條線，移動、在空中時張開 */
+.mecha-cross {
+  --spread: 0.2;
+  --gap: calc(6px + var(--spread) * 18px);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.mecha-cross span {
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 2px rgb(0 0 0 / 0.9);
+  transition: transform 0.08s;
+}
+.mecha-cross span:nth-child(1),
+.mecha-cross span:nth-child(2) {
+  width: 2px;
+  height: 9px;
+  left: -1px;
+}
+.mecha-cross span:nth-child(1) {
+  top: calc(-1 * var(--gap) - 9px);
+}
+.mecha-cross span:nth-child(2) {
+  top: var(--gap);
+}
+.mecha-cross span:nth-child(3),
+.mecha-cross span:nth-child(4) {
+  height: 2px;
+  width: 9px;
+  top: -1px;
+}
+.mecha-cross span:nth-child(3) {
+  left: calc(-1 * var(--gap) - 9px);
+}
+.mecha-cross span:nth-child(4) {
+  left: var(--gap);
+}
+.mecha-cross i {
+  position: absolute;
+  left: -1.5px;
+  top: -1.5px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 2px rgb(0 0 0 / 0.9);
+}
+.mecha-cross[data-hidden='true'] span {
+  display: none;
+}
+.mecha-cross[data-zoom='true'] i {
+  width: 5px;
+  height: 5px;
+  left: -2.5px;
+  top: -2.5px;
+}
+.mecha-cross[data-scope='true'] {
+  display: none;
+}
+
+/* 狙擊鏡：圓形的視野，外面全黑；中間留空的十字線、中心點、底下是準星對到的距離 */
+.mecha-scope {
+  --r: min(44vmin, 360px);
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  background: radial-gradient(circle at 50% 50%, transparent calc(var(--r) - 1px), var(--m-scope) calc(var(--r) + 1px));
+}
+.mecha-scope[data-on='true'] {
+  opacity: 1;
+}
+.mecha-scope-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--r) * 2);
+  height: calc(var(--r) * 2);
+  margin: calc(var(--r) * -1) 0 0 calc(var(--r) * -1);
+  border-radius: 50%;
+  box-shadow: inset 0 0 48px var(--m-scope);
+}
+.mecha-scope-ring::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--m-reticle);
+  box-shadow: 0 0 2px var(--m-reticle-shadow);
+}
+.mecha-scope-h,
+.mecha-scope-v {
+  position: absolute;
+  filter: drop-shadow(0 0 1px var(--m-reticle-shadow));
+}
+.mecha-scope-h {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: linear-gradient(90deg, var(--m-reticle) 0 44%, transparent 44% 56%, var(--m-reticle) 56%);
+}
+.mecha-scope-v {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: linear-gradient(180deg, var(--m-reticle) 0 44%, transparent 44% 56%, var(--m-reticle) 56%);
+}
+.mecha-scope-range {
+  position: absolute;
+  left: 50%;
+  top: 60%;
+  transform: translateX(8px);
+  color: var(--m-reticle);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 3px var(--m-reticle-shadow);
+}
+
+/* 打中的叉叉 */
+.mecha-hit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%),
+    linear-gradient(-45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%);
+  -webkit-mask: radial-gradient(circle, transparent 5px, #000 6px);
+  mask: radial-gradient(circle, transparent 5px, #000 6px);
+  filter: drop-shadow(0 0 2px rgb(0 0 0 / 0.9));
+}
+.mecha-hit[data-on='true'] {
+  opacity: 1;
+}
+
+/* 鎖定框：跟著目標，鎖定中慢慢縮小，鎖定完成變紅 */
+.mecha-lock {
+  --lock: 1;
+  position: absolute;
+  width: calc(46px + var(--lock) * 40px);
+  height: calc(46px + var(--lock) * 40px);
+  transform: translate(-50%, -50%);
+  border: 2px solid #ffd27a;
+  border-radius: 6px;
+  z-index: 3;
+  pointer-events: none;
+  display: none;
+  box-shadow: 0 0 4px rgb(0 0 0 / 0.6);
+}
+.mecha-lock span {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #ffd27a;
+  text-shadow: 0 0 3px rgb(0 0 0 / 0.9);
+}
+.mecha-lock[data-state='locking'] {
+  display: block;
+}
+.mecha-lock[data-state='locked'] {
+  display: block;
+  border-color: #ff4d4d;
+  border-width: 3px;
+}
+.mecha-lock[data-state='locked'] span {
+  color: #ff4d4d;
+}
+.mecha-lock-note {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 60px);
+  transform: translateX(-50%);
+  z-index: 3;
+  pointer-events: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 3px rgb(0 0 0 / 0.9);
+  white-space: nowrap;
+}
+
+.mecha-warn,
+.mecha-safe {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  pointer-events: none;
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+  display: none;
+  text-align: center;
+}
+.mecha-warn {
+  top: 28%;
+  font-size: 18px;
+  color: #fff;
+  background: color-mix(in srgb, var(--danger) 80%, transparent);
+  animation: mecha-blink 0.5s steps(2) infinite;
+}
+.mecha-safe {
+  bottom: calc(var(--m-bottom) + 120px);
+  font-size: 13px;
+  background: var(--m-glass);
+  color: var(--text-h);
+  border: 1px solid var(--m-line);
+}
+.mecha-warn[data-on='true'],
+.mecha-safe[data-on='true'] {
+  display: block;
+}
+
+/* 被打中：畫面邊緣變紅，箭頭指向開火的方向 */
+.mecha-hurt {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgb(220 30 30 / 0.55) 100%);
+}
+.mecha-hurt-arrow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 180px;
+  height: 180px;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+}
+.mecha-hurt-arrow::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-bottom: 18px solid rgb(255 60 60 / 0.9);
+}
+
+/* 名牌 */
+.mecha-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.mecha-label {
+  position: absolute;
+  display: none;
+  transform: translate(-50%, -100%);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 0 0 3px rgb(0 0 0 / 0.9);
+  white-space: nowrap;
+}
+.mecha-label[data-on='true'] {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+.mecha-label.red {
+  color: color-mix(in srgb, var(--m-red) 70%, #fff);
+}
+.mecha-label.blue {
+  color: color-mix(in srgb, var(--m-blue) 70%, #fff);
+}
+.mecha-label-bar {
+  display: block;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(0 0 0 / 0.5);
+  overflow: hidden;
+}
+.mecha-label-bar span {
+  display: block;
+  height: 100%;
+  background: currentColor;
+}
+
+/* 左下：耐久和推進能量 */
+.mecha-vitals {
+  position: absolute;
+  left: var(--m-left);
+  bottom: var(--m-bottom);
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  padding: 10px 14px;
+  width: min(300px, 44vw);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.mecha-bar-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.mecha-bar-label {
+  font-size: 12px;
+  color: var(--text);
+}
+.mecha-bar-value {
+  min-width: 3ch;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.mecha-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  overflow: hidden;
+}
+.mecha-bar > div {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.1s linear;
+}
+.mecha-bar.hp > div {
+  background: var(--ok);
+}
+.mecha-bar.hp > div[data-low='true'] {
+  background: var(--danger);
+}
+.mecha-bar.energy > div {
+  background: var(--accent);
+  transition: none;
+}
+.mecha-bar.energy > div[data-drained='true'] {
+  background: var(--text);
+}
+.mecha-bar.ammo {
+  height: 6px;
+}
+.mecha-bar.ammo > div {
+  background: var(--text-h);
+  transition: none;
+}
+
+/* 右下：彈藥和飛彈 */
+.mecha-arms {
+  position: absolute;
+  right: var(--m-right);
+  bottom: var(--m-bottom);
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  padding: 10px 14px;
+  min-width: 150px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.mecha-ammo {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.mecha-ammo-value {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+.mecha-ammo-unit {
+  font-size: 13px;
+  color: var(--text);
+}
+.mecha-missiles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mecha-missiles span {
+  width: 10px;
+  height: 22px;
+  border-radius: 5px 5px 2px 2px;
+  background: color-mix(in srgb, var(--text) 25%, transparent);
+}
+.mecha-missiles span[data-on='true'] {
+  background: var(--accent);
+}
+.mecha-missiles em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.mecha-countdown {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  font-size: clamp(64px, 16vmin, 140px);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 4px 16px rgb(0 0 0 / 0.6);
+  pointer-events: none;
+  animation: mecha-pop 0.9s ease-out both;
+}
+.mecha-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--m-top) + 64px);
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 8px 16px;
+  font-weight: 700;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: mecha-in 0.2s ease-out;
+}
+.mecha-ready-note {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--m-bottom) + 90px);
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text);
+  pointer-events: none;
+  max-width: calc(100% - 32px);
+  text-align: center;
+}
+.mecha-dead {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  color: #fff;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 0.7);
+  pointer-events: none;
+  text-align: center;
+}
+.mecha-dead strong {
+  font-size: clamp(22px, 5vmin, 36px);
+}
+.mecha-dead button {
+  pointer-events: auto;
+  min-height: 44px;
+  margin-top: 6px;
+  text-shadow: none;
+}
+/* 重生點裡：換機甲的按鈕（在「重生點」提示的上面） */
+button.mecha-swap {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--m-bottom) + 162px);
+  transform: translateX(-50%);
+  z-index: 5;
+  min-height: 44px;
+  padding: 8px 16px;
+  color: var(--text-h);
+  font-weight: 700;
+  white-space: nowrap;
+}
+button.mecha-swap:hover {
+  border-color: var(--accent);
+}
+.mecha-swap-panel {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 12px;
+}
+.mecha-swap-panel h2 {
+  margin: 0;
+}
+.mecha-watch {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--m-bottom) + 90px);
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+}
+.mecha-watch button {
+  min-height: 40px;
+}
+.mecha-offline {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--m-top) + 110px);
+  transform: translateX(-50%);
+  z-index: 7;
+  padding: 6px 14px;
+  color: var(--danger);
+}
+
+/* 點一下鎖定滑鼠 */
+button.mecha-click {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  display: grid;
+  gap: 4px;
+  padding: 14px 22px;
+  border-radius: 14px;
+  background: var(--m-glass);
+  color: var(--text-h);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+button.mecha-click strong {
+  font-size: 17px;
+}
+button.mecha-click span {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* 選單、選隊、記分板、結算 */
+.mecha-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  box-sizing: border-box;
+  padding: calc(var(--m-top) + 54px) var(--m-right) var(--m-bottom) var(--m-left);
+  pointer-events: none;
+}
+.mecha-center {
+  align-items: center;
+  justify-content: center;
+  padding-top: var(--m-top);
+  background: var(--scrim);
+  pointer-events: auto;
+}
+.mecha-panel {
+  pointer-events: auto;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(460px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding: 18px 20px 20px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 93%, transparent);
+  border: 1px solid var(--m-line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.mecha-panel h1,
+.mecha-panel h2,
+.mecha-panel h3 {
+  margin: 0;
+  color: var(--text-h);
+}
+.mecha-title {
+  font-size: 26px;
+}
+.mecha-help {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.mecha-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mecha-actions button {
+  flex: 1 1 auto;
+  min-height: 44px;
+}
+/* 主要按鈕黏在面板底部 */
+.mecha-sticky {
+  position: sticky;
+  bottom: -20px;
+  margin: 0 -20px -20px;
+  padding: 10px 20px 20px;
+  background: linear-gradient(transparent, var(--surface) 30%);
+}
+button.mecha-start {
+  min-height: 52px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.mecha-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+}
+.mecha-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.mecha-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mecha-card-head strong {
+  font-size: 18px;
+  color: var(--text-h);
+}
+.mecha-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+  margin: 0;
+}
+.mecha-stats div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+.mecha-stats dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 選隊：左右兩隊 */
+.mecha-select {
+  justify-content: flex-start;
+}
+.mecha-select .mecha-panel {
+  width: min(560px, 100%);
+}
+.mecha-select-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mecha-select-timer {
+  padding: 4px 12px;
+  font-weight: 700;
+}
+.mecha-teams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.mecha-team {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+}
+.mecha-team.red {
+  border-color: color-mix(in srgb, var(--m-red) 60%, var(--border));
+}
+.mecha-team.blue {
+  border-color: color-mix(in srgb, var(--m-blue) 60%, var(--border));
+}
+.mecha-team h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 16px;
+}
+.mecha-team.red h3 {
+  color: var(--m-red);
+}
+.mecha-team.blue h3 {
+  color: var(--m-blue);
+}
+.mecha-team h3 .muted {
+  font-size: 12px;
+  font-weight: 400;
+}
+.mecha-team ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-height: 60px;
+  /* 30 對 30 的名單很長：每隊自己捲，下面的機體選擇不會被推到很遠 */
+  max-height: min(40vh, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mecha-team li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 14px;
+}
+.mecha-team li.me .mecha-name {
+  color: var(--accent);
+  font-weight: 700;
+}
+.mecha-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.mecha-team li .chip {
+  margin: 0;
+}
+/* 名單、記分板上每個人開的機甲 */
+.mecha-kind {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text);
+  opacity: 0.75;
+}
+.mecha-guide {
+  display: grid;
+  gap: 10px;
+}
+.mecha-ok {
+  color: var(--ok);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.mecha-team button {
+  min-height: 44px;
+}
+
+/* 記分板 */
+.mecha-board-panel {
+  width: min(900px, 100%);
+}
+.mecha-board {
+  display: grid;
+  gap: 12px;
+}
+/* 寬的畫面兩隊並排（人多的時候比較好比） */
+@media (min-width: 760px) {
+  .mecha-board {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+.mecha-board-team h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 16px;
+}
+.mecha-board-team.red h3 {
+  color: var(--m-red);
+}
+.mecha-board-team.blue h3 {
+  color: var(--m-blue);
+}
+.mecha-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.mecha-table th,
+.mecha-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.mecha-table th {
+  font-size: 13px;
+  font-weight: 500;
+}
+.mecha-table td .chip {
+  margin: 0 0 0 6px;
+}
+.mecha-table tr.me td {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.mecha-result {
+  width: min(640px, 100%);
+}
+.mecha-result h2 {
+  font-size: 30px;
+}
+.mecha-final {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.mecha-mvp {
+  margin: 0;
+}
+.mecha-chat summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  cursor: pointer;
+  color: var(--text-h);
+}
+.mecha-pause {
+  width: min(400px, 100%);
+}
+.mecha-pause > button {
+  min-height: 44px;
+}
+.mecha-range {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+.mecha-range input {
+  width: 100%;
+  min-height: 40px;
+}
+
+/* 手機觸控：左下搖桿、右半邊拖曳瞄準、右下按鈕 */
+.mecha-touch {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.mecha-touch-move,
+.mecha-touch-look {
+  position: absolute;
+  bottom: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+.mecha-touch-move {
+  left: 0;
+  width: 45%;
+  height: 60%;
+}
+.mecha-touch-look {
+  right: 0;
+  width: 55%;
+  top: calc(var(--m-top) + 54px);
+}
+.mecha-stick-hint {
+  position: absolute;
+  left: calc(var(--m-left) + 40px);
+  bottom: calc(var(--m-bottom) + 110px);
+  width: 90px;
+  height: 90px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px dashed var(--m-line);
+  color: var(--text);
+  font-size: 13px;
+  background: color-mix(in srgb, var(--surface) 30%, transparent);
+}
+.mecha-stick {
+  position: fixed;
+  width: 110px;
+  height: 110px;
+  margin: -55px 0 0 -55px;
+  border-radius: 50%;
+  border: 2px solid var(--m-line);
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+  pointer-events: none;
+}
+.mecha-stick span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.mecha-touch-buttons {
+  position: absolute;
+  right: var(--m-right);
+  bottom: calc(var(--m-bottom) + 100px);
+  display: grid;
+  grid-template-columns: 58px 58px 84px;
+  grid-template-rows: 40px 58px 58px;
+  gap: 8px;
+  pointer-events: none;
+}
+button.mecha-btn {
+  pointer-events: auto;
+  touch-action: none;
+  min-height: 0;
+  padding: 0;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--m-glass);
+  color: var(--text-h);
+  border: 1px solid var(--m-line);
+}
+button.mecha-btn.fire {
+  grid-column: 3;
+  grid-row: 2 / span 2;
+  border-radius: 50%;
+  font-size: 16px;
+  align-self: center;
+  height: 84px;
+}
+button.mecha-btn.zoom {
+  grid-column: 3;
+  grid-row: 1;
+  border-radius: 12px;
+  font-size: 13px;
+}
+button.mecha-btn.boost {
+  grid-column: 2;
+  grid-row: 3;
+}
+button.mecha-btn.jump {
+  grid-column: 1;
+  grid-row: 3;
+}
+button.mecha-btn.missile {
+  grid-column: 2;
+  grid-row: 2;
+}
+button.mecha-btn.reload {
+  grid-column: 1;
+  grid-row: 2;
+}
+button.mecha-btn.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+/* 觸控版面：彈藥移到按鈕上面；重生點的提示移到上面，不要蓋住按鈕（換機甲的按鈕在提示下面） */
+.mecha-root.touch .mecha-safe {
+  bottom: auto;
+  top: 30%;
+  max-width: calc(100% - 32px);
+  white-space: normal;
+}
+.mecha-root.touch button.mecha-swap {
+  bottom: auto;
+  top: calc(30% + 64px);
+}
+.mecha-root.touch .mecha-arms {
+  bottom: calc(var(--m-bottom) + 290px);
+  min-width: 0;
+  padding: 6px 10px;
+}
+.mecha-root.touch .mecha-ammo-value {
+  font-size: 22px;
+}
+
+@keyframes mecha-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.mecha-toast {
+  animation-name: mecha-toast-in;
+}
+@keyframes mecha-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+@keyframes mecha-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.6);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+}
+@keyframes mecha-blink {
+  50% {
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mecha-warn,
+  .mecha-countdown,
+  .mecha-feed li,
+  .mecha-toast {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px), (max-height: 480px) {
+  button.mecha-icon {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    font-size: 16px;
+  }
+  .mecha-score {
+    gap: 8px;
+    padding: 4px 10px;
+  }
+  .mecha-score-team strong {
+    font-size: 22px;
+  }
+  .mecha-you {
+    display: none;
+  }
+  .mecha-panel {
+    padding: 14px 16px 16px;
+  }
+  .mecha-sticky {
+    bottom: -16px;
+    margin: 0 -16px -16px;
+    padding: 10px 16px 16px;
+  }
+  .mecha-root {
+    --m-radar: clamp(84px, 24vmin, 120px);
+  }
+  .mecha-radar {
+    top: calc(var(--m-top) + 50px);
+  }
+  .mecha-feed {
+    top: calc(var(--m-top) + 58px + var(--m-radar) * 1.394);
+  }
+  .mecha-feed li {
+    font-size: 12px;
+  }
+  .mecha-vitals {
+    padding: 8px 10px;
+  }
+}
+
+/* 窄螢幕（直的手機）：上排按鈕放不下比分，比分移到第二排；選隊兩欄改成上下 */
+@media (max-width: 520px) {
+  .mecha-top {
+    flex-wrap: wrap;
+  }
+  .mecha-score {
+    order: 3;
+    margin: 0 auto;
+  }
+  .mecha-radar {
+    top: calc(var(--m-top) + 100px);
+  }
+  .mecha-feed {
+    top: calc(var(--m-top) + 108px + var(--m-radar) * 1.394);
+  }
+  /* 提示移到比分下面（不然被比分蓋住），夾在小地圖左邊，太長就換行 */
+  .mecha-toast {
+    top: calc(var(--m-top) + 108px);
+    max-width: calc(100% - 2 * var(--m-radar) - 40px);
+    white-space: normal;
+    text-align: center;
+  }
+  /* 直的手機：小地圖下面到武器欄只放得下兩行擊倒訊息（30 對 30 時訊息很多） */
+  .mecha-feed li:nth-last-child(n + 3) {
+    display: none;
+  }
+  .mecha-teams {
+    grid-template-columns: 1fr;
+  }
+  .mecha-stats {
+    grid-template-columns: 1fr;
+  }
+  .mecha-vitals {
+    width: min(220px, 52vw);
+  }
+  .mecha-touch-buttons {
+    grid-template-columns: 52px 52px 72px;
+    grid-template-rows: 40px 52px 52px;
+  }
+  button.mecha-btn.fire {
+    height: 72px;
+  }
+}
+
+/* 橫放的手機：畫面很矮，選單貼齊上緣 */
+@media (max-height: 480px) {
+  .mecha-layer {
+    padding-top: calc(var(--m-top) + 50px);
+  }
+  .mecha-center {
+    padding-top: var(--m-top);
+  }
+  .mecha-touch-buttons {
+    bottom: calc(var(--m-bottom) + 70px);
+  }
+  .mecha-root.touch .mecha-arms {
+    bottom: calc(var(--m-bottom) + 250px);
+  }
+}
+
+/* 窄螢幕的記分板：每個人一張小卡片 */
+@media (max-width: 640px) {
+  table.responsive.mecha-table tr {
+    display: grid;
+    grid-template-columns: 1fr repeat(4, auto);
+    align-items: center;
+    gap: 2px 10px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+  }
+  table.responsive.mecha-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+    font-size: 13px;
+  }
+  table.responsive.mecha-table td[data-label]::before {
+    content: none;
+  }
+  table.responsive.mecha-table td[data-label='駕駛員'] {
+    grid-column: 1 / -1;
+    font-size: 14px;
+  }
+  table.responsive.mecha-table td[data-label='擊倒']::before {
+    content: '擊倒 ';
+  }
+  table.responsive.mecha-table td[data-label='倒下']::before {
+    content: '倒下 ';
+  }
+  table.responsive.mecha-table td[data-label='傷害']::before {
+    content: '傷害 ';
+  }
+  table.responsive.mecha-table td[data-label='勝場']::before {
+    content: '勝場 ';
+  }
+}
+
+/* ---------- 偵察型的偵察機 ---------- */
+/* 操控偵察機的畫面：四個角的框、中間的準星圈、淡淡的掃描線；左上是訊號（離機甲多遠），下面是操作說明 */
+.mecha-flight {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  display: none;
+}
+.mecha-flight[data-on='true'] {
+  display: block;
+}
+/* 掃描範圍：照鏡頭的視角算出來的框（`--fw`、`--fh` 是佔畫面的寬、高），框裡看得到的敵人才掃得到 */
+.mecha-flight-frame {
+  position: absolute;
+  inset: calc((1 - var(--fh, 0.64)) * 50%) calc((1 - var(--fw, 0.56)) * 50%);
+  background:
+    linear-gradient(var(--m-reticle), var(--m-reticle)) left top / 34px 2px,
+    linear-gradient(var(--m-reticle), var(--m-reticle)) left top / 2px 34px,
+    linear-gradient(var(--m-reticle), var(--m-reticle)) right top / 34px 2px,
+    linear-gradient(var(--m-reticle), var(--m-reticle)) right top / 2px 34px,
+    linear-gradient(var(--m-reticle), var(--m-reticle)) left bottom / 34px 2px,
+    linear-gradient(var(--m-reticle), var(--m-reticle)) left bottom / 2px 34px,
+    linear-gradient(var(--m-reticle), var(--m-reticle)) right bottom / 34px 2px,
+    linear-gradient(var(--m-reticle), var(--m-reticle)) right bottom / 2px 34px;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 2px var(--m-reticle-shadow));
+}
+.mecha-flight-frame span {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--m-reticle);
+  text-shadow: 0 0 3px var(--m-reticle-shadow);
+  white-space: nowrap;
+}
+/* 訊號差的雜訊：小張的畫布拉滿整個畫面，一格一格的 */
+.mecha-static {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  image-rendering: pixelated;
+}
+/* 訊號變弱、中斷的提示：畫面中間偏上 */
+.mecha-flight-signal {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--on-accent);
+}
+.mecha-flight-signal[data-state='ok'] {
+  display: none;
+}
+.mecha-flight-signal[data-state='weak'] {
+  background: color-mix(in srgb, var(--warn) 85%, transparent);
+}
+.mecha-flight-signal[data-state='lost'] {
+  top: 42%;
+  font-size: 18px;
+  background: var(--danger);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--danger) 45%, transparent);
+}
+.mecha-flight-signal span {
+  display: none;
+}
+.mecha-flight-signal[data-state='weak'] .weak,
+.mecha-flight-signal[data-state='lost'] .lost {
+  display: inline;
+}
+.mecha-flight-signal em {
+  font-style: normal;
+}
+.mecha-flight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to bottom, var(--m-feed-scan) 0 1px, transparent 1px 4px);
+}
+.mecha-flight-reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border: 2px solid var(--m-reticle);
+  border-radius: 50%;
+  box-shadow:
+    0 0 3px var(--m-reticle-shadow),
+    inset 0 0 3px var(--m-reticle-shadow);
+}
+.mecha-flight-reticle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--m-reticle);
+}
+.mecha-flight-info {
+  position: absolute;
+  top: calc(var(--m-top) + 54px);
+  left: var(--m-left);
+  width: min(240px, 46vw);
+  box-sizing: border-box;
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+.mecha-flight-info strong {
+  font-size: 14px;
+  color: var(--text-h);
+}
+.mecha-flight-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.mecha-bar.flight {
+  height: 8px;
+}
+.mecha-bar.flight > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+}
+.mecha-bar.flight > span[data-low='true'] {
+  background: var(--danger);
+}
+.mecha-flight-secs {
+  min-width: 4ch;
+  text-align: right;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.mecha-flight-hint {
+  position: absolute;
+  left: 50%;
+  bottom: var(--m-bottom);
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100% - 2 * 320px));
+  box-sizing: border-box;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text-h);
+  text-align: center;
+}
+/* 觸控版面、窄螢幕：說明放在訊號下面（下面是搖桿、按鈕和儀表） */
+.mecha-root.touch .mecha-flight-hint {
+  left: var(--m-left);
+  bottom: auto;
+  top: calc(var(--m-top) + 140px);
+  transform: none;
+  width: min(240px, 46vw);
+  max-width: none;
+  font-size: 12px;
+  text-align: left;
+}
+/* 窄螢幕：框的角短一點（框會壓到儀表，只畫細細的角） */
+@media (max-width: 640px) {
+  .mecha-flight-frame {
+    background-size:
+      18px 2px,
+      2px 18px,
+      18px 2px,
+      2px 18px,
+      18px 2px,
+      2px 18px,
+      18px 2px,
+      2px 18px;
+  }
+  /* 框上面的字會被左上的資訊蓋住，不寫 */
+  .mecha-flight-frame span {
+    display: none;
+  }
+  /* 訊號的提示：短短一句，放在準星下面（上面是資訊和小地圖） */
+  .mecha-flight-signal,
+  .mecha-flight-signal[data-state='lost'] {
+    top: calc(50% + 40px);
+    max-width: 180px;
+    font-size: 14px;
+  }
+  .mecha-flight-signal em {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .mecha-root:not(.touch) .mecha-flight-hint {
+    left: var(--m-left);
+    bottom: auto;
+    top: calc(var(--m-top) + 140px);
+    transform: none;
+    width: min(240px, 46vw);
+    max-width: none;
+    text-align: left;
+  }
+}
+
+/* 被敵人的偵察機掃到：飛彈警告的下面 */
+.mecha-scanned {
+  position: absolute;
+  left: 50%;
+  top: calc(28% + 46px);
+  transform: translateX(-50%);
+  z-index: 4;
+  display: none;
+  pointer-events: none;
+  padding: 5px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--on-accent);
+  background: color-mix(in srgb, var(--warn) 88%, transparent);
+}
+.mecha-scanned[data-on='true'] {
+  display: block;
+}
+
+/* 背上的偵察機（右下的武器欄）；停在原地偵測時多一個閃的「偵測中」 */
+.mecha-rack span {
+  width: 16px;
+  height: 12px;
+  border-radius: 4px;
+}
+.mecha-rack-live {
+  display: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--on-accent);
+  background: var(--warn);
+}
+.mecha-rack[data-out='true'] .mecha-rack-live {
+  display: inline-block;
+  animation: mecha-blink 1.2s steps(2) infinite;
+}
+
+/* 名牌：被偵察機標記的敵人多一行「◆ 偵測到」，名字外面一圈框 */
+.mecha-label-mark {
+  display: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-shadow: none;
+  color: var(--on-accent);
+  background: var(--warn);
+}
+.mecha-label[data-spotted='true'] .mecha-label-mark {
+  display: block;
+  animation: mecha-blink 1s steps(2) infinite;
+}
+.mecha-label[data-spotted='true'] .mecha-label-name {
+  padding: 0 6px;
+  border: 1.5px solid var(--warn);
+  border-radius: 6px;
+}
+
+/* 小地圖：被標記的敵人外面一圈會閃的圈；自己這隊的偵察機和它的掃描範圍 */
+.mecha-radar-ping {
+  display: none;
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 3;
+}
+.mecha-radar-dot[data-state='spotted'] .mecha-radar-ping {
+  display: block;
+  animation: mecha-blink 0.8s steps(2) infinite;
+}
+.mecha-radar-drone[data-on='false'] {
+  display: none;
+}
+.mecha-radar-drone .scan {
+  fill: color-mix(in srgb, var(--warn) 16%, transparent);
+  stroke: var(--warn);
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+  vector-effect: non-scaling-stroke;
+}
+.mecha-radar-drone .scan[data-on='false'] {
+  display: none;
+}
+.mecha-radar-drone rect {
+  fill: var(--warn);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+/* 觸控：偵察機的按鈕在左上那一排；操控時開火鍵變成引爆 */
+button.mecha-btn.drone {
+  grid-column: 1 / span 2;
+  grid-row: 1;
+  border-radius: 12px;
+  font-size: 13px;
+}
+button.mecha-btn.fire.boom {
+  background: color-mix(in srgb, var(--danger) 80%, transparent);
+  border-color: var(--danger);
+  color: var(--on-accent);
+}
+/* 很窄的螢幕：比分換到第二排，偵察機的訊號和說明往下移 */
+@media (max-width: 520px) {
+  .mecha-flight-info {
+    top: calc(var(--m-top) + 100px);
+  }
+  .mecha-root .mecha-flight-hint,
+  .mecha-root.touch .mecha-flight-hint {
+    top: calc(var(--m-top) + 194px);
+  }
+}
+
+/* 變身（堡壘型、砲擊型）：右下的武器欄多一行狀態；變身好了亮起來，變身中、收回中閃 */
+.mecha-mode {
+  font-size: 12px;
+  color: var(--text);
+}
+.mecha-mode > * {
+  display: none;
+}
+.mecha-mode[data-state='0'] .s0,
+.mecha-mode[data-state='1'] .s1,
+.mecha-mode[data-state='2'] .s2,
+.mecha-mode[data-state='3'] .s3 {
+  display: inline-block;
+}
+.mecha-mode .s1,
+.mecha-mode .s3 {
+  animation: mecha-blink 0.6s steps(2) infinite;
+}
+.mecha-mode .s2 {
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+/* 迫擊砲（沒有落點的標示）：準星右邊一條仰角的刻度，左邊是現在幾度、平地上大約打多遠（機甲在準星正下方，不能擋到） */
+.mecha-mortar {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: none;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--m-reticle);
+  text-shadow: 0 0 3px var(--m-reticle-shadow);
+}
+.mecha-mortar[data-on='true'] {
+  display: block;
+}
+.mecha-elev {
+  position: absolute;
+  left: calc(50% + 44px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.mecha-elev-track {
+  position: relative;
+  width: 10px;
+  height: 120px;
+  border-left: 2px solid var(--m-reticle);
+  /* 每 5 度一格（幾格照 `Hud.tsx` 給的 `--steps`） */
+  background: repeating-linear-gradient(to bottom, var(--m-reticle) 0 2px, transparent 2px calc(100% / var(--steps, 8))) left / 8px 100% no-repeat;
+  filter: drop-shadow(0 0 2px var(--m-reticle-shadow));
+}
+.mecha-elev-track::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 8px;
+  height: 2px;
+  background: var(--m-reticle);
+}
+.mecha-elev-track i {
+  position: absolute;
+  left: 9px;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  margin-bottom: -6px;
+  border: 6px solid transparent;
+  border-right-color: var(--accent);
+  border-left-width: 0;
+}
+.mecha-mortar-read {
+  position: absolute;
+  right: calc(50% + 40px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  white-space: pre;
+  font-size: 12px;
+  font-weight: 700;
+}
+.mecha-mortar-read strong {
+  font-size: 26px;
+  line-height: 1.1;
+}
+.mecha-mortar-label {
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mecha-mode .s1,
+  .mecha-mode .s3 {
+    animation: none;
+  }
+}
