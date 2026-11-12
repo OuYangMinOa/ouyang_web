@@ -29,6 +29,11 @@ const GUN_X = 1.3
 const GUN_Y = 0.6
 const BARREL_Z = 1.2
 const MUZZLE_Z = 6.3
+/** 開砲時砲管往後退多少、砲口往上跳多少；整個底盤被往後推多少、車頭往上翹多少（腳掌踩在原地） */
+const RECOIL = 1.4
+const RECOIL_CLIMB = 0.06
+const KICK_BACK = 0.55
+const KICK_TILT = 0.07
 /** 砲管畫出來的仰角範圍（太低會插進地裡；真正的瞄準照鏡頭） */
 const GUN_MIN = -0.45
 const GUN_MAX = 0.95
@@ -45,6 +50,8 @@ export class SniperModel extends Rig {
   private readonly pod: Object3D
   /** 兩門砲開火後退的量 */
   private readonly recoil = [0, 0]
+  /** 開砲的後座力：底盤一下子被往後推、慢慢回來 */
+  private kick = 0
   private lean = 0
   private air = 0
 
@@ -147,6 +154,7 @@ export class SniperModel extends Rig {
   /** 第 `side` 門砲開了一發：砲管往後退，慢慢回來 */
   fire(side: number) {
     this.recoil[side] = 1
+    this.kick = 1
   }
 
   muzzle(side: number, out: Vector3): Vector3 {
@@ -174,14 +182,22 @@ export class SniperModel extends Rig {
     // 底盤：走路時每踩一步晃一下，快跑時壓低、晃得大一點，落地時往下沉
     const bob = Math.abs(Math.sin(b.stride)) * 0.08 * pace
     const hipY = HIP_Y - crouch * 0.45 - b.landed * 0.5 + bob + this.air * 0.1
-    this.chassis.position.y = hipY
+    // 後座力：底盤照砲口的反方向被推開、車頭翹起來（腳掌留在原地，下面算腳的時候扣回去）
+    this.kick = Math.max(0, this.kick - dt * 3)
+    const kick = this.kick * this.kick
+    const rel = wrapAngle(b.aimYaw - b.legs)
+    const offX = -Math.sin(rel) * kick * KICK_BACK
+    const offZ = -Math.cos(rel) * kick * KICK_BACK
+    this.chassis.position.set(offX, hipY, offZ)
+    this.chassis.rotation.set(-Math.cos(rel) * kick * KICK_TILT, 0, Math.sin(rel) * kick * KICK_TILT)
 
-    // 砲塔跟著瞄準轉、砲跟著仰角抬，開過火的砲管往後退（一下子退、慢慢回來）
-    this.turret.rotation.y = wrapAngle(b.aimYaw - b.legs)
+    // 砲塔跟著瞄準轉、砲跟著仰角抬，開過火的砲管往後退、砲口往上跳（一下子退、慢慢回來）
+    this.turret.rotation.y = rel
     for (let i = 0; i < 2; i++) {
-      this.recoil[i] = Math.max(0, this.recoil[i] - dt * 2.5)
-      this.guns[i].rotation.x = -clamp(b.aimPitch, GUN_MIN, GUN_MAX)
-      this.barrels[i].position.z = BARREL_Z - this.recoil[i] * this.recoil[i] * 0.9
+      this.recoil[i] = Math.max(0, this.recoil[i] - dt * 2.2)
+      const r = this.recoil[i] * this.recoil[i]
+      this.guns[i].rotation.x = -clamp(b.aimPitch, GUN_MIN, GUN_MAX) - r * RECOIL_CLIMB
+      this.barrels[i].position.z = BARREL_Z - r * RECOIL
     }
 
     // 腳：先決定腳掌要踩在哪（底盤座標，地面在 -hipY），再用兩節 IK 算大腿和小腿的角度
@@ -194,8 +210,8 @@ export class SniperModel extends Rig {
       const lift = Math.max(0, Math.cos(phase)) * STEP_LIFT * Math.min(pace, 1.3)
       // 在空中縮起來；快跑時往外撐
       const spread = (1 - this.air * 0.3) * (1 + crouch * 0.12)
-      const fx = L.fx * spread
-      const fz = L.fz * spread + swing
+      const fx = L.fx * spread - offX
+      const fz = L.fz * spread + swing - offZ
       const fy = -hipY + lift + this.air * 1.1
       const dx = fx - L.hx
       const dz = fz - L.hz

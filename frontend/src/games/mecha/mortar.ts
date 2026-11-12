@@ -1,6 +1,6 @@
 // 砲擊型「隕星」的模型：兩條反關節的腿撐著一個矮胖的上半身，背上一個大彈藥箱，上面架著一門大口徑迫擊砲（平常往後躺著），
 // 右手一把卡賓槍、左肩是飛彈艙。架砲（`MechBody.deploy` 從 0 到 1）時跪下來、腰後兩支支架撐到地上，
-// 砲管從背後往上翻、立起來朝前（仰角就是瞄準的仰角，`SHELL.elevMin`～`elevMax`），開砲時砲管往後縮一下。
+// 砲管從背後往上翻、立起來朝前（仰角就是瞄準的仰角，`SHELL.elevMin`～`elevMax`），開砲時砲管往後縮一大截、整台機甲被後座力壓得往下一沉。
 // 上半身和砲跟著瞄準轉；腿用兩節的反向運動學擺，膝蓋往後彎。
 import { Group, type Object3D, type Vector3 } from 'three'
 import type { Team } from './map'
@@ -22,6 +22,10 @@ const PIVOT = { y: 1.8, z: -0.95 }
 const STOW = -2.85
 /** 砲管多長（砲口離軸心多遠） */
 const TUBE = 4.2
+/** 開砲時砲管往後縮多少；整台被後座力壓下去、上半身往後仰最多多少（仰角越高壓得越深，越低仰得越多） */
+const RECOIL = 2
+const KICK_SINK = 0.5
+const KICK_TILT = 0.2
 
 type Leg = { hip: Group; knee: Group; ankle: Group }
 
@@ -43,6 +47,8 @@ export class MortarModel extends Rig {
   /** 架砲的進度（`pose` 記下來，`muzzle` 照這個決定從砲口還是槍口出來） */
   private k = 0
   private tubeRecoil = 0
+  /** 開砲的後座力：一下子壓下去、慢慢彈回來 */
+  private kick = 0
   private gunRecoil = 0
   private lean = 0
   private air = 0
@@ -158,8 +164,10 @@ export class MortarModel extends Rig {
   }
 
   fire(_side: number) {
-    if (this.k > 0.5) this.tubeRecoil = 1
-    else this.gunRecoil = 1
+    if (this.k > 0.5) {
+      this.tubeRecoil = 1
+      this.kick = 1
+    } else this.gunRecoil = 1
   }
 
   /** 槍口：架好砲是砲口，不然是右手的卡賓槍 */
@@ -185,10 +193,14 @@ export class MortarModel extends Rig {
     this.air += ((b.onGround ? 0 : 1) - this.air) * Math.min(1, dt * 8)
     const walking = b.onGround ? clamp(speed / SPEC.walk, 0, 1.6) * (1 - k) : 0
     const bob = Math.abs(Math.sin(b.stride)) * 0.12 * Math.min(walking, 1)
-    const hipY = HIP_Y - k * KNEEL - this.lean * 0.3 - b.landed * 0.4 + bob
+    // 後座力：照砲管的仰角分成往下壓和往後仰
+    this.kick = Math.max(0, this.kick - dt * 2.4)
+    const kick = this.kick * this.kick
+    const elev = clamp(b.aimPitch, SHELL.elevMin, SHELL.elevMax)
+    const hipY = HIP_Y - k * KNEEL - this.lean * 0.3 - b.landed * 0.4 + bob - kick * KICK_SINK * (0.35 + 0.65 * Math.sin(elev))
     this.hips.position.y = hipY
     this.torso.position.y = hipY + TORSO_Y
-    this.torso.rotation.set(this.lean * 0.15, wrapAngle(b.aimYaw - b.legs), 0, 'YXZ')
+    this.torso.rotation.set(this.lean * 0.15 - kick * KICK_TILT * (0.25 + 0.75 * Math.cos(elev)), wrapAngle(b.aimYaw - b.legs), 0, 'YXZ')
 
     // 腿：兩節的反向運動學，膝蓋往後彎，腳掌保持水平；跪下時腳掌往前放一點
     for (let i = 0; i < 2; i++) {
@@ -211,10 +223,10 @@ export class MortarModel extends Rig {
       this.struts[i].rotation.set(lerp(1.3, -0.72, k), s * -0.5 * k, 0, 'YXZ')
     }
 
-    // 砲管：從背後往上翻到前面，仰角照瞄準的仰角；開砲時往後縮、慢慢回來
-    this.tubeRecoil = Math.max(0, this.tubeRecoil - dt * 1.6)
-    this.tube.rotation.x = lerp(STOW, -clamp(b.aimPitch, SHELL.elevMin, SHELL.elevMax), k)
-    this.barrel.position.z = -this.tubeRecoil * this.tubeRecoil * 0.8
+    // 砲管：從背後往上翻到前面，仰角照瞄準的仰角；開砲時往後縮一大截、慢慢回來
+    this.tubeRecoil = Math.max(0, this.tubeRecoil - dt * 1.1)
+    this.tube.rotation.x = lerp(STOW, -elev, k)
+    this.barrel.position.z = -this.tubeRecoil * this.tubeRecoil * RECOIL
 
     // 右手的卡賓槍：平常跟著仰角，架砲時垂下來
     this.gunRecoil = Math.max(0, this.gunRecoil - dt * 9)
