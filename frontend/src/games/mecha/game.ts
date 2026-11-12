@@ -25,6 +25,7 @@ import { Effects } from './fx'
 import { Input, type Controls, type PadAction, type TouchState } from './input'
 import { BED, buildMap, inBase, MapIndex, rayBox, WATER, type MapData, type Team } from './map'
 import { createMechKit, disposeMechKit, MechModel, type MechKit, type Rig } from './mech'
+import { MechLighting } from './mechlight'
 import { MortarModel } from './mortar'
 import {
   encodeState,
@@ -40,6 +41,7 @@ import {
   type MechaPlayer,
 } from './online'
 import { clamp, deployedReady, newBody, safe, stepDeploy, stepMech, wrapAngle, type MechBody, type MechInput } from './physics'
+import { Post } from './post'
 import { ReconModel } from './recon'
 import { SniperModel } from './sniper'
 import { armsOf, DRONE, ease, MECH, mechKind, MECHS, SHELL, shellElevation, shellRange, shellTime, TEAMS, type MechKind, type MechSpec } from './spec'
@@ -483,6 +485,12 @@ export class MechGame {
   private readonly index: MapIndex
   private readonly world: World
   private readonly kit: MechKit
+  /** 機甲專用的陰影和反射探針（手機沒有） */
+  private readonly light: MechLighting | null
+  /** 這一格陰影和探針對準哪裡 */
+  private readonly lightAt = new Vector3()
+  /** 泛光、色調映射（手機沒有，直接畫到螢幕上） */
+  private readonly post: Post | null
   private readonly fx: Effects
   private readonly audio: MechAudio
   private readonly input = new Input()
@@ -568,17 +576,21 @@ export class MechGame {
     this.emit = emit
     this.onFrame = onFrame
     // 不支援 WebGL 時這裡會丟錯，由呼叫的人顯示訊息
-    this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     const coarse = window.matchMedia('(pointer: coarse)').matches
+    // 桌機先畫到自己的貼圖上再做後處理（反鋸齒在那張貼圖上做），螢幕那一層就不用多重取樣
+    this.renderer = new WebGLRenderer({ antialias: coarse, powerPreference: 'high-performance' })
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2)
     this.renderer.setPixelRatio(this.pixelRatio)
+    this.post = coarse ? null : new Post(this.renderer)
     host.appendChild(this.renderer.domElement)
     this.map = buildMap()
     this.index = new MapIndex(this.map)
-    this.world = new World(this.map, this.renderer, { mobile: coarse })
-    this.kit = createMechKit()
-    this.kit.shadow.visible = !this.world.realShadows
-    this.fx = new Effects(this.world.scene)
+    this.world = new World(this.map, this.renderer, { mobile: coarse, hdr: !coarse })
+    this.light = coarse ? null : new MechLighting(this.renderer, this.world)
+    this.kit = createMechKit(this.renderer, coarse, this.light)
+    // 機甲腳下的圓影子：有真的影子時只留淡淡的一圈（站在大樓的影子裡也看得出機甲踩在地上），沒有時是唯一的影子
+    this.kit.shadow.opacity = this.world.realShadows ? 0.45 : 1
+    this.fx = new Effects(this.world.scene, !coarse)
     this.audio = new MechAudio(sound)
     this.frame = {
       hp: MECHS.speed.hp,
@@ -616,7 +628,24 @@ export class MechGame {
     this.resize.observe(host)
     this.fit()
     this.preview()
+    this.warm()
     this.raf = requestAnimationFrame(this.loop)
+  }
+
+  /**
+   * 開場先把之後才會用到的東西畫一次：遠處的簡化版（另一組著色器）、偵察機（要烘遮蔽貼圖）。
+   * 不然對戰中第一次有機甲走遠、第一次放偵察機時才編譯、才烘，畫面會卡一下
+   */
+  private warm() {
+    const drone = new DroneModel(this.kit, 0)
+    drone.root.position.set(SHOWCASE.x, 30, SHOWCASE.z)
+    this.world.scene.add(drone.root)
+    for (const p of this.showcase) p.model.setFar(true, this.kit, p.spec)
+    this.orbitCamera(0)
+    this.render()
+    for (const p of this.showcase) p.model.setFar(false, this.kit, p.spec)
+    this.world.scene.remove(drone.root)
+    drone.dispose()
   }
 
   /** 地圖資料（小地圖用） */
@@ -959,6 +988,8 @@ export class MechGame {
     this.clearShowcase()
     this.fx.dispose()
     disposeMechKit(this.kit)
+    this.light?.dispose()
+    this.post?.dispose()
     this.world.dispose()
     this.renderer.dispose()
     this.renderer.forceContextLoss()
@@ -976,6 +1007,7 @@ export class MechGame {
     const w = Math.max(1, this.host.clientWidth)
     const h = Math.max(1, this.host.clientHeight)
     this.renderer.setSize(w, h, false)
+    this.post?.resize()
     this.camera.aspect = w / h
     const s = this.stage
     if (s && s.w > 0 && s.h > 0) {
@@ -1204,8 +1236,12 @@ export class MechGame {
     else this.slowFrames = Math.max(0, this.slowFrames - 2)
     if (this.slowFrames <= 90) return
     if (this.world.cheaper()) {
-      // 先把每一格重畫的陰影換成只畫一次的（機甲改用腳下的圓影子），還是跟不上再降解析度
-      this.kit.shadow.visible = true
+      // 先把每一格重畫的陰影換成只畫一次的（機甲改用腳下的圓影子）
+      this.kit.shadow.opacity = 1
+      this.slowFrames = 0
+    } else if (this.light?.cheaper()) {
+      // 再關掉每一格都要多畫的：機甲的自陰影、反射探針、泛光；還是跟不上再降解析度
+      if (this.post) this.post.glow = false
       this.slowFrames = 0
     } else if (this.pixelRatio > 1) {
       this.pixelRatio = Math.max(1, this.pixelRatio - 0.25)
@@ -1217,8 +1253,30 @@ export class MechGame {
 
   private render() {
     if (this.disposed) return
-    this.world.update(this.time, this.camera.position.x, this.camera.position.y, this.camera.position.z)
-    this.renderer.render(this.world.scene, this.camera)
+    this.world.update(this.time, this.camera, this.particleScale())
+    if (this.light) this.light.update(this.lightAt, this.aimLight())
+    if (this.post) this.post.render(this.world.scene, this.camera, this.time)
+    else this.renderer.render(this.world.scene, this.camera)
+  }
+
+  /**
+   * 機甲的自陰影和反射探針這一格對準哪裡（寫進 `lightAt`），回傳四周多大的範圍要有清楚的自陰影：
+   * 選單是廣場上那幾台、選隊是展示的那一台，對戰是鏡頭跟著的機甲（操控偵察機時是偵察機、倒下了是殘骸）
+   */
+  private aimLight(): number {
+    if (this.phase === 'preview' || this.phase === 'showroom') {
+      const showroom = this.phase === 'showroom'
+      const c = showroom ? SHOWROOM : SHOWCASE
+      this.lightAt.set(c.x, this.index.ground(c.x, 50, c.z, 2, MECH.step) + 3.5, c.z)
+      return showroom ? 9 : 24
+    }
+    const me = this.me
+    const p = me ?? this.pilots[this.focus]
+    if (!p) this.lightAt.copy(this.camera.position)
+    else if (me && me.alive && me.drone?.piloting) this.lightAt.set(me.drone.body.x, me.drone.body.y, me.drone.body.z)
+    else if (!p.alive && p.wreck) this.lightAt.set(p.wreck.x, p.wreck.y + 1.5, p.wreck.z)
+    else this.lightAt.set(p.body.x, p.body.y + 3.5, p.body.z)
+    return 22
   }
 
   private update(dt: number) {

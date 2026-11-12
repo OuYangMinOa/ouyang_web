@@ -165,6 +165,7 @@ export class ReconModel extends Rig {
     muzzle.position.set(0, 0.05, 4.1)
     this.gun.add(muzzle)
     this.muzzlePoint = muzzle
+    this.finish(kit, 'recon')
   }
 
   /** 開了一槍：槍管往後退 */

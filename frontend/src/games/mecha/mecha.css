@@ -40,6 +40,64 @@
   display: block;
 }
 
+/* 載入中：3D 畫面做出來之前蓋住整個畫面（做的那幾秒頁面不會動，進度條只用 transform 動，那時候還是會跑） */
+.mecha-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: var(--m-top) var(--m-right) var(--m-bottom) var(--m-left);
+  background: var(--bg);
+  color: var(--text);
+  text-align: center;
+}
+.mecha-loading strong {
+  font-size: 22px;
+  color: var(--text-h);
+}
+.mecha-loading span {
+  max-width: 28em;
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: balance;
+}
+.mecha-loading-bar {
+  width: min(260px, 70%);
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+.mecha-loading-bar::after {
+  content: '';
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: mecha-loading 1.1s ease-in-out infinite;
+}
+@keyframes mecha-loading {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mecha-loading-bar::after {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
 .mecha-root .red {
   color: var(--m-red);
 }

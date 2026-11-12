@@ -1,4 +1,6 @@
-// 機甲對戰場景的貼圖：全部用 canvas 畫，不下載圖檔。
+// 機甲對戰場景的貼圖：全部用 canvas 畫，不下載圖檔。這裡畫的是每一種材質「原本的樣子」加上不會變的舊損
+// （褪色的招牌、拉下來的鐵捲門、釘上木板的店面）；整座城市各處不一樣的風化和破壞（彈孔、剝落、煤煙、破掉的窗戶）
+// 是著色器照世界座標另外疊上去的（`worldmat.ts`）。
 // 每一種材質除了顏色，還可以多畫三層：
 //   - 高低（灰階，128 是平的）→ 算成法線貼圖，斜射的陽光照上去才看得出磚縫、浪板、石塊的凹凸
 //   - 發光（窗戶、招牌）
@@ -238,18 +240,18 @@ const paintPavers: Paint = (l, rand) => {
   blotches(l.c, w, h, rand, 8, 30, 80, (a) => `rgba(40,38,34,${a})`, 0.16)
 }
 
-/** 草地：深淺不一的草叢 */
+/** 草地：枯黃的草、露出來的泥土 */
 const paintGrass: Paint = (l, rand) => {
   const { w, ht: h } = l
-  fill(l.c, '#4c6a34', 0, 0, w, h)
-  blotches(l.c, w, h, rand, 26, 40, 110, (a) => `rgba(98,128,58,${a})`, 0.4)
-  blotches(l.c, w, h, rand, 20, 30, 90, (a) => `rgba(40,62,30,${a})`, 0.4)
-  blotches(l.c, w, h, rand, 6, 20, 50, (a) => `rgba(134,122,74,${a})`, 0.3)
+  fill(l.c, '#5a5238', 0, 0, w, h)
+  blotches(l.c, w, h, rand, 26, 40, 110, (a) => `rgba(122,108,62,${a})`, 0.4)
+  blotches(l.c, w, h, rand, 20, 30, 90, (a) => `rgba(54,46,32,${a})`, 0.45)
+  blotches(l.c, w, h, rand, 10, 20, 60, (a) => `rgba(78,84,46,${a})`, 0.3)
   for (let i = 0; i < 22000; i++) {
-    const g = 86 + Math.floor(rand() * 84)
+    const g = 84 + Math.floor(rand() * 70)
     const x = rand() * w
     const y = rand() * h
-    fill(l.c, `rgba(${g - 44},${g},${g - 62},0.5)`, x, y, 1, 2 + rand() * 4)
+    fill(l.c, `rgba(${g + 6},${g - 6},${g - 46},0.45)`, x, y, 1, 2 + rand() * 4)
     if (i % 3 === 0) fill(l.h, gray(0.3 + rand() * 0.5), x, y, 1.5, 3)
   }
 }
@@ -475,7 +477,10 @@ function windowPane(l: Layers, x: number, y: number, w: number, h: number, glass
   interior(l.e, x, y, w, h)
 }
 
-/** 開著燈的窗戶裡面看起來的樣子（畫在發光那一層）：天花板的燈最亮，往下暗下來，窗邊一截窗簾、底下一排家具的影子 */
+/**
+ * 開著燈的窗戶裡面看起來的樣子（畫在發光那一層）：天花板的燈最亮，往下暗下來，窗邊一截窗簾、底下一排家具的影子。
+ * 現在整座城市停電，沒有任何材質開發光那一層（`emissive`），`e` 都是 null，這裡不會畫東西
+ */
 function interior(e: Ctx | null, x: number, y: number, w: number, h: number) {
   if (!e) return
   const g = e.createLinearGradient(0, y, 0, y + h)
@@ -632,9 +637,9 @@ const paintApartment: Paint = (l, rand) => {
         streak(l.c, ax + ww * 0.1, y + wh + 16 + fh * 0.14, 6, 50 + rand() * 40, 'rgba(60,50,40,0.3)')
       }
       // 曬衣服
-      if (rand() < 0.25) {
+      if (rand() < 0.1) {
         for (let k = 0; k < 3; k++) {
-          fill(l.c, ['#c8473c', '#3f6fb0', '#e6e2d8', '#d9b44a', '#4f8a5b'][Math.floor(rand() * 5)], x + 10 + k * ww * 0.28, y + 6, ww * 0.2, wh * 0.36)
+          fill(l.c, ['#7d5a54', '#55606e', '#8f8c84', '#857a5a', '#5a6a5c'][Math.floor(rand() * 5)], x + 10 + k * ww * 0.28, y + 6, ww * 0.2, wh * (0.2 + rand() * 0.2))
         }
       }
     }
@@ -693,11 +698,53 @@ const SIGN_COLORS: [string, string][] = [
 ]
 const SIGN_FONT = '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Heiti TC", sans-serif'
 
-/** 一樓店面（一格 24 × 5 公尺、八間）：招牌、騎樓的柱子、玻璃門、鐵捲門、雨遮 */
+/** 把顏色洗舊：往灰的靠（`keep` 是留下多少彩度）、再暗一點 */
+function faded(hex: string, keep: number, dark: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  const m = (ch[0] + ch[1] + ch[2]) / 3
+  const [r, g, b] = ch.map((v) => Math.round((m + (v - m) * keep) * dark))
+  return `rgb(${r},${g},${b})`
+}
+
+/** 噴在鐵捲門、木板上的字 */
+const SPRAY = ['禁入', '有人嗎', 'SOS', '撤', '危', '✕', '快逃', '封鎖', '07', '→ 避難所', '此路不通']
+
+/** 在 (x, y) 開始、寬 w 高 h 的範圍裡噴一個字：歪歪的、顏色不勻 */
+function spray(ctx: Ctx, rand: () => number, x: number, y: number, w: number, h: number) {
+  const word = SPRAY[Math.floor(rand() * SPRAY.length)]
+  const size = Math.min(h * 0.55, (w / Math.max(2, word.length)) * 1.1)
+  ctx.save()
+  ctx.translate(x + w / 2, y + h * (0.35 + rand() * 0.3))
+  ctx.rotate((rand() - 0.5) * 0.24)
+  ctx.font = `900 ${size}px ${SIGN_FONT}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const color = ['214,208,196', '150,32,26', '18,18,20', '214,208,196'][Math.floor(rand() * 4)]
+  // 先噴一層淡的暈開，再噴實的
+  ctx.fillStyle = `rgba(${color},0.22)`
+  for (const [ox, oy] of [
+    [-2, 0],
+    [2, 0],
+    [0, -2],
+    [0, 3],
+  ]) {
+    ctx.fillText(word, ox, oy, w)
+  }
+  ctx.fillStyle = `rgba(${color},${0.6 + rand() * 0.25})`
+  ctx.fillText(word, 0, 0, w)
+  ctx.restore()
+}
+
+/**
+ * 一樓店面（一格 24 × 5 公尺、八間）：停電很久了。招牌褪色、積灰，有幾塊面板掉了；
+ * 一半拉下鐵捲門（生鏽、被撞凹、噴了字），其他的玻璃被砸破、裡面一片黑，或是釘上木板
+ */
 const paintShops: Paint = (l, rand) => {
   const { w, ht: h } = l
-  fill(l.c, '#a9a195', 0, 0, w, h)
-  speckle(l, rand, 4000, 110, 190, 0.2, 5)
+  fill(l.c, '#8f887d', 0, 0, w, h)
+  speckle(l, rand, 4000, 90, 170, 0.22, 5)
+  blotches(l.c, w, h, rand, 18, 60, 200, (a) => `rgba(40,34,28,${a})`, 0.22)
   const bays = 8
   const bw = w / bays
   const top = h * 0.3
@@ -705,80 +752,132 @@ const paintShops: Paint = (l, rand) => {
     const x = b * bw
     const [bg, fg] = SIGN_COLORS[Math.floor(rand() * SIGN_COLORS.length)]
     // 招牌燈箱
-    fill(l.c, '#2a2c2f', x + 10, h * 0.045, bw - 20, h * 0.215)
-    fill(l.c, bg, x + 14, h * 0.055, bw - 28, h * 0.195)
+    fill(l.c, '#232527', x + 10, h * 0.045, bw - 20, h * 0.215)
     fill(l.h, gray(1), x + 10, h * 0.045, bw - 20, h * 0.215)
-    fill(l.e, bg, x + 14, h * 0.055, bw - 28, h * 0.195)
-    fill(l.o, ormStyle(0.35, 0), x + 14, h * 0.055, bw - 28, h * 0.195)
-    const name = SHOP_NAMES[Math.floor(rand() * SHOP_NAMES.length)]
-    const size = Math.min(h * 0.14, (bw - 50) / name.length)
-    for (const ctx of [l.c, l.e]) {
-      if (!ctx) continue
-      ctx.fillStyle = fg
-      ctx.font = `900 ${size}px ${SIGN_FONT}`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(name, x + bw / 2, h * 0.155, bw - 40)
+    if (rand() < 0.7) {
+      fill(l.c, faded(bg, 0.45, 0.6), x + 14, h * 0.055, bw - 28, h * 0.195)
+      fill(l.o, ormStyle(0.6, 0), x + 14, h * 0.055, bw - 28, h * 0.195)
+      const name = SHOP_NAMES[Math.floor(rand() * SHOP_NAMES.length)]
+      const size = Math.min(h * 0.14, (bw - 50) / name.length)
+      l.c.fillStyle = faded(fg, 0.5, 0.68)
+      l.c.font = `900 ${size}px ${SIGN_FONT}`
+      l.c.textAlign = 'center'
+      l.c.textBaseline = 'middle'
+      l.c.fillText(name, x + bw / 2, h * 0.155, bw - 40)
+      // 往下流的髒水
+      for (let k = 0; k < 5; k++) streak(l.c, x + 16 + rand() * (bw - 44), h * 0.055, 4 + rand() * 12, 30 + rand() * 60, `rgba(30,26,22,${0.2 + rand() * 0.25})`)
+    } else {
+      // 面板掉了：裡面黑黑的，看得到幾根燈管，還掛著的一角
+      fill(l.c, '#0e0f10', x + 14, h * 0.055, bw - 28, h * 0.195)
+      fill(l.h, gray(0.25), x + 14, h * 0.055, bw - 28, h * 0.195)
+      for (let k = 0; k < 3; k++) fill(l.c, 'rgba(150,150,140,0.5)', x + 22, h * (0.085 + k * 0.06), bw - 44, 3)
+      l.c.fillStyle = faded(bg, 0.45, 0.58)
+      l.c.beginPath()
+      l.c.moveTo(x + 14, h * 0.055)
+      l.c.lineTo(x + 14 + (bw - 28) * (0.25 + rand() * 0.3), h * 0.055)
+      l.c.lineTo(x + 14 + (bw - 28) * 0.1, h * 0.25)
+      l.c.lineTo(x + 14, h * 0.25)
+      l.c.fill()
     }
     const roll = rand()
     const y0 = top + 14
-    if (roll < 0.28) {
-      // 鐵捲門拉下來
-      fill(l.c, '#8a8d92', x + 16, y0, bw - 32, h - y0)
+    const sx = x + 16
+    const sw = bw - 32
+    if (roll < 0.5) {
+      // 鐵捲門拉下來：生鏽、被撞凹，有的噴了字
+      fill(l.c, '#6c6e72', sx, y0, sw, h - y0)
       for (let y = y0; y < h; y += 9) {
-        fill(l.c, 'rgba(0,0,0,0.28)', x + 16, y, bw - 32, 2.5)
-        fill(l.h, gray(0.25), x + 16, y, bw - 32, 3)
+        fill(l.c, 'rgba(0,0,0,0.3)', sx, y, sw, 2.5)
+        fill(l.h, gray(0.25), sx, y, sw, 3)
       }
-      fill(l.o, ormStyle(0.5, 0.6), x + 16, y0, bw - 32, h - y0)
-      for (let k = 0; k < 3; k++) streak(l.c, x + 20 + rand() * (bw - 50), y0 + rand() * 60, 6 + rand() * 14, 60 + rand() * 120, 'rgba(84,48,24,0.25)')
-    } else {
-      // 玻璃店面：裡面亮著燈，看得到貨架
-      const g = l.c.createLinearGradient(0, y0, 0, h)
-      g.addColorStop(0, '#59636c')
-      g.addColorStop(1, '#20262c')
-      l.c.fillStyle = g
-      l.c.fillRect(x + 16, y0, bw - 32, h - y0)
-      const warm = rand() < 0.7
-      const glow = warm ? 'rgba(255,214,150,0.5)' : 'rgba(200,228,255,0.45)'
-      fill(l.c, glow, x + 24, y0 + 30, bw - 48, h - y0 - 60)
-      fill(l.e, warm ? '#8a6a3c' : '#5a7088', x + 24, y0 + 30, bw - 48, h - y0 - 60)
-      for (let k = 0; k < 4; k++) {
-        const sy = y0 + 50 + k * ((h - y0 - 90) / 4)
-        fill(l.c, 'rgba(40,30,24,0.55)', x + 30, sy + 26, bw - 60, 5)
-        fill(l.e, '#000', x + 30, sy + 26, bw - 60, 5)
-        for (let i = 0; i < 9; i++) {
-          const col = `hsl(${Math.floor(rand() * 360)},${40 + Math.floor(rand() * 40)}%,${40 + Math.floor(rand() * 30)}%)`
-          fill(l.c, col, x + 34 + i * ((bw - 68) / 9), sy + 4 + rand() * 6, (bw - 68) / 11, 20)
+      fill(l.o, ormStyle(0.6, 0.5), sx, y0, sw, h - y0)
+      for (let k = 0; k < 7; k++) streak(l.c, sx + 4 + rand() * (sw - 20), y0 + rand() * 120, 6 + rand() * 18, 60 + rand() * 160, `rgba(96,50,22,${0.25 + rand() * 0.3})`)
+      for (let k = 0; k < 3; k++) {
+        const dx = sx + 20 + rand() * (sw - 40)
+        const dy = y0 + 30 + rand() * (h - y0 - 60)
+        const dr = 14 + rand() * 26
+        for (const ctx of [l.c, l.h]) {
+          if (!ctx) continue
+          const g = ctx.createRadialGradient(dx, dy, 0, dx, dy, dr)
+          g.addColorStop(0, ctx === l.c ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.6)')
+          g.addColorStop(1, 'rgba(0,0,0,0)')
+          ctx.fillStyle = g
+          ctx.fillRect(dx - dr, dy - dr, dr * 2, dr * 2)
         }
       }
-      fill(l.o, ormStyle(0.1, 0.4), x + 16, y0, bw - 32, h - y0)
-      fill(l.h, gray(0.2), x + 16, y0, bw - 32, h - y0)
-      // 門框
-      for (const fx of [x + 16, x + bw / 2 - 3, x + bw - 22]) {
-        fill(l.c, '#2f3236', fx, y0, 6, h - y0)
-        fill(l.e, '#000', fx, y0, 6, h - y0)
+      if (rand() < 0.55) spray(l.c, rand, sx + 10, y0 + 30, sw - 20, h - y0 - 70)
+    } else if (roll < 0.8) {
+      // 玻璃被砸破的店面：裡面一片黑，地上翻倒的貨架，框上還剩幾片碎玻璃
+      const g = l.c.createLinearGradient(0, y0, 0, h)
+      g.addColorStop(0, '#15171a')
+      g.addColorStop(1, '#060707')
+      l.c.fillStyle = g
+      l.c.fillRect(sx, y0, sw, h - y0)
+      fill(l.o, ormStyle(1, 0), sx, y0, sw, h - y0)
+      fill(l.h, gray(0.12), sx, y0, sw, h - y0)
+      for (let k = 0; k < 7; k++) {
+        const v = 34 + Math.floor(rand() * 34)
+        fill(l.c, `rgba(${v + 8},${v + 2},${v - 6},0.85)`, sx + 6 + rand() * (sw - 80), h - 14 - rand() * 80, 20 + rand() * 60, 8 + rand() * 36)
+      }
+      for (let k = 0; k < 12; k++) {
+        // 從框邊往裡面伸的一片尖尖的玻璃
+        const side = Math.floor(rand() * 3)
+        const t = rand()
+        const len = 14 + rand() * 46
+        const half = 5 + rand() * 14
+        const bx = side === 0 ? sx : side === 1 ? sx + sw : sx + t * sw
+        const by = side === 2 ? y0 : y0 + t * (h - y0)
+        const tx = side === 0 ? bx + len : side === 1 ? bx - len : bx + (rand() - 0.5) * 20
+        const ty = side === 2 ? by + len : by + (rand() - 0.5) * 20
+        for (const ctx of [l.c, l.o]) {
+          if (!ctx) continue
+          ctx.fillStyle = ctx === l.c ? 'rgba(126,146,156,0.4)' : ormStyle(0.12, 0.4)
+          ctx.beginPath()
+          ctx.moveTo(side === 2 ? bx - half : bx, side === 2 ? by : by - half)
+          ctx.lineTo(side === 2 ? bx + half : bx, side === 2 ? by : by + half)
+          ctx.lineTo(tx, ty)
+          ctx.fill()
+        }
+      }
+      for (const fx of [sx, x + bw / 2 - 3, sx + sw - 6]) {
+        fill(l.c, '#2a2c2f', fx, y0, 6, h - y0)
         fill(l.h, gray(0.7), fx, y0, 6, h - y0)
       }
+    } else {
+      // 釘上木板：一片一片長短不齊，縫裡黑黑的
+      fill(l.c, '#0c0c0c', sx, y0, sw, h - y0)
+      fill(l.o, ormStyle(0.9, 0), sx, y0, sw, h - y0)
+      const ph = 34
+      for (let y = y0; y < h; y += ph) {
+        const v = 0.7 + rand() * 0.5
+        const inset = rand() * 10
+        fill(l.c, `rgb(${Math.round(84 * v)},${Math.round(66 * v)},${Math.round(44 * v)})`, sx + inset, y + 1.5, sw - inset - rand() * 10, ph - 3)
+        fill(l.h, gray(0.75), sx + inset, y + 2.5, sw - 20, ph - 5)
+        for (let k = 0; k < 6; k++) fill(l.c, 'rgba(30,22,14,0.3)', sx + rand() * sw, y + 3 + rand() * (ph - 8), 20 + rand() * 60, 1.5)
+        for (const nx of [sx + 12, sx + sw - 16]) fill(l.c, 'rgba(20,20,20,0.8)', nx, y + ph / 2 - 2, 4, 4)
+      }
+      if (rand() < 0.5) spray(l.c, rand, sx + 10, y0 + 30, sw - 20, h - y0 - 70)
     }
-    // 雨遮
-    if (rand() < 0.5) {
-      const col = ['#a8322a', '#2f5d8f', '#2f7d4f', '#c98a1e'][Math.floor(rand() * 4)]
-      for (let s = 0; s < bw - 20; s += 20) fill(l.c, s % 40 ? '#e8e2d4' : col, x + 10 + s, top - 4, 20, 22)
-      fill(l.c, 'rgba(0,0,0,0.3)', x + 10, top + 18, bw - 20, 6)
-      fill(l.h, gray(1), x + 10, top - 4, bw - 20, 22)
+    // 雨遮：褪色、下緣破破爛爛
+    if (rand() < 0.45) {
+      const col = faded(['#a8322a', '#2f5d8f', '#2f7d4f', '#c98a1e'][Math.floor(rand() * 4)], 0.5, 0.7)
+      for (let k = 0; k < bw - 20; k += 20) {
+        if (rand() < 0.15) continue
+        fill(l.c, k % 40 ? '#a39d90' : col, x + 10 + k, top - 4, 20, 10 + rand() * 16)
+      }
+      fill(l.h, gray(1), x + 10, top - 4, bw - 20, 10)
     }
     // 兩間中間的柱子
-    fill(l.c, '#8f887c', x - 8, top, 16, h - top)
+    fill(l.c, '#7f786d', x - 8, top, 16, h - top)
     fill(l.h, gray(0.85), x - 8, top, 16, h - top)
-    fill(l.e, '#000', x - 8, 0, 16, h)
   }
-  fill(l.c, '#8f887c', w - 8, top, 8, h - top)
+  fill(l.c, '#7f786d', w - 8, top, 8, h - top)
   // 牆腳的髒污
-  const g = l.c.createLinearGradient(0, h * 0.82, 0, h)
+  const g = l.c.createLinearGradient(0, h * 0.72, 0, h)
   g.addColorStop(0, 'rgba(30,26,22,0)')
-  g.addColorStop(1, 'rgba(30,26,22,0.45)')
+  g.addColorStop(1, 'rgba(30,26,22,0.6)')
   l.c.fillStyle = g
-  l.c.fillRect(0, h * 0.82, w, h * 0.18)
+  l.c.fillRect(0, h * 0.72, w, h * 0.28)
 }
 
 /** 掛在外牆上的直式招牌（一張圖八塊，一塊 1.2 × 4.8 公尺） */
@@ -790,19 +889,21 @@ const paintSigns: Paint = (l, rand) => {
   for (let i = 0; i < SIGN_COUNT; i++) {
     const [bg, fg] = SIGN_COLORS[(i * 4 + Math.floor(rand() * 3)) % SIGN_COLORS.length]
     fill(l.c, '#1f2124', i * sw, 0, sw, h)
-    fill(l.c, bg, i * sw + 6, 6, sw - 12, h - 12)
-    fill(l.e, bg, i * sw + 6, 6, sw - 12, h - 12)
+    fill(l.c, faded(bg, 0.5, 0.62), i * sw + 6, 6, sw - 12, h - 12)
     const word = SIGN_WORDS[(i * 5 + Math.floor(rand() * SIGN_WORDS.length)) % SIGN_WORDS.length]
     const chars = [...word.replace('OK', 'Ｋ')]
     const size = Math.min(sw - 26, (h - 40) / chars.length - 6)
-    for (const ctx of [l.c, l.e]) {
-      if (!ctx) continue
-      ctx.fillStyle = fg
-      ctx.font = `900 ${size}px ${SIGN_FONT}`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      const step = (h - 30) / chars.length
-      chars.forEach((ch, k) => ctx.fillText(ch, i * sw + sw / 2, 15 + step * (k + 0.5), sw - 20))
+    l.c.fillStyle = faded(fg, 0.55, 0.72)
+    l.c.font = `900 ${size}px ${SIGN_FONT}`
+    l.c.textAlign = 'center'
+    l.c.textBaseline = 'middle'
+    const step = (h - 30) / chars.length
+    chars.forEach((ch, k) => l.c.fillText(ch, i * sw + sw / 2, 15 + step * (k + 0.5), sw - 20))
+    // 往下流的髒水、破掉的一角
+    for (let k = 0; k < 4; k++) streak(l.c, i * sw + 8 + rand() * (sw - 24), 6 + rand() * h * 0.5, 4 + rand() * 9, 50 + rand() * 140, `rgba(26,22,18,${0.22 + rand() * 0.25})`)
+    if (rand() < 0.5) {
+      const y = rand() < 0.5 ? 6 : h - 6 - h * 0.22
+      fill(l.c, '#0d0e0f', i * sw + 6, y, sw - 12, h * (0.1 + rand() * 0.12))
     }
   }
 }
@@ -860,7 +961,7 @@ export function createTextures(small: boolean): WorldTextures {
   const k = small ? 0.5 : 1
   const s = (n: number) => Math.round(n * k)
   const facade = (seed: number, paint: Paint, normal: number): Surface =>
-    surface(s(1024), s(1024), seed, paint, { logical: [1200, 1320], normal, emissive: true, orm: true, aux: 0.5, rough: 0.88 })
+    surface(s(1024), s(1024), seed, paint, { logical: [1200, 1320], normal, orm: true, aux: 0.5, rough: 0.88 })
   return {
     asphalt: surface(s(512), s(512), 1, paintAsphalt, { logical: [512, 512], normal: 1.6 }),
     pavers: surface(s(256), s(256), 2, paintPavers, { logical: [256, 256], normal: 2.2 }),
@@ -876,8 +977,8 @@ export function createTextures(small: boolean): WorldTextures {
     office: facade(8, paintOffice, 1.8),
     apartment: facade(9, paintApartment, 1.8),
     glass: facade(7, paintGlass, 0.5),
-    shops: surface(s(2048), s(512), 10, paintShops, { logical: [2400, 500], normal: 1.6, emissive: true, orm: true, aux: 0.5, rough: 0.85 }),
-    signs: surface(s(1024), s(512), 21, paintSigns, { logical: [960, 480], emissive: true }),
+    shops: surface(s(2048), s(512), 10, paintShops, { logical: [2400, 500], normal: 1.6, orm: true, aux: 0.5, rough: 0.9 }),
+    signs: surface(s(1024), s(512), 21, paintSigns, { logical: [960, 480] }),
     waterNormal: waterNormal(small ? 128 : 256, 16),
   }
 }

@@ -149,6 +149,7 @@ export class SniperModel extends Rig {
       this.barrels.push(barrel)
       this.muzzles.push(muzzle)
     }
+    this.finish(kit, 'sniper')
   }
 
   /** 第 `side` 門砲開了一發：砲管往後退，慢慢回來 */
