@@ -277,8 +277,8 @@ export const MECHS: Record<MechKind, MechSpec> = {
       drop: 0.95,
       hitH: 5.2,
       // 變身後鏡頭在正後方、貼得很近，從四門重機槍中間看出去
-      cam: [6, 0, 2.6],
-      zoomCam: [2.6, 0, 1.4],
+      cam: [3.8, 0, 2],
+      zoomCam: [1.6, 0, 1.1],
       zoomFov: 34,
       arms: {
         weapon: '重機槍',
@@ -391,6 +391,8 @@ export const SHELL = {
   elevMax: (85 * Math.PI) / 180,
   /** 架砲時鏡頭抬頭的角度（弧度）：砲管在最低仰角時抬 `base`，砲管每多抬 1 度鏡頭多抬 `follow` 度（不用跟著砲管看到天頂） */
   view: { base: 0.1, follow: 0.3 },
+  /** 自己開砲後鏡頭抬頭看著砲彈飛出去：看幾秒、最多抬到幾度、砲彈放在畫面中間往上多少（鏡頭的位置不動，看完慢慢轉回來） */
+  watch: { time: 1.1, max: 1.2, above: 0.2 },
   /** 平地上最遠、最近大約打多遠（`speed`² ÷ `gravity`，和仰角最高時；電腦和說明用） */
   range: 520,
   min: 90,

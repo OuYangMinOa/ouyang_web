@@ -2,9 +2,14 @@
 // 打中的「叮」、被打中的悶響、鎖定的嗶嗶聲、換彈、偵察機的旋翼和掃描聲。別人的聲音照距離變小聲。
 // 瀏覽器要等使用者點過畫面才肯出聲，所以第一次按按鈕時才建立 AudioContext。
 
+/** 大聲的那一路的音量（一般的聲音是 0.5，還會再被壓小） */
+const LOUD = 0.9
+
 export class MechAudio {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
+  /** 特別大聲的（迫擊砲、電磁砲、砲彈爆炸）走這一路：不跟其他聲音一起被壓小 */
+  private loud: GainNode | null = null
   private noise: AudioBuffer | null = null
   private boost: { gain: GainNode; filter: BiquadFilterNode } | null = null
   private rotor: { gain: GainNode; osc: OscillatorNode } | null = null
@@ -29,6 +34,15 @@ export class MechAudio {
     this.master.gain.value = this.enabled ? 0.5 : 0
     const comp = ctx.createDynamicsCompressor()
     this.master.connect(comp).connect(ctx.destination)
+    this.loud = ctx.createGain()
+    this.loud.gain.value = this.enabled ? LOUD : 0
+    const limit = ctx.createDynamicsCompressor()
+    limit.threshold.value = -6
+    limit.knee.value = 4
+    limit.ratio.value = 16
+    limit.attack.value = 0.002
+    limit.release.value = 0.2
+    this.loud.connect(limit).connect(ctx.destination)
     const length = ctx.sampleRate
     this.noise = ctx.createBuffer(1, length, ctx.sampleRate)
     const data = this.noise.getChannelData(0)
@@ -64,6 +78,7 @@ export class MechAudio {
   setEnabled(on: boolean) {
     this.enabled = on
     if (this.master && this.ctx) this.master.gain.setTargetAtTime(on ? 0.5 : 0, this.ctx.currentTime, 0.05)
+    if (this.loud && this.ctx) this.loud.gain.setTargetAtTime(on ? LOUD : 0, this.ctx.currentTime, 0.05)
   }
 
   dispose() {
@@ -83,10 +98,12 @@ export class MechAudio {
     return true
   }
 
-  private burst(dur: number, freq: number, q: number, type: BiquadFilterType, volume: number, decay: number) {
+  /** 一陣雜訊：`delay` 秒後才出聲（回音用），`loud` 走大聲的那一路 */
+  private burst(dur: number, freq: number, q: number, type: BiquadFilterType, volume: number, decay: number, delay = 0, loud = false) {
     const ctx = this.ctx
-    if (!ctx || !this.master || !this.noise || !this.enabled) return
-    const t = ctx.currentTime
+    const out = loud ? this.loud : this.master
+    if (!ctx || !out || !this.noise || !this.enabled || volume <= 0.001) return
+    const t = ctx.currentTime + delay
     const src = ctx.createBufferSource()
     src.buffer = this.noise
     src.playbackRate.value = 0.8 + Math.random() * 0.4
@@ -97,13 +114,14 @@ export class MechAudio {
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(volume, t)
     gain.gain.exponentialRampToValueAtTime(0.0008, t + decay)
-    src.connect(filter).connect(gain).connect(this.master)
+    src.connect(filter).connect(gain).connect(out)
     src.start(t, Math.random() * 0.5, dur)
   }
 
-  private tone(type: OscillatorType, from: number, to: number, dur: number, volume: number, delay = 0) {
+  private tone(type: OscillatorType, from: number, to: number, dur: number, volume: number, delay = 0, loud = false) {
     const ctx = this.ctx
-    if (!ctx || !this.master || !this.enabled) return
+    const out = loud ? this.loud : this.master
+    if (!ctx || !out || !this.enabled || volume <= 0.001) return
     const t = ctx.currentTime + delay
     const osc = ctx.createOscillator()
     osc.type = type
@@ -112,7 +130,7 @@ export class MechAudio {
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(volume, t)
     gain.gain.exponentialRampToValueAtTime(0.0008, t + dur)
-    osc.connect(gain).connect(this.master)
+    osc.connect(gain).connect(out)
     osc.start(t)
     osc.stop(t + dur + 0.02)
   }
@@ -125,26 +143,53 @@ export class MechAudio {
     this.tone('square', 160, 60, 0.07, 0.22 * v)
   }
 
-  /** 電磁砲一發：尖銳的放電聲加上低沉的轟（傳得比機槍遠） */
+  /** 電磁砲一發：很響的一聲爆裂、尖銳的放電聲、低沉的轟，後面拖一段回音（傳得比機槍遠） */
   cannon(d: number) {
     if (d >= 1 && !this.gate('cannon', 40)) return
-    const v = this.vol(d * 0.5)
-    this.burst(0.6, 600, 0.5, 'lowpass', 0.9 * v, 0.5)
-    this.burst(0.12, 3200, 1.2, 'bandpass', 0.45 * v, 0.1)
-    this.tone('sine', 110, 32, 0.5, 0.7 * v)
-    this.tone('sawtooth', 1800, 260, 0.2, 0.1 * v)
+    const v = this.vol(d * 0.4)
+    this.burst(0.07, 3000, 0.7, 'highpass', 0.9 * this.vol(d), 0.05, 0, true)
+    this.burst(0.16, 3200, 1.2, 'bandpass', 0.6 * v, 0.13, 0, true)
+    this.tone('sawtooth', 2400, 180, 0.28, 0.22 * v, 0, true)
+    this.burst(0.9, 520, 0.5, 'lowpass', 1.1 * v, 0.75, 0, true)
+    this.tone('sine', 130, 28, 0.7, 1.0 * v, 0, true)
+    this.burst(1.0, 260, 0.5, 'lowpass', 0.4 * v, 0.9, 0.2, true)
+  }
+
+  /** 電磁砲打到東西：一聲悶重的撞擊加上碎裂聲 */
+  slam(d: number) {
+    if (!this.gate('slam', 40)) return
+    const v = this.vol(d * 0.6)
+    this.burst(0.06, 2600, 0.8, 'highpass', 0.5 * v, 0.05, 0, true)
+    this.burst(0.5, 700, 0.5, 'lowpass', 0.9 * v, 0.4, 0, true)
+    this.tone('sine', 150, 36, 0.35, 0.8 * v, 0, true)
+    this.burst(0.5, 1800, 0.8, 'bandpass', 0.2 * v, 0.45, 0.08, true)
   }
 
   /**
-   * 迫擊砲開砲：很大、很低沉的一聲「碰」，整張地圖都聽得到（再遠也有四成的音量）。
+   * 迫擊砲開砲：砲口一聲爆裂，接著很大、很低沉的一聲「碰」，後面拖著隆隆的回音。整張地圖都聽得到（再遠也有四成五的音量）。
    * 砲彈落在哪裡對方沒有任何提示，只有這一聲
    */
   mortar(d: number) {
     if (d >= 1 && !this.gate('mortar', 60)) return
-    const v = Math.max(0.4, this.vol(d * 0.2))
-    this.burst(0.9, 260, 0.6, 'lowpass', 1.6 * v, 0.75)
-    this.tone('sine', 85, 28, 0.8, 1.3 * v)
-    this.burst(0.12, 1400, 1, 'bandpass', 0.45 * v, 0.1)
+    const v = Math.max(0.45, this.vol(d * 0.2))
+    this.burst(0.08, 2400, 0.7, 'highpass', 1.1 * this.vol(d), 0.06, 0, true)
+    this.burst(1.4, 320, 0.5, 'lowpass', 1.5 * v, 1.2, 0, true)
+    this.tone('sine', 95, 24, 1.1, 1.4 * v, 0, true)
+    this.tone('triangle', 170, 40, 0.35, 0.8 * v, 0, true)
+    this.burst(1.2, 180, 0.5, 'lowpass', 0.7 * v, 1.1, 0.22, true)
+    this.burst(1.6, 120, 0.5, 'lowpass', 0.45 * v, 1.5, 0.55, true)
+  }
+
+  /** 迫擊砲彈爆炸：比其他爆炸大很多、傳得遠，後面是隆隆的餘響和碎塊落下來的沙沙聲 */
+  blast(d: number) {
+    if (d >= 1 && !this.gate('blast', 60)) return
+    const v = this.vol(d * 0.35)
+    this.burst(0.1, 2000, 0.7, 'highpass', 1.0 * this.vol(d), 0.08, 0, true)
+    this.burst(1.8, 420, 0.4, 'lowpass', 1.6 * v, 1.6, 0, true)
+    this.tone('sine', 110, 22, 1.3, 1.5 * v, 0, true)
+    this.tone('triangle', 200, 45, 0.4, 0.7 * v, 0, true)
+    this.burst(1.6, 160, 0.5, 'lowpass', 0.8 * v, 1.5, 0.25, true)
+    this.burst(1.2, 3000, 0.6, 'highpass', 0.14 * this.vol(d), 1.1, 0.5, true)
   }
 
   /** 變身、收回：液壓的嗡嗡聲加上卡榫扣上的一聲 */

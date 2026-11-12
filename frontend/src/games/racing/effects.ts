@@ -50,10 +50,13 @@ export class Particles {
   private readonly grow: Float32Array
   private readonly opacity: Float32Array
   private readonly material: ShaderMaterial
+  private readonly gravity: number
   private next = 0
 
-  constructor(count: number, additive: boolean) {
+  /** `gravity`：每秒往下加速多少（碎塊用；煙和火光是 0） */
+  constructor(count: number, additive: boolean, gravity = 0) {
     this.count = count
+    this.gravity = gravity
     this.pos = new Float32Array(count * 3)
     this.vel = new Float32Array(count * 3)
     this.color = new Float32Array(count * 3)
@@ -118,6 +121,7 @@ export class Particles {
       }
       this.life[i] -= dt
       const k = i * 3
+      this.vel[k + 1] -= this.gravity * dt
       this.vel[k] *= drag
       this.vel[k + 1] *= drag
       this.vel[k + 2] *= drag

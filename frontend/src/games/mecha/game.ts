@@ -23,7 +23,7 @@ import {
 import { FortressModel } from './fortress'
 import { Effects } from './fx'
 import { Input, type Controls, type PadAction, type TouchState } from './input'
-import { BED, buildMap, inBase, MapIndex, rayBox, type MapData, type Team } from './map'
+import { BED, buildMap, inBase, MapIndex, rayBox, WATER, type MapData, type Team } from './map'
 import { createMechKit, disposeMechKit, MechModel, type MechKit, type Rig } from './mech'
 import { MortarModel } from './mortar'
 import {
@@ -528,6 +528,12 @@ export class MechGame {
   /** 觀戰時鏡頭跟著的座位 */
   private focus = 0
   private zoom = 0
+  /** 自己剛打出去的那一發迫擊砲彈（鏡頭抬頭看著它飛出去）、看的程度 0～1、看到的仰角 */
+  private watch: Shell | null = null
+  private watchK = 0
+  private watchPitch = 0
+  /** 開砲的瞬間視角被震寬幾度（很快縮回來） */
+  private fovKick = 0
   private fov = BASE_FOV
   private hitAt = -1e9
   private hurtAt = -1e9
@@ -1702,13 +1708,31 @@ export class MechGame {
     this.fx.tracer(o.x, o.y, o.z, dir.x, dir.y, dir.z, dist, new Color(TEAMS[p.team].glow), heavy)
     if (heavy) {
       this.audio.cannon(d)
-      // 自己開砲：鏡頭晃一下、準星往上跳一點
+      // 砲口的震波把腳邊的灰塵掀起來
+      if (b.onGround) this.fx.dust(b.x, b.y, b.z, 12)
+      // 自己開砲：鏡頭用力晃一下、視角震寬一下、準星往上跳一點；旁邊的人開砲也感覺得到
       if (p === this.me) {
-        this.fx.shake = Math.min(1, this.fx.shake + 0.3)
+        this.fx.shake = Math.min(1, this.fx.shake + 0.6)
+        this.fovKick = this.fov * 0.1
         b.aimPitch = clamp(b.aimPitch + 0.012, PITCH_MIN, PITCH_MAX)
-      }
+      } else this.fx.shake = Math.min(1, this.fx.shake + clamp(1 - d / 40, 0, 0.3))
     } else this.audio.gun(d)
-    if (t !== Infinity) this.fx.impact(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t, hit !== null || drone !== null, heavy)
+    if (t !== Infinity) {
+      const ix = o.x + dir.x * t
+      const iy = o.y + dir.y * t
+      const iz = o.z + dir.z * t
+      this.fx.impact(ix, iy, iz, hit !== null || drone !== null, heavy)
+      if (heavy) {
+        // 電磁砲打到東西：很響的一聲、附近的鏡頭跟著晃，打在平地上留一片焦痕
+        const di = this.distToCam(ix, iy, iz)
+        this.audio.slam(di)
+        this.fx.shake = Math.min(1, this.fx.shake + clamp(1 - di / 45, 0, 0.45))
+        if (!hit && !drone) {
+          const g = this.flatGround(ix, iy, iz, 1)
+          if (g !== null) this.fx.scorch(ix, g + 0.06, iz, 2.2)
+        }
+      }
+    }
     // 打中敵人的偵察機：伺服器累積到 `DRONE.hp` 就打下來
     if (real && drone) {
       this.hits.push({ seat: drone.seat, w: 'gun', drone: true, ...(p.bot ? { by: p.seat } : {}) })
@@ -1928,13 +1952,34 @@ export class MechGame {
     const msg = { id: this.nextMissile++, o: [round(o.x, 100), round(o.y, 100), round(o.z, 100)], v: [round(vx, 1000), round(vy, 1000), round(vz, 1000)] }
     this.addShell(p, msg.id, msg.o, msg.v, true)
     this.link?.shell({ ...msg, ...(p.bot ? { by: p.seat } : {}) })
-    if (p === this.me) this.fx.shake = Math.min(1, this.fx.shake + 0.35)
+    // 自己開砲：鏡頭用力晃、視角震寬一下，接著抬頭看砲彈飛出去
+    if (p === this.me) {
+      this.fx.shake = 1
+      this.fovKick = 7
+      this.watch = this.shells[this.shells.length - 1] ?? null
+    }
+  }
+
+  /** 爆炸點是不是在一片平的地面上（留焦痕用，半徑 `r`）：是就回傳地面的高度，不是（牆上、斜坡、水裡）回傳 null */
+  private flatGround(x: number, y: number, z: number, r: number): number | null {
+    const g = this.index.ground(x, y + 0.5, z, 0.5, 1)
+    if (g < WATER || Math.abs(g - y) > 1.2) return null
+    for (const [ox, oz] of [
+      [r, 0],
+      [-r, 0],
+      [0, r],
+      [0, -r],
+    ]) {
+      if (Math.abs(this.index.ground(x + ox, y + 0.5, z + oz, 0.5, 1) - g) > 0.4) return null
+    }
+    return g
   }
 
   /** 一發砲彈開始飛（自己的、別人的）：砲口的火光和很大的砲聲（整張地圖都聽得到，這是對方唯一的提示） */
   private addShell(p: Pilot, id: number, o: number[], v: number[], local: boolean) {
     const mesh = this.fx.shellMesh()
     mesh.position.set(o[0], o[1], o[2])
+    mesh.scale.setScalar(1.6)
     const s: Shell = {
       owner: p.seat,
       team: p.team,
@@ -1952,8 +1997,12 @@ export class MechGame {
     }
     this.shells.push(s)
     const vl = Math.hypot(v[0], v[1], v[2]) || 1
-    this.fx.mortarFlash(o[0], o[1], o[2], v[0] / vl, v[1] / vl, v[2] / vl)
-    this.audio.mortar(p === this.me ? 0 : this.distToCam(o[0], o[1], o[2]))
+    const b = p.body
+    this.fx.mortarFlash(o[0], o[1], o[2], v[0] / vl, v[1] / vl, v[2] / vl, b.x, b.y, b.z)
+    const d = p === this.me ? 0 : this.distToCam(o[0], o[1], o[2])
+    this.audio.mortar(d)
+    // 旁邊的人開砲：地面跟著震
+    if (p !== this.me) this.fx.shake = Math.min(1, this.fx.shake + clamp(1 - d / 60, 0, 0.5))
   }
 
   private removeShell(s: Shell) {
@@ -2002,7 +2051,7 @@ export class MechGame {
       s.trail += dt
       while (s.trail > 0.03) {
         s.trail -= 0.03
-        this.fx.trail(s.x - ux * 0.6, s.y - uy * 0.6, s.z - uz * 0.6)
+        this.fx.shellTrail(s.x - ux * 0.6, s.y - uy * 0.6, s.z - uz * 0.6, s.age < 1.5)
       }
       if (!hit && s.age < SHELL.life && s.y > BED - 1) continue
       if (hit) this.explodeShell(s, direct, now)
@@ -2014,9 +2063,11 @@ export class MechGame {
   /** 砲彈爆炸：爆炸半徑內、看得到爆炸點的敵人都擊倒（傷害伺服器算），自己這邊發射的送給伺服器 */
   private explodeShell(s: Shell, direct: Pilot | null, now: number) {
     this.fx.shellBlast(s.x, s.y, s.z)
+    const g = this.flatGround(s.x, s.y, s.z, 3.5)
+    if (g !== null) this.fx.scorch(s.x, g + 0.08, s.z, SHELL.blast * 0.8)
     const d = this.distToCam(s.x, s.y, s.z)
-    this.audio.explosion(d, true)
-    this.fx.shake = Math.min(1, this.fx.shake + clamp(1 - d / 90, 0, 0.7))
+    this.audio.blast(d)
+    this.fx.shake = Math.min(1, this.fx.shake + clamp(1.15 - d / 130, 0, 1))
     if (!s.local) return
     const owner = this.pilots[s.owner]
     if (!owner) return
@@ -2416,6 +2467,18 @@ export class MechGame {
     const fx = Math.sin(yaw) * Math.cos(pitch)
     const fy = Math.sin(pitch)
     const fz = Math.cos(yaw) * Math.cos(pitch)
+    // 砲擊型剛開砲：鏡頭的位置不動，抬頭看著砲彈飛出去（仰角高時砲彈一下就飛出畫面上緣），看完慢慢轉回來
+    const w = p === me ? this.watch : null
+    const watching = w !== null && w.age < SHELL.watch.time && this.shells.includes(w)
+    if (w && watching) {
+      const to = Math.atan2(w.y - this.camPos.y, Math.hypot(w.x - this.camPos.x, w.z - this.camPos.z))
+      this.watchPitch = clamp(to - SHELL.watch.above, pitch, Math.max(pitch, SHELL.watch.max))
+    } else if (w) this.watch = null
+    this.watchK += ((watching ? 1 : 0) - this.watchK) * Math.min(1, dt * (watching ? 9 : 2.2))
+    const look = this.watchK > 0.001 ? pitch + (Math.max(this.watchPitch, pitch) - pitch) * this.watchK : pitch
+    const lx = Math.sin(yaw) * Math.cos(look)
+    const ly = Math.sin(look)
+    const lz = Math.cos(yaw) * Math.cos(look)
     const rx = -Math.cos(yaw)
     const rz = Math.sin(yaw)
     const px = b.x
@@ -2455,13 +2518,20 @@ export class MechGame {
       this.camPos.y + (Math.random() - 0.5) * shake,
       this.camPos.z + (Math.random() - 0.5) * shake,
     )
-    this.camera.lookAt(this.camPos.x + fx * 50, this.camPos.y + fy * 50, this.camPos.z + fz * 50)
+    // 晃的時候看的方向也跟著抖一點（只移位置的話，遠的東西幾乎不會動）
+    this.camera.lookAt(
+      this.camPos.x + lx * 50 + (Math.random() - 0.5) * shake * 3,
+      this.camPos.y + ly * 50 + (Math.random() - 0.5) * shake * 3,
+      this.camPos.z + lz * 50 + (Math.random() - 0.5) * shake * 3,
+    )
     // 衝刺時視角拉寬一點（長弓快跑只拉一半）
     const boost = b.boosting ? (spec.jets ? 1 : 0.5) : 0
     // 直的手機畫面很窄：視角放寬一點，左右才看得到東西
     const base = this.camera.aspect < 1 ? PORTRAIT_FOV : BASE_FOV
     this.fov += (base + boost * 8 - (base - zoomFovOf(p)) * z - this.fov) * Math.min(1, dt * (z > 0.5 ? 12 : 6))
-    this.setFov(this.fov)
+    // 開砲的瞬間視角被震寬一下
+    this.fovKick *= Math.exp(-9 * dt)
+    this.setFov(this.fov + (p === me ? this.fovKick : 0))
   }
 
   /** 偵察機的鏡頭：在機身後上方一點，照偵察機的鏡頭方向看出去，不穿牆 */

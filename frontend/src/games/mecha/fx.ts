@@ -1,8 +1,10 @@
-// 畫面效果：機槍的曳光彈、電磁砲的光束、飛彈和它的煙、迫擊砲彈、槍口火光、打中的火花、爆炸、推進器的火、腳步揚起的灰塵。
+// 畫面效果：機槍的曳光彈、電磁砲的光束、飛彈和它的煙、迫擊砲彈、槍口火光、打中的火花、爆炸（炸飛的碎塊、地上的焦痕、
+// 之後還冒一陣子的煙）、推進器的火、腳步揚起的灰塵。
 // 粒子沿用 3D 賽車的 `Particles`（固定數量輪流用）。
 import {
   AdditiveBlending,
   BoxGeometry,
+  CanvasTexture,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -12,6 +14,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  PlaneGeometry,
   Quaternion,
   Vector3,
   type Scene,
@@ -27,6 +30,47 @@ const SPARK = new Color(0xffd27a)
 const FIRE = new Color(0xff8a2a)
 const FLASH = new Color(0xfff1c0)
 const TRAIL = new Color(0xdedad4)
+const DIRT = new Color(0x4a4238)
+
+const rnd = (k: number) => (Math.random() - 0.5) * k
+
+/** 爆炸、砲口之後還冒一陣子的煙：每 `gap` 秒在原地（往上 `tall` 公尺以內）冒一團，冒 `left` 秒 */
+type Wisp = { x: number; y: number; z: number; left: number; acc: number; gap: number; color: Color; size: number; rise: number; spread: number; tall: number }
+
+/** 地上的焦痕：固定幾片輪流用，`SCORCH_LIFE` 秒後淡掉 */
+type Scorch = { mesh: Mesh; mat: MeshBasicMaterial; age: number }
+const SCORCHES = 14
+const SCORCH_LIFE = 40
+const SCORCH_FADE = 8
+
+/** 焦痕的貼圖：中間黑、往外淡掉，加上一些往外噴的條紋 */
+function scorchTexture(): CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = c.height = 128
+  const g = c.getContext('2d')
+  if (g) {
+    const grad = g.createRadialGradient(64, 64, 3, 64, 64, 64)
+    grad.addColorStop(0, 'rgba(10,8,6,0.95)')
+    grad.addColorStop(0.4, 'rgba(18,14,10,0.8)')
+    grad.addColorStop(0.7, 'rgba(28,22,16,0.32)')
+    grad.addColorStop(1, 'rgba(28,22,16,0)')
+    g.fillStyle = grad
+    g.fillRect(0, 0, 128, 128)
+    g.strokeStyle = 'rgba(8,6,4,0.3)'
+    g.lineCap = 'round'
+    for (let i = 0; i < 46; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r0 = 14 + Math.random() * 14
+      const r1 = 36 + Math.random() * 24
+      g.lineWidth = 1 + Math.random() * 3
+      g.beginPath()
+      g.moveTo(64 + Math.cos(a) * r0, 64 + Math.sin(a) * r0)
+      g.lineTo(64 + Math.cos(a) * r1, 64 + Math.sin(a) * r1)
+      g.stroke()
+    }
+  }
+  return new CanvasTexture(c)
+}
 
 /** 曳光彈：一小段發光的線，沿著彈道飛過去；電磁砲的粗一點、長一點、快很多 */
 type Tracer = {
@@ -52,8 +96,15 @@ const BEAM_LEN = 60
 const MAX_TRACERS = 160
 
 export class Effects {
-  readonly smoke = new Particles(1400, false)
-  readonly glow = new Particles(1200, true)
+  readonly smoke = new Particles(2000, false)
+  readonly glow = new Particles(1500, true)
+  /** 炸飛的碎塊：會往下掉 */
+  readonly chunks = new Particles(500, false, 34)
+  private readonly wisps: Wisp[] = []
+  private readonly scorches: Scorch[] = []
+  private readonly scorchGeo: PlaneGeometry
+  private readonly scorchTex: CanvasTexture
+  private scorchNext = 0
   private readonly tracerMesh: InstancedMesh
   private readonly tracers: Tracer[] = []
   private readonly missileGeo: { body: CylinderGeometry; nose: ConeGeometry; fin: BoxGeometry }
@@ -69,6 +120,9 @@ export class Effects {
   private readonly v = new Vector3()
   private readonly s = new Vector3()
   private readonly up = new Vector3(0, 0, 1)
+  /** 跟某個方向垂直的兩個方向（`basis` 算出來放這裡） */
+  private readonly pu = new Vector3()
+  private readonly pv = new Vector3()
   /** 畫面晃動（爆炸、被打中） */
   shake = 0
 
@@ -99,7 +153,39 @@ export class Effects {
     this.shellGeo.nose.rotateX(Math.PI / 2)
     this.shellGeo.nose.translate(0, 0, 0.8)
     this.shellMat = new MeshStandardMaterial({ color: 0x4a4f45, roughness: 0.5, metalness: 0.5 })
-    scene.add(this.smoke.points, this.glow.points, this.tracerMesh)
+    this.scorchGeo = new PlaneGeometry(2, 2)
+    this.scorchGeo.rotateX(-Math.PI / 2)
+    this.scorchTex = scorchTexture()
+    for (let i = 0; i < SCORCHES; i++) {
+      const mat = new MeshBasicMaterial({ map: this.scorchTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+      const mesh = new Mesh(this.scorchGeo, mat)
+      mesh.visible = false
+      mesh.renderOrder = 1
+      scene.add(mesh)
+      this.scorches.push({ mesh, mat, age: SCORCH_LIFE })
+    }
+    scene.add(this.smoke.points, this.glow.points, this.chunks.points, this.tracerMesh)
+  }
+
+  /** 跟 (dx, dy, dz)（單位向量）垂直的兩個方向，放在 `pu`、`pv` */
+  private basis(dx: number, dy: number, dz: number) {
+    if (Math.abs(dy) > 0.9) this.pu.set(1, 0, 0)
+    else this.pu.set(-dz, 0, dx)
+    const k = this.pu.x * dx + this.pu.y * dy + this.pu.z * dz
+    this.pu.set(this.pu.x - dx * k, this.pu.y - dy * k, this.pu.z - dz * k).normalize()
+    this.pv.set(dy * this.pu.z - dz * this.pu.y, dz * this.pu.x - dx * this.pu.z, dx * this.pu.y - dy * this.pu.x)
+  }
+
+  /** 平的地面上留一片焦痕（半徑 `r`），過一陣子淡掉 */
+  scorch(x: number, y: number, z: number, r: number) {
+    const s = this.scorches[this.scorchNext]
+    this.scorchNext = (this.scorchNext + 1) % SCORCHES
+    s.age = 0
+    s.mesh.position.set(x, y, z)
+    s.mesh.rotation.y = Math.random() * Math.PI * 2
+    s.mesh.scale.set(r, 1, r)
+    s.mat.opacity = 1
+    s.mesh.visible = true
   }
 
   /** 一發迫擊砲彈的模型（彈頭朝 +z，尾巴一點火光） */
@@ -116,24 +202,71 @@ export class Effects {
     return g
   }
 
-  /** 迫擊砲彈爆炸：比飛彈大一圈、揚起一大片灰塵 */
+  /**
+   * 迫擊砲彈爆炸（幾百公尺外也要看得出來炸在哪裡）：一大片閃光、一團往上翻的火球、貼著地面往外衝的一圈灰塵（大約就是爆炸半徑）、
+   * 衝到三四十公尺高的土柱、炸飛的碎塊和火星，之後原地一根黑煙柱再冒好幾秒
+   */
   shellBlast(x: number, y: number, z: number) {
-    this.explosion(x, y, z, 1.9)
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2
-      const sp = 6 + Math.random() * 9
-      this.smoke.emit(x + Math.cos(a) * 2, y + 0.4, z + Math.sin(a) * 2, Math.cos(a) * sp, 1 + Math.random() * 2, Math.sin(a) * sp, DUST, 2.6, 4, 1.4 + Math.random(), 0.6)
+    this.explosion(x, y, z, 3)
+    this.glow.emit(x, y + 1, z, 0, 0, 0, FLASH, 20, 80, 0.2, 1)
+    this.glow.emit(x, y + 1, z, 0, 2, 0, FIRE, 11, 16, 0.45, 0.9)
+    for (let i = 0; i < 16; i++) {
+      this.glow.emit(x + rnd(5), y + 1, z + rnd(5), rnd(8), 18 + Math.random() * 22, rnd(8), Math.random() < 0.6 ? FIRE : FLASH, 4.5, 5, 0.7 + Math.random() * 0.5, 0.9)
     }
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2 + rnd(0.3)
+      const sp = 24 + Math.random() * 22
+      this.smoke.emit(x + Math.cos(a) * 1.5, y + 0.6, z + Math.sin(a) * 1.5, Math.cos(a) * sp, 0.5 + Math.random() * 3, Math.sin(a) * sp, DUST, 3.5, 7, 1.8 + Math.random() * 1.4, 0.65)
+    }
+    for (let i = 0; i < 40; i++) {
+      this.smoke.emit(x + rnd(3), y + 0.5, z + rnd(3), rnd(8), 25 + Math.random() * 70, rnd(8), Math.random() < 0.5 ? DIRT : DARK_SMOKE, 4, 6, 2.6 + Math.random() * 2.4, 0.8)
+    }
+    for (let i = 0; i < 60; i++) {
+      this.chunks.emit(x, y + 0.5, z, rnd(56), 20 + Math.random() * 50, rnd(56), Math.random() < 0.6 ? DIRT : DARK_SMOKE, 0.45 + Math.random() * 0.7, 0, 1.5 + Math.random() * 1.2, 1)
+    }
+    for (let i = 0; i < 26; i++) {
+      this.glow.emit(x, y + 1, z, rnd(60), 8 + Math.random() * 44, rnd(60), SPARK, 0.5, -0.1, 0.9 + Math.random() * 0.9, 1)
+    }
+    this.wisps.push({ x, y: y + 0.5, z, left: 7, acc: 0, gap: 0.07, color: DARK_SMOKE, size: 4, rise: 7, spread: 4, tall: 26 })
   }
 
-  /** 迫擊砲開砲：砲口一團火和往上衝的煙 */
-  mortarFlash(x: number, y: number, z: number, dx: number, dy: number, dz: number) {
-    this.glow.emit(x, y, z, dx * 8, dy * 8, dz * 8, FLASH, 3.4, 5, 0.12, 1)
-    this.glow.emit(x, y, z, dx * 4, dy * 4, dz * 4, FIRE, 2.4, 3, 0.2, 0.9)
+  /**
+   * 迫擊砲開砲：砲口一大團火和順著砲管噴出去的火舌、煙柱，砲口往四周炸開的一圈煙，
+   * 腳邊（`gx…`，站在水裡就沒有）震起來的一圈灰塵，砲口之後還冒一陣子煙
+   */
+  mortarFlash(x: number, y: number, z: number, dx: number, dy: number, dz: number, gx: number, gy: number, gz: number) {
+    this.glow.emit(x, y, z, dx * 10, dy * 10, dz * 10, FLASH, 7, 16, 0.14, 1)
+    this.glow.emit(x, y, z, dx * 5, dy * 5, dz * 5, FIRE, 4.5, 8, 0.3, 0.95)
     for (let i = 0; i < 10; i++) {
-      const sp = 2 + Math.random() * 6
-      this.smoke.emit(x, y, z, dx * sp + (Math.random() - 0.5) * 3, dy * sp + Math.random(), dz * sp + (Math.random() - 0.5) * 3, SMOKE, 1.6, 4, 1.2 + Math.random() * 0.8, 0.55)
+      const sp = 12 + Math.random() * 40
+      this.glow.emit(x, y, z, dx * sp + rnd(4), dy * sp + rnd(4), dz * sp + rnd(4), Math.random() < 0.5 ? FIRE : FLASH, 1.6 + Math.random(), 2, 0.18 + Math.random() * 0.25, 1)
     }
+    for (let i = 0; i < 44; i++) {
+      const sp = 3 + Math.random() * 34
+      this.smoke.emit(x, y, z, dx * sp + rnd(6), dy * sp + rnd(6), dz * sp + rnd(6), Math.random() < 0.35 ? DARK_SMOKE : SMOKE, 2.4, 5.5, 1.8 + Math.random() * 2, 0.8)
+    }
+    this.basis(dx, dy, dz)
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2 + rnd(0.3)
+      const sp = 9 + Math.random() * 8
+      const c = Math.cos(a) * sp
+      const s = Math.sin(a) * sp
+      this.smoke.emit(x, y, z, this.pu.x * c + this.pv.x * s + dx * 2, this.pu.y * c + this.pv.y * s + dy * 2, this.pu.z * c + this.pv.z * s + dz * 2, SMOKE, 2, 5, 1.3 + Math.random() * 1, 0.7)
+    }
+    if (gy >= WATER) {
+      for (let i = 0; i < 30; i++) {
+        const a = (i / 30) * Math.PI * 2 + rnd(0.3)
+        const sp = 10 + Math.random() * 10
+        this.smoke.emit(gx + Math.cos(a) * 2.5, gy + 0.4, gz + Math.sin(a) * 2.5, Math.cos(a) * sp, 0.6 + Math.random() * 1.5, Math.sin(a) * sp, DUST, 2.4, 5.5, 1.5 + Math.random() * 1.2, 0.65)
+      }
+    }
+    this.wisps.push({ x, y, z, left: 2.8, acc: 0, gap: 0.04, color: SMOKE, size: 1.4, rise: 3, spread: 0.9, tall: 0 })
+  }
+
+  /** 迫擊砲彈飛的時候尾巴的火和煙（剛出砲口那一段火比較大，看得到它飛出去） */
+  shellTrail(x: number, y: number, z: number, fresh: boolean) {
+    this.smoke.emit(x, y, z, rnd(0.8), 0.4, rnd(0.8), TRAIL, fresh ? 0.9 : 0.5, fresh ? 3 : 2.2, fresh ? 2.2 : 1.6, 0.55)
+    this.glow.emit(x, y, z, 0, 0, 0, FIRE, fresh ? 1.5 : 0.5, -0.5, fresh ? 0.2 : 0.08, 0.9)
   }
 
   /** 一發飛彈的模型 */
@@ -171,7 +304,7 @@ export class Effects {
       len: dist,
       t: 0,
       color,
-      w: heavy ? 2.6 : 1,
+      w: heavy ? 3.6 : 1,
       speed: heavy ? BEAM_SPEED : TRACER_SPEED,
       tail: heavy ? BEAM_LEN : TRACER_LEN,
     })
@@ -181,30 +314,51 @@ export class Effects {
       this.glow.emit(ox + dx * 0.6, oy + dy * 0.6, oz + dz * 0.6, 0, 0, 0, FIRE, 0.9, 1, 0.05, 0.7)
       return
     }
-    // 電磁砲：很亮的砲口閃光、往兩邊噴的煙，彈道上留下一條慢慢散掉的光
-    this.glow.emit(ox, oy, oz, dx * 10, dy * 10, dz * 10, FLASH, 3.2, 4, 0.1, 1)
-    this.glow.emit(ox + dx, oy + dy, oz + dz, dx * 4, dy * 4, dz * 4, color, 2.2, 3, 0.16, 0.9)
-    for (let i = 0; i < 8; i++) {
-      const sp = 3 + Math.random() * 5
-      this.smoke.emit(ox + dx * 0.8, oy + dy * 0.8, oz + dz * 0.8, dx * sp + (Math.random() - 0.5) * 4, dy * sp + Math.random() * 1.5, dz * sp + (Math.random() - 0.5) * 4, SMOKE, 1.2, 3.5, 0.9 + Math.random() * 0.6, 0.5)
+    // 電磁砲：很亮的砲口閃光、砲口往四周炸開的一圈光和煙、往前噴的煙，彈道上留下一條慢慢散掉的光
+    this.glow.emit(ox, oy, oz, dx * 12, dy * 12, dz * 12, FLASH, 5.5, 12, 0.12, 1)
+    this.glow.emit(ox + dx, oy + dy, oz + dz, dx * 5, dy * 5, dz * 5, color, 3.6, 6, 0.22, 0.95)
+    this.basis(dx, dy, dz)
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + rnd(0.3)
+      const sp = 12 + Math.random() * 5
+      const ux = this.pu.x * Math.cos(a) + this.pv.x * Math.sin(a)
+      const uy = this.pu.y * Math.cos(a) + this.pv.y * Math.sin(a)
+      const uz = this.pu.z * Math.cos(a) + this.pv.z * Math.sin(a)
+      this.glow.emit(ox + dx * 0.5, oy + dy * 0.5, oz + dz * 0.5, ux * sp, uy * sp, uz * sp, color, 0.9, 1.5, 0.16 + Math.random() * 0.1, 0.9)
+      this.smoke.emit(ox + dx * 0.5, oy + dy * 0.5, oz + dz * 0.5, ux * sp * 0.7 + dx * 3, uy * sp * 0.7 + dy * 3, uz * sp * 0.7 + dz * 3, SMOKE, 1.4, 4, 0.9 + Math.random() * 0.7, 0.5)
     }
-    const n = Math.min(90, Math.floor(dist / 4))
+    for (let i = 0; i < 12; i++) {
+      const sp = 5 + Math.random() * 21
+      this.smoke.emit(ox + dx * 0.8, oy + dy * 0.8, oz + dz * 0.8, dx * sp + rnd(4), dy * sp + rnd(4), dz * sp + rnd(4), SMOKE, 1.4, 4, 1 + Math.random() * 0.8, 0.5)
+    }
+    const n = Math.min(110, Math.floor(dist / 3.5))
     for (let i = 1; i <= n; i++) {
       const s = (i / n) * dist
-      this.glow.emit(ox + dx * s, oy + dy * s, oz + dz * s, 0, 0.3, 0, color, 0.7, 0.8, 0.35 + Math.random() * 0.25, 0.55)
+      this.glow.emit(ox + dx * s, oy + dy * s, oz + dz * s, 0, 0.3, 0, color, 0.9, 1, 0.5 + Math.random() * 0.4, 0.6)
     }
   }
 
-  /** 子彈打到東西：火花；打到機甲多一點；`heavy` 是電磁砲，炸出一大團 */
+  /**
+   * 子彈打到東西：火花；打到機甲多一點。`heavy` 是電磁砲：炸出一大團火光、四散的火花和碎塊、一大團煙（打到機甲還有火），
+   * 之後還冒一下煙
+   */
   impact(x: number, y: number, z: number, mech: boolean, heavy = false) {
     if (heavy) {
-      this.glow.emit(x, y, z, 0, 0, 0, FLASH, 3, 6, 0.12, 1)
-      for (let i = 0; i < 14; i++) {
-        this.glow.emit(x, y, z, (Math.random() - 0.5) * 30, Math.random() * 16, (Math.random() - 0.5) * 30, SPARK, 0.35, -0.2, 0.4 + Math.random() * 0.4, 1)
+      this.glow.emit(x, y, z, 0, 0, 0, FLASH, 7, 24, 0.15, 1)
+      this.glow.emit(x, y, z, 0, 1, 0, mech ? FIRE : FLASH, 4, 9, 0.3, 0.9)
+      for (let i = 0; i < 30; i++) {
+        this.glow.emit(x, y, z, rnd(44), Math.random() * 26 - 4, rnd(44), SPARK, 0.4, -0.2, 0.4 + Math.random() * 0.6, 1)
       }
-      for (let i = 0; i < 6; i++) {
-        this.smoke.emit(x, y, z, (Math.random() - 0.5) * 4, 1 + Math.random() * 2, (Math.random() - 0.5) * 4, mech ? DARK_SMOKE : DUST, 1.6, 3, 1 + Math.random() * 0.8, 0.55)
+      for (let i = 0; i < 16; i++) {
+        this.chunks.emit(x, y, z, rnd(22), 6 + Math.random() * 18, rnd(22), mech ? DARK_SMOKE : DIRT, 0.25 + Math.random() * 0.35, 0, 0.9 + Math.random() * 0.7, 1)
       }
+      for (let i = 0; i < 20; i++) {
+        this.smoke.emit(x, y, z, rnd(12), 1 + Math.random() * 9, rnd(12), mech ? DARK_SMOKE : DUST, 2.8, 5, 1.4 + Math.random() * 1.4, 0.7)
+      }
+      if (mech) {
+        for (let i = 0; i < 8; i++) this.glow.emit(x, y, z, rnd(10), Math.random() * 8, rnd(10), FIRE, 1.6, 2, 0.3 + Math.random() * 0.3, 0.9)
+      }
+      this.wisps.push({ x, y, z, left: mech ? 2.4 : 1.6, acc: 0, gap: 0.07, color: mech ? DARK_SMOKE : DUST, size: 1.8, rise: 4, spread: 0.8, tall: 0 })
       return
     }
     const n = mech ? 4 : 2
@@ -268,7 +422,24 @@ export class Effects {
   update(dt: number, scale: number) {
     this.smoke.update(dt, scale)
     this.glow.update(dt, scale)
+    this.chunks.update(dt, scale)
     this.shake = Math.max(0, this.shake - dt * 2.2)
+    for (let i = this.wisps.length - 1; i >= 0; i--) {
+      const w = this.wisps[i]
+      w.left -= dt
+      w.acc += dt
+      while (w.acc > w.gap) {
+        w.acc -= w.gap
+        this.smoke.emit(w.x + rnd(w.spread), w.y + Math.random() * w.tall, w.z + rnd(w.spread), rnd(0.8), w.rise * (0.6 + Math.random() * 0.6), rnd(0.8), w.color, w.size, w.size * 1.4, 1.6 + Math.random() * 1.2, 0.6 * Math.min(1, w.left + 0.3))
+      }
+      if (w.left <= 0) this.wisps.splice(i, 1)
+    }
+    for (const s of this.scorches) {
+      if (!s.mesh.visible) continue
+      s.age += dt
+      if (s.age >= SCORCH_LIFE) s.mesh.visible = false
+      else s.mat.opacity = Math.min(1, (SCORCH_LIFE - s.age) / SCORCH_FADE)
+    }
     let n = 0
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i]
@@ -299,14 +470,24 @@ export class Effects {
   clear() {
     this.smoke.clear()
     this.glow.clear()
+    this.chunks.clear()
+    this.wisps.length = 0
+    for (const s of this.scorches) s.mesh.visible = false
     this.tracers.length = 0
     this.tracerMesh.count = 0
   }
 
   dispose() {
-    this.scene.remove(this.smoke.points, this.glow.points, this.tracerMesh)
+    this.scene.remove(this.smoke.points, this.glow.points, this.chunks.points, this.tracerMesh)
+    for (const s of this.scorches) {
+      this.scene.remove(s.mesh)
+      s.mat.dispose()
+    }
+    this.scorchGeo.dispose()
+    this.scorchTex.dispose()
     this.smoke.dispose()
     this.glow.dispose()
+    this.chunks.dispose()
     this.tracerMesh.dispose()
     this.tracerGeo.dispose()
     this.tracerMat.dispose()
