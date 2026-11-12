@@ -161,6 +161,10 @@ export class MortarModel extends Rig {
     gunMuzzle.position.set(0, 0.05, 2.4)
     this.carbine.add(gunMuzzle)
     this.gunMuzzle = gunMuzzle
+    // 變身時大搬家的：砲管從背後翻到前面、支架撐到地上
+    this.tube.userData.solo = true
+    for (const s of this.struts) s.userData.solo = true
+    this.finish(kit, 'mortar')
   }
 
   fire(_side: number) {

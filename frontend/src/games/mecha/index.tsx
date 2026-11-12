@@ -88,6 +88,8 @@ export default function Mecha() {
   const gameRef = useRef<MechGame | null>(null)
   const frames = useRef<((f: HudFrame) => void) | null>(null)
   const [map, setMap] = useState<MapData | null>(null)
+  /** 3D 畫面做好了沒（做好之前蓋著「載入中」；底下用到遊戲的 effect 等它好了再跑一次） */
+  const [ready, setReady] = useState(false)
   const [phase, setPhase] = useState<Phase>('preview')
   const [countdown, setCountdown] = useState<number | null>(null)
   const [toast, setToast] = useState<{ text: string; id: number } | null>(null)
@@ -238,18 +240,27 @@ export default function Mecha() {
         }
       }
     }
-    let game: MechGame
-    try {
-      game = new MechGame(host, onEvent, (f) => frames.current?.(f), load('mecha:sound', true))
-    } catch {
-      setError('這個瀏覽器沒辦法顯示 3D 畫面（WebGL 沒有開啟或不支援），換個瀏覽器或更新顯示卡驅動程式再試試。')
-      return
-    }
-    game.setSensitivity(load('mecha:sensitivity', 1))
-    gameRef.current = game
-    setMap(game.mapData)
+    // 做 3D 畫面要幾秒（蓋城市、烘機甲的光影、編譯著色器），這段時間整個頁面不會動：
+    // 先讓「載入中」畫出來，隔兩格才開始做
+    let game: MechGame | null = null
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        try {
+          game = new MechGame(host, onEvent, (f) => frames.current?.(f), load('mecha:sound', true))
+        } catch {
+          setError('這個瀏覽器沒辦法顯示 3D 畫面（WebGL 沒有開啟或不支援），換個瀏覽器或更新顯示卡驅動程式再試試。')
+          return
+        }
+        game.setSensitivity(load('mecha:sensitivity', 1))
+        gameRef.current = game
+        setMap(game.mapData)
+        setReady(true)
+      })
+    })
     return () => {
-      game.dispose()
+      if (frame) cancelAnimationFrame(frame)
+      game?.dispose()
       gameRef.current = null
     }
   }, [])
@@ -258,15 +269,15 @@ export default function Mecha() {
   const myTeam: Team = view && view.you !== null ? (view.players[view.you]?.team ?? 0) : 0
   const myKind = mechKind(view && view.you !== null ? view.players[view.you]?.mech : null)
   useEffect(() => {
-    const game = gameRef.current
+    const game = ready ? gameRef.current : null
     if (!game) return
     if (screen === 'menu') game.preview()
     else if (screen === 'select') game.showroom(myTeam, myKind)
-  }, [screen, myTeam, myKind])
+  }, [ready, screen, myTeam, myKind])
 
   // 選隊畫面：機甲畫在選單右邊空出來的那一塊（窄螢幕選單蓋滿整個畫面，就不移）
   useEffect(() => {
-    const game = gameRef.current
+    const game = ready ? gameRef.current : null
     if (!game) return
     if (screen !== 'select') {
       game.setStage(null)
@@ -281,12 +292,12 @@ export default function Mecha() {
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
-  }, [screen])
+  }, [ready, screen])
 
   // 開局：選完隊、收到新的一局（或重新整理後接著打、選了觀戰）
   const startedGame = useRef<number | null>(null)
   useEffect(() => {
-    const game = gameRef.current
+    const game = ready ? gameRef.current : null
     if (!game || !view || screen !== 'battle') {
       if (screen !== 'battle') startedGame.current = null
       return
@@ -323,15 +334,15 @@ export default function Mecha() {
       ping: (t) => party.act({ type: 'ping', t }),
     })
     if (view.you !== null && !isCoarse()) game.lockPointer()
-  }, [screen, view, party])
+  }, [ready, screen, view, party])
 
   // view 變了：活著沒、第幾條命、血量、飛彈、誰開電腦；結算了就停下來
   useEffect(() => {
-    const game = gameRef.current
+    const game = ready ? gameRef.current : null
     if (!game || !view || screen !== 'battle' || startedGame.current !== view.game) return
     game.sync(view.players, view.you !== null && view.driver === view.you, goAtOf(view, party.viewAt))
     if (view.ended) game.end()
-  }, [screen, view, party.viewAt])
+  }, [ready, screen, view, party.viewAt])
 
   // 復活了就不再顯示是誰打倒的
   const meAlive = view && view.you !== null ? view.players[view.you]?.alive !== false : true
@@ -392,8 +403,8 @@ export default function Mecha() {
 
   // 打開選單、換機甲的面板時放開所有按鍵
   useEffect(() => {
-    gameRef.current?.setHold(menu || swap)
-  }, [menu, swap])
+    if (ready) gameRef.current?.setHold(menu || swap)
+  }, [ready, menu, swap])
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -726,6 +737,14 @@ export default function Mecha() {
       {inBattle && (party.error || !party.connected) && (
         <div className="mecha-chip mecha-offline" role="alert">
           {party.error ?? '連線中斷，重新連線中…'}
+        </div>
+      )}
+
+      {!ready && !error && (
+        <div className="mecha-loading" role="status">
+          <strong>機甲整備中…</strong>
+          <span>正在蓋城市、替每一台機甲烘焙光影，第一次進來要幾秒</span>
+          <div className="mecha-loading-bar" aria-hidden="true" />
         </div>
       )}
     </div>

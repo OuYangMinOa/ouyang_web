@@ -126,7 +126,8 @@ export class Effects {
   /** 畫面晃動（爆炸、被打中） */
   shake = 0
 
-  constructor(scene: Scene) {
+  /** `hdr`：畫面有泛光（`post.ts`），火光、曳光彈、飛彈的火調得比 1 亮，才暈得開 */
+  constructor(scene: Scene, hdr = false) {
     this.scene = scene
     this.tracerGeo = new BoxGeometry(0.16, 0.16, 1)
     this.tracerGeo.translate(0, 0, 0.5)
@@ -163,6 +164,11 @@ export class Effects {
       mesh.renderOrder = 1
       scene.add(mesh)
       this.scorches.push({ mesh, mat, age: SCORCH_LIFE })
+    }
+    if (hdr) {
+      this.glow.gain = 2.2
+      this.tracerMat.color.setScalar(3)
+      this.flameMat.color.multiplyScalar(2.5)
     }
     scene.add(this.smoke.points, this.glow.points, this.chunks.points, this.tracerMesh)
   }

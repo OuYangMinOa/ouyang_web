@@ -4,7 +4,7 @@
 // 沒人操控（停在原地偵測）時就停在空中，鏡頭一直朝著停下來時的方向。
 import { AdditiveBlending, DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, type Object3D } from 'three'
 import type { MapIndex, Team } from './map'
-import { part, type MechKit } from './mech'
+import { assemble, part, type MechKit } from './mech'
 import { clamp } from './physics'
 import { DRONE, TEAMS } from './spec'
 
@@ -211,6 +211,8 @@ export class DroneModel {
     this.scanner.rotation.order = 'YXZ'
     this.scanner.add(this.ring)
     this.root.add(this.scanner)
+    // 零件換成合併、倒角過的網格；量位置時當作飛在半空中（不然會被當成貼著地面、沾滿灰塵）
+    assemble(kit, 'drone', this.root, team, () => this.root.position.set(0, 12, 0))
   }
 
   /** 掃描波從頭開始擴 */

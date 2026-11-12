@@ -1,6 +1,10 @@
 // 機甲的模型：全部用方塊和圓柱拼出來，不下載模型檔。這裡是共用的材質、`Rig`（每種機甲的模型都有的）和速度型「疾風」；狙擊型在 `sniper.ts`。
 // 疾風參考的是厚重的老派機甲：往前傾的上半身、兩臂各一門多管速射砲、鳥腳式的反關節腿、背後兩具推進器，左肩掛飛彈艙。
 // 裝甲照隊伍上色（紅隊鏽紅、藍隊鋼藍）。上半身跟著瞄準轉、手臂跟著仰角抬，腳照移動的方向走。
+//
+// 模型檔用 `part()` 一塊一塊擺零件只是在「描述」機甲長怎樣；真正拿來畫的是 `assemble` 做出來的：
+// 零件倒角、同一個關節的合成一個網格（`mechgeo.ts`）、噴上標誌（`mechdecal.ts`）、套上分層的材質（`mechmat.ts`），
+// 每一種機甲第一次做出來時烘一張遮蔽貼圖（`mechbake.ts`）。陰影和反射另外算（`mechlight.ts`）。
 import {
   AdditiveBlending,
   BoxGeometry,
@@ -10,81 +14,123 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DoubleSide,
+  Float32BufferAttribute,
   Group,
+  LatheGeometry,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  SRGBColorSpace,
+  Vector2,
   Vector3,
   type BufferGeometry,
   type Material,
   type Object3D,
+  type WebGLRenderer,
+  type WebGLRenderTarget,
 } from 'three'
+import { bakeOcclusion, canBake, type BakePiece } from './mechbake'
+import { buildParts, LAYER, packCharts, Soup, toGeometry, type Chart, type PartSpec } from './mechgeo'
+import { planDecals } from './mechdecal'
+import { MECH_LAYER, type MechLighting } from './mechlight'
+import { createBodyMaterial, createLook, type BodyMaterial, type MechLook } from './mechmat'
+import { createMechTextures, disposeMechTextures, type MechTextures } from './mechtex'
 import type { MechBody } from './physics'
-import { clamp, wrapAngle } from './physics'
-import { MECHS, TEAMS } from './spec'
+import { clamp, newBody, wrapAngle } from './physics'
+import { MECHS, TEAMS, type MechKind } from './spec'
 import type { Team } from './map'
+
+/**
+ * 一種機甲（或偵察機）拿來畫的東西，第一台做出來時算好，之後每一台共用：
+ * 每個關節一個合併好的網格、每隊一個材質、烘好的遮蔽貼圖
+ */
+export type Blueprint = {
+  geos: BufferGeometry[]
+  mats: BodyMaterial[]
+  /** 遠處用的簡化版：整台（站好的姿勢）合成一個網格，沒有倒角，一次 draw call；材質少一層 */
+  far: BufferGeometry
+  farMats: BodyMaterial[]
+  ao: WebGLRenderTarget | null
+}
 
 /** 所有機甲共用的幾何和材質（每隊一份裝甲） */
 export type MechKit = {
+  /**
+   * `part()` 擺零件用的單位幾何和材質。裝甲、副色、鋼、骨架這四種只是記號（哪個零件是哪一層）：
+   * 模型組好後 `assemble` 會把用它們擺的零件換成合併、倒角過的網格和真正的材質（`Blueprint`）
+   */
   geo: Record<string, BufferGeometry>
   armor: MeshStandardMaterial[]
   trim: MeshStandardMaterial[]
   glow: MeshBasicMaterial[]
+  /** 推進器噴嘴裡的餘燼：和 `glow` 同一個顏色，暗很多（鏡頭一直在機甲後面，太亮會一直有兩顆燈在畫面中間） */
+  ember: MeshBasicMaterial[]
   flame: MeshBasicMaterial[]
   metal: MeshStandardMaterial
   dark: MeshStandardMaterial
   shadow: MeshBasicMaterial
   missile: MeshStandardMaterial
+  /** 飛彈艙裡露出來的彈頭（`part()` 用圓錐加 `missile` 擺的會換成這個幾何和材質） */
+  warhead: MeshStandardMaterial
   textures: CanvasTexture[]
+  /** 機甲材質的細節貼圖和共用的參數 */
+  detail: MechTextures
+  look: MechLook
+  blueprints: Map<string, Blueprint>
+  /** 烘遮蔽貼圖用；沒有（測試）就不烘 */
+  renderer: WebGLRenderer | null
+  /** 手機：貼圖小一半、材質少一層 */
+  lite: boolean
+  /** 機甲專用的陰影和反射探針（`mechlight.ts`）；沒有就用場景的 */
+  light: MechLighting | null
 }
 
-/** 裝甲的貼圖：面板分割線、鉚釘、一點髒污，乘在隊伍的顏色上 */
-function panelTexture(): CanvasTexture {
-  const size = 256
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#e8e8e8'
-  ctx.fillRect(0, 0, size, size)
-  // 髒污
-  for (let i = 0; i < 900; i++) {
-    const v = 200 + Math.floor(Math.random() * 55)
-    ctx.fillStyle = `rgba(${v},${v},${v},0.35)`
-    ctx.fillRect(Math.random() * size, Math.random() * size, 2 + Math.random() * 6, 2 + Math.random() * 6)
+/**
+ * 飛彈的彈頭：和 `geo.cone` 一樣寬的那頭在原點、尖端沿著 -y（半徑 0.5、長 1，照 `part()` 的大小放大），
+ * 尖拱形的頭、後面一小段彈體；尖端紅色、中間一圈深色的環（頂點顏色）
+ */
+function warheadGeometry(): LatheGeometry {
+  const profile: Vector2[] = []
+  // 尖拱：從尖端（y = -1）彎到最粗的地方（y = -0.42），再直直到底
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8
+    profile.push(new Vector2(0.5 * Math.sin((t * Math.PI) / 2) ** 0.8, -1 + t * 0.58))
   }
-  // 面板線
-  ctx.strokeStyle = 'rgba(40,40,40,0.55)'
-  ctx.lineWidth = 2
-  ctx.strokeRect(6, 6, size - 12, size - 12)
-  ctx.beginPath()
-  ctx.moveTo(size * 0.55, 6)
-  ctx.lineTo(size * 0.55, size * 0.62)
-  ctx.lineTo(size - 6, size * 0.62)
-  ctx.moveTo(6, size * 0.35)
-  ctx.lineTo(size * 0.55, size * 0.35)
-  ctx.stroke()
-  // 鉚釘
-  ctx.fillStyle = 'rgba(60,60,60,0.6)'
-  for (const [x, y] of [
-    [16, 16],
-    [size - 16, 16],
-    [16, size - 16],
-    [size - 16, size - 16],
-    [size * 0.55 + 10, size * 0.62 + 10],
-  ]) {
-    ctx.beginPath()
-    ctx.arc(x, y, 3, 0, Math.PI * 2)
-    ctx.fill()
+  profile.push(new Vector2(0.5, -0.3), new Vector2(0.46, -0.28), new Vector2(0.46, -0.2), new Vector2(0.5, -0.18), new Vector2(0.5, 0))
+  const geo = new LatheGeometry(profile, 16)
+  const pos = geo.attributes.position
+  const colors: number[] = []
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i)
+    if (y < -0.74) colors.push(0.62, 0.08, 0.05)
+    else if (y > -0.3 && y < -0.17) colors.push(0.07, 0.07, 0.08)
+    else colors.push(0.78, 0.79, 0.8)
   }
-  // 磨掉漆的邊
-  ctx.fillStyle = 'rgba(255,255,255,0.5)'
-  ctx.fillRect(6, 6, size - 12, 3)
-  const tex = new CanvasTexture(canvas)
-  tex.colorSpace = SRGBColorSpace
-  tex.anisotropy = 4
-  return tex
+  geo.setAttribute('color', new Float32BufferAttribute(colors, 3))
+  return geo
+}
+
+/**
+ * 彈藥箱旁邊掛的迫擊砲彈：和 `geo.cyl` 一樣以原點為中心、沿著 y（半徑 0.5、長 1），上面是尖拱形的彈頭；
+ * 彈體橄欖綠、一圈黃色的識別帶、引信是鋼的顏色（頂點顏色）
+ */
+function shellGeometry(): LatheGeometry {
+  const profile: Vector2[] = [new Vector2(0.0, -0.5), new Vector2(0.44, -0.5), new Vector2(0.5, -0.44), new Vector2(0.5, 0.08)]
+  for (let i = 1; i <= 7; i++) {
+    const t = i / 7
+    profile.push(new Vector2(0.5 * Math.cos((t * Math.PI) / 2) ** 0.7 + 0.04 * t, 0.08 + t * 0.42))
+  }
+  const geo = new LatheGeometry(profile, 14)
+  const pos = geo.attributes.position
+  const colors: number[] = []
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i)
+    if (y > 0.38) colors.push(0.5, 0.5, 0.52)
+    else if (y > -0.02 && y < 0.1) colors.push(0.7, 0.55, 0.08)
+    else colors.push(0.17, 0.2, 0.14)
+  }
+  geo.setAttribute('color', new Float32BufferAttribute(colors, 3))
+  return geo
 }
 
 /** 機甲底下的圓形影子 */
@@ -102,18 +148,18 @@ function shadowTexture(): CanvasTexture {
   return new CanvasTexture(canvas)
 }
 
-export function createMechKit(): MechKit {
-  const panel = panelTexture()
+export function createMechKit(renderer: WebGLRenderer | null = null, lite = false, light: MechLighting | null = null): MechKit {
   const shadowTex = shadowTexture()
-  const armor = TEAMS.map(
-    (t) => new MeshStandardMaterial({ color: t.armor, map: panel, roughness: 0.55, metalness: 0.35 }),
-  )
-  const trim = TEAMS.map((t) => new MeshStandardMaterial({ color: t.trim, map: panel, roughness: 0.6, metalness: 0.4 }))
-  const glow = TEAMS.map((t) => new MeshBasicMaterial({ color: t.glow }))
+  const detail = createMechTextures(lite, renderer ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 1)
+  const armor = TEAMS.map((t) => new MeshStandardMaterial({ color: t.armor, roughness: 0.5, metalness: 0.1 }))
+  const trim = TEAMS.map((t) => new MeshStandardMaterial({ color: t.trim, roughness: 0.55, metalness: 0.1 }))
+  // 有泛光（桌機）時發光的地方比 1 亮很多，暈得開；沒有的話只亮一點，不然整塊變白
+  const glow = TEAMS.map((t) => new MeshBasicMaterial({ color: new Color(t.glow).multiplyScalar(light ? 5 : 1.5) }))
+  const ember = TEAMS.map((t) => new MeshBasicMaterial({ color: new Color(t.glow).multiplyScalar(0.5) }))
   const flame = TEAMS.map(
     (t) =>
       new MeshBasicMaterial({
-        color: new Color(t.glow).lerp(new Color(0xffffff), 0.25),
+        color: new Color(t.glow).lerp(new Color(0xffffff), 0.25).multiplyScalar(light ? 2.4 : 1),
         transparent: true,
         opacity: 0.85,
         blending: AdditiveBlending,
@@ -132,25 +178,179 @@ export function createMechKit(): MechKit {
   // 火焰：圓錐倒過來，寬的那頭在原點、尖端沿著 -y 長出去
   geo.cone.rotateX(Math.PI)
   geo.cone.translate(0, -0.5, 0)
+  geo.warhead = warheadGeometry()
+  geo.shell = shellGeometry()
   return {
     geo,
     armor,
     trim,
     glow,
+    ember,
     flame,
-    metal: new MeshStandardMaterial({ color: 0x8b9097, map: panel, roughness: 0.4, metalness: 0.7 }),
+    metal: new MeshStandardMaterial({ color: 0x8b9097, roughness: 0.4, metalness: 0.7 }),
     dark: new MeshStandardMaterial({ color: 0x2c2e31, roughness: 0.7, metalness: 0.5 }),
+    // 有真的影子時這片圓影子畫淡一點（當成機甲壓在地上的那一圈暗），沒有時是唯一的影子
     shadow: new MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }),
     missile: new MeshStandardMaterial({ color: 0xd9dcdf, roughness: 0.4, metalness: 0.3, emissive: 0x330000 }),
-    textures: [panel, shadowTex],
+    warhead: new MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.32, metalness: 0.15 }),
+    textures: [shadowTex],
+    detail,
+    look: createLook(detail),
+    blueprints: new Map(),
+    renderer,
+    lite,
+    light,
   }
 }
 
 export function disposeMechKit(kit: MechKit) {
   for (const g of Object.values(kit.geo)) g.dispose()
-  const mats: Material[] = [...kit.armor, ...kit.trim, ...kit.glow, ...kit.flame, kit.metal, kit.dark, kit.shadow, kit.missile]
+  const mats: Material[] = [...kit.armor, ...kit.trim, ...kit.glow, ...kit.ember, ...kit.flame, kit.metal, kit.dark, kit.shadow, kit.missile, kit.warhead]
   for (const m of mats) m.dispose()
   for (const t of kit.textures) t.dispose()
+  for (const bp of kit.blueprints.values()) {
+    for (const g of bp.geos) g.dispose()
+    for (const m of bp.mats) m.dispose()
+    bp.far.dispose()
+    for (const m of bp.farMats) m.dispose()
+    bp.ao?.dispose()
+  }
+  kit.blueprints.clear()
+  disposeMechTextures(kit.detail)
+}
+
+const ONE = new Vector3(1, 1, 1)
+
+/** `part()` 擺的一個零件換成要做的幾何：哪種形狀、哪一層材質；液壓桿拆成套筒、鍍鉻的桿和一圈擋環 */
+function partSpecs(kit: MechKit, mesh: Mesh, groupWorld: Matrix4): PartSpec[] {
+  const mat = mesh.material as Material
+  const layer = mat === kit.metal ? LAYER.metal : mat === kit.dark ? LAYER.dark : kit.trim.includes(mat as MeshStandardMaterial) ? LAYER.trim : LAYER.armor
+  const local = new Matrix4().compose(mesh.position, mesh.quaternion, ONE)
+  const world = groupWorld.clone().multiply(local)
+  const size: [number, number, number] = [mesh.scale.x, mesh.scale.y, mesh.scale.z]
+  const g = mesh.geometry
+  if (g === kit.geo.box) return [{ shape: 'box', size, local, world, layer }]
+  if (g === kit.geo.nozzle) return [{ shape: 'nozzle', size, local, world, layer }]
+  if (g === kit.geo.cyl) return [{ shape: 'cyl', size, local, world, layer }]
+  // 六角柱：粗的、長的是液壓桿，細的是天線
+  const d = Math.max(size[0], size[2])
+  const len = size[1]
+  if (d < 0.1 || len < 0.75) return [{ shape: 'rod', size, local, world, layer: LAYER.metal }]
+  const along = (y: number) => {
+    const m = local.clone().multiply(new Matrix4().makeTranslation(0, y, 0))
+    return { local: m, world: groupWorld.clone().multiply(m) }
+  }
+  return [
+    { shape: 'cyl', size: [d * 1.2, len * 0.54, d * 1.2], layer: LAYER.dark, ...along(-len * 0.23) },
+    { shape: 'cyl', size: [d * 1.5, 0.06, d * 1.5], layer: LAYER.metal, ...along(len * 0.04) },
+    { shape: 'cyl', size: [d * 0.62, len * 0.5, d * 0.62], layer: LAYER.chrome, ...along(len * 0.25) },
+    { shape: 'cyl', size: [d * 1.1, 0.07, d * 1.1], layer: LAYER.metal, ...along(len * 0.5 - 0.035) },
+  ]
+}
+
+function isSolid(kit: MechKit, o: Object3D): o is Mesh {
+  if (!(o instanceof Mesh)) return false
+  const m = o.material as Material
+  const g = o.geometry
+  if (g !== kit.geo.box && g !== kit.geo.cyl && g !== kit.geo.cyl6 && g !== kit.geo.nozzle) return false
+  return m === kit.metal || m === kit.dark || kit.armor.includes(m as MeshStandardMaterial) || kit.trim.includes(m as MeshStandardMaterial)
+}
+
+/** 每個有實心零件的關節（照固定的順序走，同一種機甲每一台都一樣） */
+function solidGroups(kit: MechKit, root: Object3D): { node: Object3D; parts: Mesh[] }[] {
+  const out: { node: Object3D; parts: Mesh[] }[] = []
+  root.traverse((node) => {
+    const parts = node.children.filter((c) => isSolid(kit, c)) as Mesh[]
+    if (parts.length) out.push({ node, parts })
+  })
+  return out
+}
+
+function hashText(s: string): number {
+  let h = 7
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0
+  return Math.abs(h) % 9973
+}
+
+/**
+ * 把 `root` 底下用 `part()` 擺好的實心零件（裝甲、副色、鋼、骨架）換成合併、倒角過的網格，每個關節一個。
+ * 同一個 `key`（哪一種機甲）第一次呼叫時做幾何、烘遮蔽貼圖，之後的每一台直接共用。
+ * `pose` 把模型擺成站好的樣子（`deployed` 是變身後）：算每個零件離地多高、哪一面朝上、烘遮蔽時零件之間的位置都照這個姿勢。
+ * 關節的 `userData.solo` 是「變身時會大搬家的」（堡壘型的重機槍和盾、砲擊型的砲管、支架）：它們照變身後的樣子、只算自己擋自己，
+ * 也不會在別的零件上留下影子
+ */
+export function assemble(kit: MechKit, key: string, root: Object3D, team: Team, pose?: (deployed: boolean) => void): Blueprint {
+  const groups = solidGroups(kit, root)
+  let bp = kit.blueprints.get(key)
+  if (!bp) {
+    const solo = groups.map(({ node }) => {
+      for (let o: Object3D | null = node; o && o !== root; o = o.parent) if (o.userData.solo) return true
+      return false
+    })
+    const snapshot = (deployed: boolean) => {
+      pose?.(deployed)
+      root.updateMatrixWorld(true)
+      return groups.map((g) => g.node.matrixWorld.clone())
+    }
+    const rest = snapshot(false)
+    const open = pose && solo.some(Boolean) ? snapshot(true) : rest
+    if (open !== rest) {
+      pose?.(false)
+      root.updateMatrixWorld(true)
+    }
+    const charts: Chart[] = []
+    const seed = hashText(key)
+    const specs = groups.map((g, i) => g.parts.flatMap((m) => partSpecs(kit, m, solo[i] ? open[i] : rest[i])))
+    // 哪些面噴標誌：主體和變身時大搬家的那一組分開看（各自照自己的姿勢看有沒有被擋住）
+    for (const lone of [false, true]) {
+      planDecals(
+        key,
+        specs.filter((_, i) => solo[i] === lone).flat(),
+        kit.detail.decals,
+        seed + (lone ? 1 : 0),
+      )
+    }
+    const firsts: number[] = []
+    const soups = specs.map((list, i) => {
+      firsts.push(charts.length)
+      return buildParts(list, charts, seed + i * 17)
+    })
+    // 遠處用的簡化版：所有關節照站好的姿勢合成一個網格（`root` 這時在原點，世界座標就是整台機甲的座標）
+    const farSoup = new Soup()
+    specs.forEach((list, i) => buildParts(list, charts, seed + i * 17, { soup: farSoup, firstChart: firsts[i], into: rest[i] }))
+    const size = kit.lite ? 512 : 1024
+    const density = packCharts(charts, size)
+    const geos = soups.map((s) => toGeometry(s, charts, size, density))
+    const far = toGeometry(farSoup, charts, size, density)
+    // 烘遮蔽貼圖：主體一組，變身時大搬家的另一組（照變身後的樣子）
+    const sets: BakePiece[][] = [[], []]
+    groups.forEach((_, i) => sets[solo[i] ? 1 : 0].push({ geo: geos[i], world: solo[i] ? open[i] : rest[i] }))
+    const ao = kit.renderer && canBake(kit.renderer) ? bakeOcclusion(kit.renderer, sets, size, kit.lite ? 128 : 288, kit.lite ? 512 : 1024) : null
+    const material = (far: boolean) =>
+      TEAMS.map((t) =>
+        createBodyMaterial({ look: kit.look, textures: kit.detail, armor: t.armor, trim: t.trim, ao: ao?.texture ?? null, lite: kit.lite, light: kit.light, far }),
+      )
+    bp = { geos, mats: material(false), far, farMats: material(true), ao }
+    kit.blueprints.set(key, bp)
+  }
+  // 飛彈艙裡露出來的彈頭、彈藥箱旁邊的砲彈：換成尖拱形的幾何和自己的材質
+  root.traverse((o) => {
+    if (!(o instanceof Mesh) || o.material !== kit.missile) return
+    if (o.geometry === kit.geo.cone) o.geometry = kit.geo.warhead
+    else if (o.geometry === kit.geo.cyl) o.geometry = kit.geo.shell
+    else return
+    o.material = kit.warhead
+  })
+  groups.forEach((g, i) => {
+    for (const m of g.parts) g.node.remove(m)
+    const mesh = new Mesh(bp.geos[i], bp.mats[team])
+    mesh.castShadow = true
+    // 有機甲專用的陰影時不吃場景的陰影（材質自己算），另外放進自陰影那一層
+    mesh.receiveShadow = !kit.light
+    if (kit.light) mesh.layers.enable(MECH_LAYER)
+    g.node.add(mesh)
+  })
+  return bp
 }
 
 /** 在 `parent` 底下放一個零件：幾何、材質、大小、位置、轉角 */
@@ -178,10 +378,14 @@ export abstract class Rig {
   team: Team
   protected readonly missiles: Mesh[] = []
   protected readonly shadow: Mesh
-  /** 遠的時候換成的簡單外形（腳、身體、眼睛三個方塊），第一次用到才做；`detail` 是原本的零件 */
+  /** 遠的時候換成的簡單外形（整台合成一個網格，不動），第一次用到才做；`detail` 是原本的零件 */
   private proxy: Group | null = null
   private detail: Object3D[] = []
   private far = false
+  /** 這一種機甲合併好的網格和材質（`finish` 之後才有） */
+  private blueprint: Blueprint | null = null
+  /** 腳下的地面多高（圓影子貼在這裡）；還不知道是 NaN */
+  private floor = NaN
 
   constructor(kit: MechKit, team: Team, shadow: number) {
     this.team = team
@@ -192,10 +396,27 @@ export abstract class Rig {
     this.root.add(this.shadow)
   }
 
+  /**
+   * 每一種機甲的建構式最後呼叫：把用 `part()` 擺好的零件換成合併、倒角過的網格（`assemble`）。
+   * 這一種的第一台順便把模型擺成站好的樣子，量每個零件的位置、烘遮蔽貼圖
+   */
+  protected finish(kit: MechKit, kind: MechKind) {
+    const rest = newBody(this.team, kind, 0, 0, 0)
+    this.blueprint = assemble(kit, kind, this.root, this.team, (deployed) => {
+      rest.deployed = deployed
+      rest.deploy = deployed ? 1 : 0
+      this.pose(rest, false, 0)
+    })
+  }
+
   setTeam(kit: MechKit, team: Team) {
     if (team === this.team) return
-    const from = [kit.armor[this.team], kit.trim[this.team], kit.glow[this.team], kit.flame[this.team]]
-    const to = [kit.armor[team], kit.trim[team], kit.glow[team], kit.flame[team]]
+    const from: Material[] = [kit.armor[this.team], kit.trim[this.team], kit.glow[this.team], kit.ember[this.team], kit.flame[this.team]]
+    const to: Material[] = [kit.armor[team], kit.trim[team], kit.glow[team], kit.ember[team], kit.flame[team]]
+    if (this.blueprint) {
+      from.push(this.blueprint.mats[this.team], this.blueprint.farMats[this.team])
+      to.push(this.blueprint.mats[team], this.blueprint.farMats[team])
+    }
     this.root.traverse((o) => {
       if (!(o instanceof Mesh)) return
       const i = from.indexOf(o.material)
@@ -214,20 +435,21 @@ export abstract class Rig {
   }
 
   /**
-   * 遠近切換：遠的只畫三個方塊（一台機甲有四、五十個零件，每個都是一次 draw call；30 對 30 時遠處的看不清楚，省下來）。
+   * 遠近切換：遠的換成簡化版，整台站著不動、合成一個網格，一次 draw call（近的每個關節各一次，30 對 30 時省很多）；
+   * 材質、遮蔽、標誌都和近的一樣，只是沒有倒角、關節不動。發光的零件不在那個網格裡，另外放一小條隊伍顏色的燈。
    * `size` 是打中範圍的大小（`MechSpec` 的 hitR、hitH）
    */
   setFar(far: boolean, kit: MechKit, size: { hitR: number; hitH: number }) {
     if (far === this.far) return
     this.far = far
-    if (far && !this.proxy) {
-      const r = size.hitR
-      const h = size.hitH
+    if (far && !this.proxy && this.blueprint) {
       this.detail = this.root.children.slice()
       this.proxy = new Group()
-      part(this.proxy, kit.geo.box, kit.dark, [r * 1.2, h * 0.5, r * 1.1], [0, h * 0.25, 0])
-      part(this.proxy, kit.geo.box, kit.armor[this.team], [r * 2, h * 0.42, r * 1.7], [0, h * 0.7, 0])
-      part(this.proxy, kit.geo.box, kit.glow[this.team], [r * 0.9, h * 0.08, 0.3], [0, h * 0.78, r * 0.86])
+      const mesh = new Mesh(this.blueprint.far, this.blueprint.farMats[this.team])
+      mesh.castShadow = true
+      mesh.receiveShadow = !kit.light
+      this.proxy.add(mesh)
+      part(this.proxy, kit.geo.box, kit.glow[this.team], [size.hitR * 0.7, size.hitH * 0.05, 0.2], [0, size.hitH * 0.74, size.hitR * 0.8])
       this.root.add(this.proxy)
     }
     for (const c of this.detail) c.visible = !far
@@ -240,10 +462,15 @@ export abstract class Rig {
     this.root.rotation.y = b.aimYaw
   }
 
-  /** 影子貼在地上，飛得越高越小 */
+  /**
+   * 影子貼在腳下的地上，飛得越高越小。地面多高照最後一次站在地上時的高度（橋上、河床裡的地面不是 0）；
+   * 在空中時不知道底下的地面多高，就當成還在起跳的那個高度
+   */
   protected placeShadow(b: MechBody, size: number) {
-    this.shadow.position.y = 0.06 - b.y
-    const height = clamp(b.y / 14, 0, 1)
+    if (b.onGround || Number.isNaN(this.floor)) this.floor = b.y
+    const above = Math.max(0, b.y - this.floor)
+    this.shadow.position.y = 0.06 - above
+    const height = clamp(above / 14, 0, 1)
     this.shadow.scale.setScalar(size * (1 - height * 0.5))
   }
 
@@ -363,7 +590,7 @@ export class MechModel extends Rig {
       body.add(pod)
       part(pod, cyl, trim, [0.78, 1.5, 0.78], [0, 0, 0], [Math.PI / 2, 0, 0])
       part(pod, nozzle, kit.dark, [1, 0.5, 1], [0, 0, -0.95], [-Math.PI / 2, 0, 0])
-      part(pod, disc, glow, [0.55, 0.55, 0.55], [0, 0, -1.15], [0, Math.PI, 0])
+      part(pod, disc, kit.ember[team], [0.55, 0.55, 0.55], [0, 0, -1.15], [0, Math.PI, 0])
       // 火焰往後長（圓錐沿著 -y，轉成 -z）
       const f = part(pod, cone, kit.flame[team], [0.62, 3, 0.62], [0, 0, -1.15], [Math.PI / 2, 0, 0])
       const core = part(pod, cone, kit.flame[team], [0.32, 1.6, 0.32], [0, 0, -1.15], [Math.PI / 2, 0, 0])
@@ -414,6 +641,7 @@ export class MechModel extends Rig {
       this.barrels.push(barrel)
       this.muzzles.push(muzzle)
     }
+    this.finish(kit, 'speed')
   }
 
   /** 第 `side` 支手臂開了一槍：往後退一下 */

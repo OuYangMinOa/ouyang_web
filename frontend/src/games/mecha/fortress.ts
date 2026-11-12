@@ -221,6 +221,11 @@ export class FortressModel extends Rig {
       part(wing, box, kit.dark, [0.14, h * 0.6, 0.1], [s * WING_W * 0.55, 0, 0.18])
       this.wings.push(wing)
     }
+    // 變身時大搬家的：重機槍從背上翻到肩上、盾從手上移到正前方張開、支架撐到地上
+    this.shield.userData.solo = true
+    for (const m of this.mounts) m.userData.solo = true
+    for (const s of this.struts) s.userData.solo = true
+    this.finish(kit, 'fortress')
   }
 
   /** 開一發：變身了是四門重機槍輪流（不看 `side`，自己記輪到哪一門） */
