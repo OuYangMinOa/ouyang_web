@@ -11,6 +11,7 @@ import './Appearance.css'
 const STYLES: { value: StylePreference; name: string; desc: string }[] = [
   { value: 'ink', name: '墨與陽', desc: '宣紙與墨，乾淨俐落' },
   { value: 'doodle', name: '塗鴉', desc: '手畫線條，筆記本與黑板' },
+  { value: 'mist', name: '山嵐', desc: '霧灰與松綠，安靜耐看' },
 ]
 
 const THEMES: { value: ThemePreference; icon: string; label: string }[] = [
@@ -22,6 +23,7 @@ const THEMES: { value: ThemePreference; icon: string; label: string }[] = [
 const HINTS: Record<StylePreference, { light: string; dark: string }> = {
   ink: { light: '亮色是宣紙上的墨', dark: '深色是夜裡的餘燼' },
   doodle: { light: '亮色是方格筆記本上的原子筆和螢光筆', dark: '深色是黑板上的粉筆' },
+  mist: { light: '亮色是清晨起霧的山', dark: '深色是入夜的山谷' },
 }
 
 /** 外觀設定裡的縮圖：data-preview 會把那個風格＋深淺的變數套在縮圖上（index.css） */

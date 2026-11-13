@@ -445,6 +445,90 @@ a.home-item:hover .home-item-go {
   opacity: 0.85;
 }
 
+/* ---- 山嵐風格（<html data-style="mist">） ---- */
+
+/* 不會動的山景（components/MistScene.tsx），取代 3D 粒子太陽；顏色是 index.css 的 --mist-* */
+.mist-scene {
+  position: absolute;
+  inset: 0 0 36px;
+  width: 100%;
+  height: calc(100% - 36px);
+}
+.mist-halo-stop {
+  stop-color: var(--mist-halo);
+}
+/* 山腳的霧 */
+.mist-fog-stop {
+  stop-color: var(--mist-fog);
+}
+/* 畫面的左、右、下三邊淡出成頁面的底色 */
+.mist-edge-stop {
+  stop-color: var(--bg);
+}
+.mist-disc {
+  fill: var(--mist-disc);
+}
+.mist-stars {
+  fill: var(--text-h);
+  opacity: var(--mist-stars);
+}
+.mist-ridge-1 {
+  fill: var(--mist-ridge-1);
+}
+.mist-ridge-2 {
+  fill: var(--mist-ridge-2);
+}
+.mist-ridge-3 {
+  fill: var(--mist-ridge-3);
+}
+.mist-ridge-4 {
+  fill: var(--mist-ridge-4);
+}
+.mist-ridge-5 {
+  fill: var(--mist-ridge-5);
+}
+
+/* 名字當 logo：細一點的明體，字距拉開 */
+:root[data-style='mist'] .home-name {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(40px, 5.4vw, 64px);
+  letter-spacing: 0.12em;
+}
+:root[data-style='mist'] .home-items {
+  border-top-color: var(--border);
+}
+/* 作品前面的字放在一塊淡淡的松綠底上 */
+:root[data-style='mist'] .home-item-glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font: 600 18px/1 var(--display);
+}
+/* 滑過只換顏色，箭頭不滑動 */
+:root[data-style='mist'] a.home-item:hover .home-item-go {
+  transform: none;
+}
+
+/* 便條紙排整齊：不歪、不貼紙膠帶，新留言淡入 */
+:root[data-style='mist'] .notes {
+  gap: 14px;
+}
+:root[data-style='mist'] .note {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transform: none;
+}
+:root[data-style='mist'] .note::before {
+  content: none;
+}
+:root[data-style='mist'] .note.fresh {
+  animation: mist-fade 0.4s ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .note.fresh {
     animation: none;

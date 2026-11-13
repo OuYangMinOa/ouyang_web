@@ -1,0 +1,88 @@
+/* 風格「山嵐」的共用元件：顏色和字型在 index.css，這裡只調全站共用元件的質感。
+   各頁面自己的山嵐樣式放在該頁的 CSS 裡（例如 pages/Home.css）。
+
+   山嵐的原則是安靜：線條和圓角跟墨與陽一樣，不加裝飾；
+   卡片底下多一層很淡的影子、輸入框有底色、滑過按鈕只換一點顏色，不位移、不發光。
+
+   權重的規則跟 doodle.css 一樣：每條都跟 App.css 裡對應的那條一樣重（前面的 :where() 不算權重），
+   App.css 沒有的新屬性（影子、轉場）整條包在 :where() 裡、權重是 0。
+   所以各頁面能蓋過基本樣式的地方，山嵐時一樣蓋得過去。這個檔案要在 App.css 後面載入。 */
+
+/* ---- 字：站名當 logo，用細一點的明體 ---- */
+
+:where(:root[data-style='mist']) .brand {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+:where(:root[data-style='mist']) ::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* 瀏覽器原生的勾選框、單選鈕、滑桿也用松綠（各頁面自己有設 accent-color 的照舊） */
+:where(:root[data-style='mist']) {
+  accent-color: var(--accent);
+}
+
+/* 山嵐唯一的進場動畫：淡入（外觀對話框、首頁新貼上的留言） */
+@keyframes mist-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---- 按鈕：滑過只換一點顏色 ---- */
+
+:where(:root[data-style='mist']) button.danger {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+}
+:where(:root[data-style='mist'] button:is(:not([class]), .secondary, .danger)) {
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+@media (hover: hover) {
+  /* 主要按鈕往文字色靠一點：亮色變深、深色變亮 */
+  :where(:root[data-style='mist']) button:where(:not([class]):enabled:hover) {
+    background: color-mix(in srgb, var(--accent) 86%, var(--text-h));
+  }
+  /* 次要按鈕蓋一層很淡的字色，放在牌桌這類有底色的地方也看得出來 */
+  :where(:root[data-style='mist']) button.secondary:where(:enabled:hover),
+  :where(:root[data-style='mist']) button.danger:where(:enabled:hover) {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
+}
+
+/* ---- 輸入框：有底色，聚焦時框線換成松綠、外面一圈淡淡的光 ---- */
+
+:where(:root[data-style='mist'])
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']),
+:where(:root[data-style='mist']) select,
+:where(:root[data-style='mist']) textarea {
+  background: var(--surface);
+}
+:where(:root[data-style='mist']) input:focus-visible,
+:where(:root[data-style='mist']) select:focus-visible,
+:where(:root[data-style='mist']) textarea:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+:where(:root[data-style='mist']) button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* ---- 卡片：底下一層很淡的影子 ---- */
+
+:where(:root[data-style='mist'] .card) {
+  box-shadow: var(--shadow-card);
+}
+
+@media (max-width: 640px) {
+  /* 窄螢幕上表格的每一列是一張卡片 */
+  :where(:root[data-style='mist'] table.responsive tr) {
+    box-shadow: var(--shadow-card);
+  }
+}

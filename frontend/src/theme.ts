@@ -1,11 +1,11 @@
 // 外觀偏好存在 localStorage，分成兩個獨立的選擇：
 // - 深淺（theme）：跟隨系統／亮色／深色 → <html data-theme>，跟隨系統時不設
-// - 風格（style）：墨與陽／塗鴉 → <html data-style>，墨與陽是預設、不設
+// - 風格（style）：墨與陽／塗鴉／山嵐 → <html data-style>，墨與陽是預設、不設
 // index.html 裡有一段同樣邏輯的 inline script，在畫面出來前先套用，避免閃一下
 import { useSyncExternalStore } from 'react'
 
 export type ThemePreference = 'system' | 'light' | 'dark'
-export type StylePreference = 'ink' | 'doodle'
+export type StylePreference = 'ink' | 'doodle' | 'mist'
 
 const THEME_KEY = 'theme'
 const STYLE_KEY = 'style'
@@ -37,7 +37,8 @@ function readTheme(): ThemePreference {
 }
 
 function readStyle(): StylePreference {
-  return read(STYLE_KEY) === 'doodle' ? 'doodle' : 'ink'
+  const value = read(STYLE_KEY)
+  return value === 'doodle' || value === 'mist' ? value : 'ink'
 }
 
 // 存不進 localStorage 時，這次開著的畫面還是照選的走
@@ -65,11 +66,12 @@ function applyToRoot() {
   const root = document.documentElement
   if (theme === 'system') delete root.dataset.theme
   else root.dataset.theme = theme
-  if (style === 'doodle') {
-    loadDoodleFont()
-    root.dataset.style = 'doodle'
-  } else {
+  if (style === 'ink') {
     delete root.dataset.style
+  } else {
+    // 山嵐用的是本來就載入的字，只有塗鴉要另外下載
+    if (style === 'doodle') loadDoodleFont()
+    root.dataset.style = style
   }
   refresh()
 }
