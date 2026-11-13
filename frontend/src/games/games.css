@@ -907,6 +907,35 @@ button.music-volume-toggle {
   transform: none;
 }
 
+/* ---- 貼紙風格（<html data-style="sticker">）：遊戲卡片是一張貼紙，圖示底下一塊橘，滑過往右上浮起來 ---- */
+/* 卡片外面有白邊和影子，間距要大一點才不會疊到隔壁 */
+:root[data-style='sticker'] .games-grid {
+  gap: 20px 22px;
+}
+:root[data-style='sticker'] .game-card {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition:
+    translate 0.12s,
+    box-shadow 0.12s;
+}
+:root[data-style='sticker'] .game-card:is(:hover, :focus-visible) {
+  border-color: var(--ink);
+  transform: none;
+  translate: 2px -3px;
+  box-shadow:
+    0 0 0 3px var(--edge),
+    -7px 10px 0 3px var(--ink-shadow);
+}
+:root[data-style='sticker'] .game-card-icon {
+  border: 2px solid var(--ink);
+  background: var(--pop);
+}
+:root[data-style='sticker'] .game-card-body strong {
+  font-weight: 900;
+}
+
 /* 蓋住整個畫面的遊戲（3D 賽車）還在下載時，先用同樣的全螢幕底色擋著 */
 .game-fullscreen-loading {
   position: fixed;

@@ -1,0 +1,200 @@
+/* 風格「貼紙」的形狀：顏色和字型在 index.css，這裡只換全站共用元件的框線、圓角和影子。
+   各頁面自己的貼紙樣式放在該頁的 CSS 裡（例如 pages/Home.css）。
+
+   貼紙的原則：奶油色的點點紙當底，上面的東西都是一張張貼紙：粗框、大圓角、往左下錯開的實心影子。
+   卡片多一圈白邊（--shadow-card），按鈕和輸入框只有影子（--shadow-ctl）；分隔線用虛線。
+   滑過會往右上浮起來一點，按下去貼回紙上。
+
+   權重的規則跟 doodle.css 一樣：每條都跟 App.css 裡對應的那條一樣重（前面的 :where() 不算權重），
+   App.css 沒有的新屬性（影子、位移）整條包在 :where() 裡、權重是 0。
+   所以各頁面能蓋過基本樣式的地方，貼紙時一樣蓋得過去。這個檔案要在 App.css 後面載入。 */
+
+/* ---- 底紙：圓點固定不跟著捲，頁首和側邊欄的點才對得齊 ---- */
+
+:root[data-style='sticker'] {
+  background-image: var(--paper);
+  background-size: var(--paper-size);
+  background-attachment: fixed;
+  accent-color: var(--accent);
+}
+:where(:root[data-style='sticker']) body {
+  background: transparent;
+}
+:where(:root[data-style='sticker']) .site-top,
+:where(:root[data-style='sticker']) .app-sidebar {
+  background-image: var(--paper);
+  background-size: var(--paper-size);
+  background-attachment: fixed;
+}
+:where(:root[data-style='sticker']) ::selection {
+  background: var(--pop);
+  color: var(--on-pop);
+}
+
+/* ---- 站名：一張歪一點的橘色小貼紙 ---- */
+
+:where(:root[data-style='sticker']) .brand {
+  font-weight: 900;
+  font-size: 17px;
+  color: var(--on-pop);
+}
+:where(:root[data-style='sticker'] .brand) {
+  padding: 3px 12px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-ctl);
+  background: var(--pop);
+  box-shadow: var(--shadow-ctl);
+  rotate: -2deg;
+  transition: rotate 0.15s;
+}
+@media (hover: hover) {
+  :where(:root[data-style='sticker'] .brand:hover) {
+    rotate: 1.5deg;
+  }
+}
+
+/* ---- 頁首：底線換成虛線 ---- */
+
+:where(:root[data-style='sticker']) .site-header {
+  border-bottom: 2px dashed var(--border);
+}
+
+/* ---- 按鈕：沒有 class 的是主要按鈕，secondary／danger 是次要；各頁面自己有 class 的按鈕不動 ---- */
+
+:where(:root[data-style='sticker']) button:where(:not([class])) {
+  border: 2px solid var(--ink);
+}
+:where(:root[data-style='sticker']) button.secondary,
+:where(:root[data-style='sticker']) button.danger {
+  border-width: 2px;
+  border-color: var(--ink);
+  background: var(--surface);
+}
+:where(:root[data-style='sticker']) button:where(:not([class]), .secondary, .danger) {
+  border-radius: var(--radius-ctl);
+}
+:where(:root[data-style='sticker'] button:is(:not([class]), .secondary, .danger)) {
+  font-weight: 700;
+  box-shadow: var(--shadow-ctl);
+  transition:
+    translate 0.12s,
+    box-shadow 0.12s;
+}
+@media (hover: hover) {
+  :where(:root[data-style='sticker'] button:is(:not([class]), .secondary, .danger):enabled:hover) {
+    translate: 1px -1px;
+    box-shadow: -3px 4px 0 var(--ink-shadow);
+  }
+}
+/* 按下去：影子收起來，貼回紙上 */
+:where(:root[data-style='sticker'] button:is(:not([class]), .secondary, .danger):enabled:active) {
+  translate: -2px 3px;
+  box-shadow: none;
+}
+
+/* 頁首的圓角按鈕（切換 APP、回報、帳號） */
+:where(:root[data-style='sticker']) button.menu-button {
+  border-width: 2px;
+  border-color: var(--ink);
+  background: var(--surface);
+}
+:where(:root[data-style='sticker']) button.menu-button:hover,
+:where(:root[data-style='sticker']) button.menu-button[aria-expanded='true'] {
+  background: var(--pop);
+  color: var(--on-pop);
+}
+:where(:root[data-style='sticker']) .fb-button {
+  border-width: 2px;
+  border-color: var(--ink);
+  background: var(--surface);
+}
+:where(:root[data-style='sticker']) .fb-button:hover,
+:where(:root[data-style='sticker']) .fb-button[aria-expanded='true'] {
+  background: var(--pop);
+  color: var(--on-pop);
+}
+:where(:root[data-style='sticker'] .avatar) {
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+/* ---- 輸入框：白底粗框，聚焦時外面一圈橘 ---- */
+
+:where(:root[data-style='sticker'])
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']),
+:where(:root[data-style='sticker']) select,
+:where(:root[data-style='sticker']) textarea {
+  border-width: 2px;
+  border-color: var(--ink);
+  border-radius: var(--radius-ctl);
+  background: var(--surface);
+}
+:where(:root[data-style='sticker']) input:focus-visible,
+:where(:root[data-style='sticker']) select:focus-visible,
+:where(:root[data-style='sticker']) textarea:focus-visible,
+:where(:root[data-style='sticker']) button:focus-visible {
+  outline: 3px solid var(--pop);
+  outline-offset: 2px;
+}
+
+/* ---- 卡片、選單、標籤 ---- */
+
+:where(:root[data-style='sticker']) .card {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+}
+:where(:root[data-style='sticker'] .card) {
+  box-shadow: var(--shadow-card);
+}
+
+:where(:root[data-style='sticker']) .menu-panel {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+}
+:where(:root[data-style='sticker']) .menu-item {
+  border-radius: var(--radius-ctl);
+}
+
+:where(:root[data-style='sticker']) .badge {
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+:where(:root[data-style='sticker']) .chip {
+  background: var(--pop);
+  color: var(--on-pop);
+}
+:where(:root[data-style='sticker'] .chip) {
+  border: 1.5px solid var(--ink);
+  font-weight: 500;
+}
+:where(:root[data-style='sticker']) .chip.subtle {
+  background: var(--surface);
+  color: var(--text-h);
+  border: 1.5px solid var(--ink);
+}
+
+/* ---- 表格：虛線分隔 ---- */
+
+:where(:root[data-style='sticker']) th,
+:where(:root[data-style='sticker']) td {
+  border-bottom-style: dashed;
+}
+
+/* ---- 平板與手機 ---- */
+
+@media (max-width: 640px) {
+  /* 窄螢幕上表格的每一列是一張卡片 */
+  :where(:root[data-style='sticker']) table.responsive tr {
+    border: 2px solid var(--ink);
+    border-radius: var(--radius-card);
+  }
+  :where(:root[data-style='sticker'] table.responsive tr) {
+    box-shadow: var(--shadow-card);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(:root[data-style='sticker'] .brand),
+  :where(:root[data-style='sticker'] button:is(:not([class]), .secondary, .danger)) {
+    transition: none;
+  }
+}
