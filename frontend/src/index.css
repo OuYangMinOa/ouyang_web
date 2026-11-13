@@ -1,7 +1,7 @@
 /* 外觀分成兩個獨立的選擇（切換邏輯在 theme.ts）：
    - 深淺：亮色是預設；深色在兩種情況套用：使用者選了深色（data-theme="dark"），或沒選、系統是深色
-   - 風格：「墨與陽」是預設；選了「塗鴉」時 <html data-style="doodle">、「山嵐」時 <html data-style="mist">，
-     色票在這個檔案的最後面
+   - 風格：「墨與陽」是預設；選了「塗鴉」時 <html data-style="doodle">、「山嵐」時 <html data-style="mist">、
+     「貼紙」時 <html data-style="sticker">，色票在這個檔案的最後面
    data-preview 是外觀設定裡的縮圖：把某個風格＋深淺的變數套在縮圖上，不管目前選的是哪一種 */
 
 /* 配色「墨與陽」：亮色是宣紙上的墨，深色是夜裡的餘燼；強調色是太陽的橘 */
@@ -624,6 +624,29 @@
   --chalk: none;
 }
 
+:root[data-style='sticker'],
+[data-preview^='sticker'] {
+  /* 字用本來就載入的黑體，標題加到最粗；不另外下載字型 */
+  --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
+  --serif: var(--sans);
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  /* 粗黑框、大圓角；卡片是一張貼紙：框線外面一圈白邊（--edge），再往左下錯開一塊實心的影子 */
+  --line: var(--ink);
+  --stroke: 2px;
+  --radius-card: 16px;
+  --radius-ctl: 12px;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+  --shadow-card: 0 0 0 3px var(--edge), -4px 6px 0 3px var(--ink-shadow);
+  --shadow-ctl: -2px 3px 0 var(--ink-shadow);
+  --marker-bg: none;
+  /* 底紙上的圓點 */
+  --paper: radial-gradient(var(--dot) 1.5px, transparent 2px);
+  --paper-size: 22px 22px;
+  --paper-size-sm: 8px 8px;
+  --chalk: none;
+}
+
 /* 配色「塗鴉」：亮色是方格筆記本上的原子筆和螢光筆，深色是深灰黑板上的粉筆。
    只換基本色；遊戲、日曆這類專用色沿用上面墨與陽的亮色／深色。
    亮色和深色要列一樣的變數，深色才蓋得乾淨 */
@@ -850,6 +873,91 @@
   --card-ink: #e6ecea;
   --mg-board: #1a2226;
   --mg-slot: #253036;
+  color-scheme: dark;
+}
+
+/* 配色「貼紙」：亮色是奶油色點點紙上的白底貼紙，粗黑框、實心的影子，圖示底下一塊亮橘；
+   深色是黑卡紙，框線換成奶油色、影子是純黑。
+   只換基本色；遊戲、日曆這類專用色沿用墨與陽的亮色／深色（都是暖色調，放在奶油紙和黑卡紙上不突兀）。
+   亮色和深色要列一樣的變數，深色才蓋得乾淨 */
+:root[data-style='sticker'],
+[data-preview='sticker-light'] {
+  --text: #5c5346;
+  --text-h: #1f1a14;
+  --bg: #fdf1cf;
+  --surface: #ffffff;
+  /* border 是細的分隔線；ink 是貼紙的粗框，ink-shadow 是錯開的實心影子，edge 是框線外面那圈白邊 */
+  --border: rgb(31 26 20 / 0.2);
+  --ink: #1f1a14;
+  --ink-shadow: #1f1a14;
+  --edge: #ffffff;
+  --accent: #d9480f;
+  --on-accent: #ffffff;
+  --ok: #2b8a3e;
+  --danger: #e03131;
+  --shadow: -6px 8px 0 #1f1a14;
+  --scrim: rgb(31 26 20 / 0.4);
+  /* 貼紙的顏色：pop 是圖示底下那塊橘（上面的字用 on-pop），其他四色給首頁的小貼紙和點綴用 */
+  --pop: #ff922b;
+  --on-pop: #1f1a14;
+  --pop-pink: #ff7eb0;
+  --pop-yellow: #ffd43b;
+  --pop-mint: #63e6be;
+  --pop-sky: #74c0fc;
+  --dot: rgb(214 158 46 / 0.3);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-style='sticker']:not([data-theme='light']) {
+    --text: #b9ad9a;
+    --text-h: #fbf3e1;
+    --bg: #1c1814;
+    --surface: #2a241d;
+    --border: rgb(251 243 225 / 0.2);
+    --ink: #fbf3e1;
+    --ink-shadow: #000000;
+    --edge: #000000;
+    --accent: #ffa94d;
+    --on-accent: #1f1408;
+    --ok: #69db7c;
+    --danger: #ff8787;
+    --shadow: -6px 8px 0 #000000;
+    --scrim: rgb(0 0 0 / 0.6);
+    --pop: #ff922b;
+    --on-pop: #1f1408;
+    --pop-pink: #f783ac;
+    --pop-yellow: #fcc419;
+    --pop-mint: #38d9a9;
+    --pop-sky: #4dabf7;
+    --dot: rgb(251 243 225 / 0.07);
+    color-scheme: dark;
+  }
+}
+
+:root[data-style='sticker'][data-theme='dark'],
+[data-preview='sticker-dark'] {
+  --text: #b9ad9a;
+  --text-h: #fbf3e1;
+  --bg: #1c1814;
+  --surface: #2a241d;
+  --border: rgb(251 243 225 / 0.2);
+  --ink: #fbf3e1;
+  --ink-shadow: #000000;
+  --edge: #000000;
+  --accent: #ffa94d;
+  --on-accent: #1f1408;
+  --ok: #69db7c;
+  --danger: #ff8787;
+  --shadow: -6px 8px 0 #000000;
+  --scrim: rgb(0 0 0 / 0.6);
+  --pop: #ff922b;
+  --on-pop: #1f1408;
+  --pop-pink: #f783ac;
+  --pop-yellow: #fcc419;
+  --pop-mint: #38d9a9;
+  --pop-sky: #4dabf7;
+  --dot: rgb(251 243 225 / 0.07);
   color-scheme: dark;
 }
 

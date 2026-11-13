@@ -48,6 +48,7 @@ import './App.css'
 // 塗鴉和山嵐風格的形狀要壓過 App.css 的基本樣式，一定要排在它後面
 import './doodle.css'
 import './mist.css'
+import './sticker.css'
 
 // 天氣與環境的頁面帶著 Leaflet 地圖，進到那一頁才下載
 const WeatherHub = lazyPage(() => import('./weather/WeatherHub'))

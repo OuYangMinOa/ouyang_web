@@ -457,3 +457,10 @@ button.lobby-start-close:hover {
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
+
+/* ---- 貼紙風格（<html data-style="sticker">）：「和朋友一起玩」是一張貼紙 ---- */
+:root[data-style='sticker'] .lobby-entry {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
