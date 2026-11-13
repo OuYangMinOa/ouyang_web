@@ -88,3 +88,12 @@
   border-color: var(--accent);
   box-shadow: 4px 6px 0 var(--pen-shadow);
 }
+
+/* ---- 山嵐風格（<html data-style="mist">）：工具卡片底下一層淡影，滑過只換框線顏色，不浮起來 ---- */
+:root[data-style='mist'] .tool-card {
+  box-shadow: var(--shadow-card);
+}
+:root[data-style='mist'] .tool-card:is(:hover, :focus-visible) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  transform: none;
+}

@@ -1,5 +1,5 @@
 /* 頁首右上角的「外觀」按鈕和對話框（components/Appearance.tsx）。
-   框線、圓角、陰影用 index.css 的 --line、--stroke、--radius-* 變數，墨與陽和塗鴉會自動長得不一樣 */
+   框線、圓角、陰影用 index.css 的 --line、--stroke、--radius-* 變數，墨與陽、塗鴉和山嵐會自動長得不一樣 */
 
 .appearance-button {
   display: inline-flex;
@@ -26,7 +26,7 @@
 
 .appearance-dialog {
   --pop-tilt: 0deg;
-  width: min(560px, 100vw - 32px);
+  width: min(640px, 100vw - 32px);
   max-width: none;
   max-height: none;
   box-sizing: border-box;
@@ -111,12 +111,12 @@
   pointer-events: none;
 }
 
-/* ---- 風格：兩張縮圖卡 ---- */
+/* ---- 風格：一種一張縮圖卡 ---- */
 
 .appearance-styles {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 .appearance-option {
   position: relative;
@@ -241,8 +241,17 @@
   color: var(--on-accent);
   text-shadow: none;
 }
-[data-preview^='ink'] .thumb-mark {
+[data-preview^='ink'] .thumb-mark,
+[data-preview^='mist'] .thumb-mark {
   color: var(--accent);
+}
+/* 山嵐的縮圖：站名跟真的一樣是細一點的明體，標題是黑體 */
+[data-preview^='mist'] .thumb-bar b {
+  font-family: var(--display);
+  letter-spacing: 0.06em;
+}
+[data-preview^='mist'] .thumb-title {
+  font-weight: 700;
 }
 /* 縮圖裡的站名和名字跟真的一樣用手寫的芫荽 */
 [data-preview^='doodle'] .thumb-bar b,
@@ -353,6 +362,12 @@
   outline-style: dashed;
 }
 
+/* ---- 山嵐：對話框只淡入，不彈一下 ---- */
+
+:root[data-style='mist'] .appearance-dialog[open] {
+  animation: mist-fade 0.2s ease-out;
+}
+
 /* ---- 平板與手機 ---- */
 
 @media (max-width: 900px) {
@@ -394,11 +409,24 @@
   .appearance-foot {
     padding-inline: 16px;
   }
+  /* 三張縮圖排一列放得下：縮圖改成方的、內距縮小，裡面只留一顆膠囊、不畫按鈕 */
   .appearance-styles {
-    gap: 12px;
+    gap: 8px;
+  }
+  .appearance-option {
+    padding: 6px;
   }
   .appearance-thumb {
     aspect-ratio: 1;
+    gap: 4px;
+    padding: 6px;
+  }
+  .thumb-bar i + i,
+  .thumb-button {
+    display: none;
+  }
+  .thumb-cards {
+    gap: 6px;
   }
   .appearance-foot button {
     flex: 1;

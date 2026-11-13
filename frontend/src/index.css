@@ -1,6 +1,7 @@
 /* 外觀分成兩個獨立的選擇（切換邏輯在 theme.ts）：
    - 深淺：亮色是預設；深色在兩種情況套用：使用者選了深色（data-theme="dark"），或沒選、系統是深色
-   - 風格：「墨與陽」是預設；選了「塗鴉」時 <html data-style="doodle">，色票在這個檔案的最後面
+   - 風格：「墨與陽」是預設；選了「塗鴉」時 <html data-style="doodle">、「山嵐」時 <html data-style="mist">，
+     色票在這個檔案的最後面
    data-preview 是外觀設定裡的縮圖：把某個風格＋深淺的變數套在縮圖上，不管目前選的是哪一種 */
 
 /* 配色「墨與陽」：亮色是宣紙上的墨，深色是夜裡的餘燼；強調色是太陽的橘 */
@@ -599,6 +600,30 @@
   --marker-bg: linear-gradient(var(--marker), var(--marker));
 }
 
+:root[data-style='mist'],
+[data-preview^='mist'] {
+  /* 全站只用一套黑體，標題不用明體的粗黑字，讀起來安靜；
+     只有左上角的站名和首頁的名字當 logo，用細一點的明體（--display，本來就載入的字，不用另外下載） */
+  --sans: 'Noto Sans TC', system-ui, 'Segoe UI', sans-serif;
+  --serif: var(--sans);
+  --display: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  /* 線條和圓角跟墨與陽一樣（各頁面寫死的圓角才對得上），差別在卡片底下多一層很淡的影子 */
+  --line: var(--border);
+  --stroke: 1px;
+  --radius-card: 12px;
+  --radius-ctl: 8px;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.03), 0 10px 24px -14px var(--shade);
+  --shadow-ctl: none;
+  --marker-bg: none;
+  --paper: none;
+  --paper-size: auto;
+  --paper-size-sm: auto;
+  --chalk: none;
+}
+
 /* 配色「塗鴉」：亮色是方格筆記本上的原子筆和螢光筆，深色是深灰黑板上的粉筆。
    只換基本色；遊戲、日曆這類專用色沿用上面墨與陽的亮色／深色。
    亮色和深色要列一樣的變數，深色才蓋得乾淨 */
@@ -690,6 +715,141 @@
   --paper-size: auto;
   --paper-size-sm: auto;
   --chalk: 0 0 1px rgb(255 255 255 / 0.3);
+  color-scheme: dark;
+}
+
+/* 配色「山嵐」：亮色是清晨起霧的山，深色是入夜的山谷。整體是低彩度的霧灰和松綠，
+   唯一的暖色是太陽（夜裡是月亮）的淡金，只用在首頁的山景和棋盤上標記選到的格子。
+   除了基本色，也把遊戲裡偏暖的中性色（踩地雷的格子、方塊的盤面、牌的邊…）換成同一個色調的冷灰，
+   放在霧灰的頁面上才不會突兀；其他專用色（棋盤的木頭、花色、日曆…）沿用墨與陽的亮色／深色。
+   亮色和深色要列一樣的變數，深色才蓋得乾淨 */
+:root[data-style='mist'],
+[data-preview='mist-light'] {
+  --text: #586560;
+  --text-h: #1d2926;
+  --bg: #eff2ef;
+  --surface: #fafcfa;
+  --border: #dbe2dd;
+  --accent: #2c6a5d;
+  --on-accent: #fafdfb;
+  --ok: #2b7a4b;
+  --danger: #b3364a;
+  --warn: #a4520c;
+  --shadow: 0 14px 36px -10px rgb(29 41 38 / 0.22);
+  --scrim: rgb(29 41 38 / 0.32);
+  /* 卡片底下那層淡影的顏色（--shadow-card） */
+  --shade: rgb(29 41 38 / 0.16);
+  /* 首頁的山景（components/MistScene.tsx）：太陽和光暈、山腳的霧、由遠到近五層山；星星只有夜裡看得到 */
+  --mist-disc: #f3d6a2;
+  --mist-halo: rgb(243 214 162 / 0.6);
+  --mist-fog: rgb(239 242 239 / 0.78);
+  --mist-ridge-1: #d3ddd8;
+  --mist-ridge-2: #b9cac3;
+  --mist-ridge-3: #96b0a7;
+  --mist-ridge-4: #6a8f83;
+  --mist-ridge-5: #44766a;
+  --mist-stars: 0;
+  /* 棋盤上標記選到的格子：太陽的金色，跟綠色的提示點分得開 */
+  --highlight: rgb(205 150 40 / 0.32);
+  --cell: #d5ddd8;
+  --cell-open: #fafcfa;
+  --cell-alt: #e6ebe7;
+  --n7: #1d2926;
+  --n8: #586560;
+  --tet-8: #98a39e;
+  --tet-bg: #e4e9e5;
+  --puyo-5: #a3aba7;
+  --puyo-bg: #e4e9e5;
+  --card-face: #fdfefd;
+  --card-edge: #cdd6d1;
+  --card-ink: #1d2926;
+  --mg-board: #cdd6d1;
+  --mg-slot: #dfe6e1;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-style='mist']:not([data-theme='light']) {
+    --text: #96a4a6;
+    --text-h: #e4ebea;
+    --bg: #151b1e;
+    --surface: #1c2428;
+    --border: #2b363b;
+    --accent: #74bda9;
+    --on-accent: #0f1c1a;
+    --ok: #7ed39a;
+    --danger: #f08a96;
+    --warn: #e9bd5c;
+    --shadow: 0 14px 36px -10px rgb(0 0 0 / 0.6);
+    --scrim: rgb(0 0 0 / 0.55);
+    --shade: rgb(0 0 0 / 0.5);
+    --mist-disc: #e6ede4;
+    --mist-halo: rgb(196 224 214 / 0.16);
+    --mist-fog: rgb(132 164 164 / 0.2);
+    --mist-ridge-1: #2b3b40;
+    --mist-ridge-2: #233237;
+    --mist-ridge-3: #1c292e;
+    --mist-ridge-4: #152024;
+    --mist-ridge-5: #0f171a;
+    --mist-stars: 0.8;
+    --highlight: rgb(233 189 92 / 0.3);
+    --cell: #324046;
+    --cell-open: #1c2428;
+    --cell-alt: #222c31;
+    --n7: #e4ebea;
+    --n8: #96a4a6;
+    --tet-8: #56646a;
+    --tet-bg: #0e1315;
+    --puyo-5: #6f7b80;
+    --puyo-bg: #0e1315;
+    --card-face: #222b30;
+    --card-edge: #3f4c53;
+    --card-ink: #e6ecea;
+    --mg-board: #1a2226;
+    --mg-slot: #253036;
+    color-scheme: dark;
+  }
+}
+
+:root[data-style='mist'][data-theme='dark'],
+[data-preview='mist-dark'] {
+  --text: #96a4a6;
+  --text-h: #e4ebea;
+  --bg: #151b1e;
+  --surface: #1c2428;
+  --border: #2b363b;
+  --accent: #74bda9;
+  --on-accent: #0f1c1a;
+  --ok: #7ed39a;
+  --danger: #f08a96;
+  --warn: #e9bd5c;
+  --shadow: 0 14px 36px -10px rgb(0 0 0 / 0.6);
+  --scrim: rgb(0 0 0 / 0.55);
+  --shade: rgb(0 0 0 / 0.5);
+  --mist-disc: #e6ede4;
+  --mist-halo: rgb(196 224 214 / 0.16);
+  --mist-fog: rgb(132 164 164 / 0.2);
+  --mist-ridge-1: #2b3b40;
+  --mist-ridge-2: #233237;
+  --mist-ridge-3: #1c292e;
+  --mist-ridge-4: #152024;
+  --mist-ridge-5: #0f171a;
+  --mist-stars: 0.8;
+  --highlight: rgb(233 189 92 / 0.3);
+  --cell: #324046;
+  --cell-open: #1c2428;
+  --cell-alt: #222c31;
+  --n7: #e4ebea;
+  --n8: #96a4a6;
+  --tet-8: #56646a;
+  --tet-bg: #0e1315;
+  --puyo-5: #6f7b80;
+  --puyo-bg: #0e1315;
+  --card-face: #222b30;
+  --card-edge: #3f4c53;
+  --card-ink: #e6ecea;
+  --mg-board: #1a2226;
+  --mg-slot: #253036;
   color-scheme: dark;
 }
 

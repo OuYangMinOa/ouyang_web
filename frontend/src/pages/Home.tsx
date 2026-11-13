@@ -4,6 +4,7 @@ import { api, errorMessage } from '../api'
 import { appPath, visibleApps } from '../apps/registry'
 import { useAuth } from '../auth'
 import DoodleSun from '../components/DoodleSun'
+import MistScene from '../components/MistScene'
 import SunStage from '../components/SunStage'
 import { GAMES } from '../games/registry'
 import { useAppearance } from '../theme'
@@ -24,7 +25,7 @@ const PROFILE = [
 ]
 
 function Intro() {
-  // 塗鴉風格換成手畫的太陽，不載入 three.js
+  // 塗鴉風格換成手畫的太陽、山嵐換成一幅不會動的山景，都不載入 three.js
   const { style } = useAppearance()
   return (
     <section className="home-intro">
@@ -44,7 +45,7 @@ function Intro() {
             ))}
           </dl>
         </div>
-        {style === 'doodle' ? <DoodleSun /> : <SunStage />}
+        {style === 'doodle' ? <DoodleSun /> : style === 'mist' ? <MistScene /> : <SunStage />}
       </div>
     </section>
   )
