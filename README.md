@@ -1038,6 +1038,10 @@ DELETE /api/calendar/events/{id}
 - **照片 EXIF**：直接改檔案的位元組移除中繼資料，不重新壓縮；照片有旋轉時會補回只含方向的 EXIF，避免直拍的照片變橫的。
 - **圖片壓縮與轉檔**：在 Worker 裡用 OffscreenCanvas 轉檔，zip 是自己寫的（只打包不壓縮）。
   HEIC 先試瀏覽器內建解碼，不行才動態載入 `heic-to`（LGPL-3.0，約 3.2 MB，所以 `vite.config.ts` 的 chunk 警告上限調到 3300 kB）。
+- **影片轉 MP3／GIF／WebP**：ffmpeg.wasm（`@ffmpeg/ffmpeg` + 單執行緒的 `@ffmpeg/core`，GPL）在 Web Worker 裡跑，不需要跨來源隔離。
+  core 的 wasm（31 MB，gzip 後約 10 MB）跟著網站部署，第一次加入檔案才下載；檔案用 WORKERFS 掛進去，只讀要轉的那段，不會整個複製進 wasm 的記憶體。
+  GIF 分兩趟（先 `palettegen` 算調色盤、再 `paletteuse`），一趟做完的寫法要先把整段畫格放在記憶體，原尺寸的影片很快就爆掉。
+  開發時 `vite.config.ts` 要把 `@ffmpeg/ffmpeg` 排除在 `optimizeDeps` 之外，不然它的 worker 載不到。
 - **QR Code**：產生用 `bwip-js`，掃描沿用 `datamatrix/scanner.ts` 的 `@zxing/library`。
 - **簡繁轉換**：`opencc-js` 的詞庫當成靜態檔輸出，選到那個方向才下載（簡轉繁的詞庫 gzip 後約 425 KB）。**文字比對**用 `diff`，**JSON / YAML** 的 YAML 用 `yaml`（動態載入）。
 - **正規表示式測試**：在 Worker 裡執行，超過 1.5 秒就終止重開，災難性回溯不會卡住頁面。
