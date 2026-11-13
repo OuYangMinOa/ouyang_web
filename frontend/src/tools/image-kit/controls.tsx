@@ -10,7 +10,8 @@ export function Seg<T extends string>({
 }: {
   label: string
   value: T
-  options: { value: T; label: string }[]
+  /** title：滑過時的說明，停用時可以寫為什麼不能選 */
+  options: { value: T; label: string; disabled?: boolean; title?: string }[]
   onChange: (v: T) => void
 }) {
   return (
@@ -24,6 +25,8 @@ export function Seg<T extends string>({
             role="radio"
             aria-checked={o.value === value}
             className={o.value === value ? 'active' : ''}
+            disabled={o.disabled}
+            title={o.title}
             onClick={() => onChange(o.value)}
           >
             {o.label}

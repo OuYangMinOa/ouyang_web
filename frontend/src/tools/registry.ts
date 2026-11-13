@@ -2,7 +2,7 @@ import type { ComponentType, LazyExoticComponent } from 'react'
 import { lazyPage } from '../lazyPage'
 
 /** 側邊欄的分組，順序就是顯示順序 */
-export const TOOL_CATEGORIES = ['圖片', '文字', '計算', '生活', '娛樂'] as const
+export const TOOL_CATEGORIES = ['圖片', '影音', '文字', '計算', '生活', '娛樂'] as const
 
 export type ToolInfo = {
   /** 網址用的 id：/tools/<id> */
@@ -80,6 +80,15 @@ export const TOOLS: ToolInfo[] = [
     tags: ['調色盤', '對比'],
     category: '圖片',
     component: lazyPage(() => import('./color-picker')),
+  },
+  {
+    id: 'video-convert',
+    name: '影片轉 MP3／GIF／WebP',
+    icon: '🎬',
+    blurb: '取出影片的聲音存成 MP3，或剪一段做成 GIF、WebP 動圖，可調寬度、格數與品質。影片不會上傳。',
+    tags: ['ffmpeg', '本機處理'],
+    category: '影音',
+    component: lazyPage(() => import('./video-convert')),
   },
   {
     id: 'emoji',

@@ -1,0 +1,260 @@
+/* ---- 影片轉 MP3／GIF／WebP ---- */
+
+.vc {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.vc-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 目前的檔案：一條，按鈕在窄螢幕換到下一行 */
+.vc-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.vc-file > strong {
+  flex: 1 1 140px;
+  color: var(--text-h);
+}
+.vc-file > button {
+  margin-left: auto;
+}
+
+/* 窄的時候上下排，夠寬時預覽在左、設定在右 */
+.vc-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@container (min-width: 760px) {
+  .vc-main {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+
+.vc-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.vc-preview video {
+  display: block;
+  width: 100%;
+  max-height: min(60dvh, 520px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-sizing: border-box;
+  background: var(--surface);
+}
+.vc-preview audio {
+  width: 100%;
+}
+.vc-no-preview {
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  line-height: 1.6;
+}
+.vc-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 設定面板 */
+.vc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.vc-clip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.vc-clip legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--text-h);
+  font-size: 14px;
+}
+.vc-time {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vc-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.vc-time-row input {
+  flex: 1 1 120px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.vc-time-row input[aria-invalid] {
+  border-color: var(--danger);
+}
+.vc-time-row button {
+  flex: 0 0 auto;
+}
+.vc-clip-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.vc-clip-foot > .muted {
+  flex: 1 1 auto;
+}
+
+.vc-warn {
+  margin: 0;
+  color: var(--warn);
+  font-size: 14px;
+}
+
+.vc-actions {
+  display: flex;
+}
+.vc-actions > button {
+  flex: 1;
+  min-height: 44px;
+  font-size: 16px;
+}
+
+.vc-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.vc-status:empty {
+  display: none;
+}
+.vc-status .muted {
+  margin-left: 4px;
+  font-size: 13px;
+}
+.vc-bar {
+  width: 100%;
+}
+/* 不知道進度時來回跑的一小段 */
+.vc-bar.busy > span {
+  width: 30%;
+  animation: vc-busy 1.2s ease-in-out infinite alternate;
+}
+@keyframes vc-busy {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(233%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vc-bar.busy > span {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+/* 轉好的檔案 */
+.vc-results h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.vc-results ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+}
+.vc-result {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.vc-result-img {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  /* 動圖可能有透明的地方，用棋盤格 */
+  background: repeating-conic-gradient(var(--ik-check-b) 0 25%, var(--ik-check-a) 0 50%) 0 0 / 16px 16px;
+  --ik-check-a: var(--surface);
+  --ik-check-b: color-mix(in srgb, var(--text) 22%, var(--surface));
+}
+/* 絕對定位才會被框的比例限制住，直拍的動圖不會把卡片撐得很長 */
+.vc-result-img img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.vc-result audio {
+  width: calc(100% - 24px);
+  margin: 12px 12px 0;
+}
+.vc-result-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+}
+.vc-result-body > strong {
+  color: var(--text-h);
+}
+.vc-meta {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.vc-result-body .ik-buttons {
+  margin-top: 6px;
+}
+.vc-result-body .ik-buttons > .vc-icon-btn {
+  flex: 0 0 auto;
+  min-width: 40px;
+  padding: 8px;
+}
