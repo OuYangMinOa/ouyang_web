@@ -1,5 +1,5 @@
-/* 頁首右上角的「外觀」按鈕和對話框（components/Appearance.tsx）。
-   框線、圓角、陰影用 index.css 的 --line、--stroke、--radius-* 變數，墨與陽和塗鴉會自動長得不一樣 */
+/* 頁首右上角的「外觀」按鈕和面板（components/Appearance.tsx），最後面是換外觀時的轉場。
+   框線、圓角、陰影用 index.css 的 --line、--stroke、--radius-* 變數，四種風格會自動長得不一樣 */
 
 .appearance-button {
   display: inline-flex;
@@ -22,16 +22,19 @@
   color: var(--text-h);
 }
 
-/* ---- 對話框 ---- */
+/* ---- 面板：popover，貼在按鈕下面，不蓋遮罩，換了什麼直接看得到後面的頁面 ---- */
 
-.appearance-dialog {
+.appearance-panel {
   --pop-tilt: 0deg;
-  width: min(560px, 100vw - 32px);
-  max-width: none;
-  max-height: none;
+  position: fixed;
+  inset: auto;
+  top: var(--panel-top, 64px);
+  right: var(--panel-right, 16px);
+  width: min(400px, 100vw - 32px);
+  margin: 0;
   box-sizing: border-box;
   padding: 0;
-  /* 塗鴉的框線畫在 ::before，會超出一點點 */
+  /* 塗鴉的框線畫在 ::before，會超出一點點；拖曳時的小圓貼紙也要能跑到面板外面 */
   overflow: visible;
   border: var(--stroke) solid var(--line);
   border-radius: var(--radius-card);
@@ -39,34 +42,37 @@
   color: var(--text);
   box-shadow: var(--shadow);
 }
-.appearance-dialog::backdrop {
-  background: var(--scrim);
-}
-.appearance-dialog[open] {
+.appearance-panel:popover-open {
   animation: appearance-pop 0.2s ease-out;
 }
 @keyframes appearance-pop {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.97) rotate(var(--pop-tilt));
+    transform: translateY(-8px) scale(0.97) rotate(var(--pop-tilt));
   }
 }
 
 .appearance-body {
-  max-height: calc(100dvh - 48px);
+  max-height: calc(100dvh - var(--panel-top, 64px) - 16px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 拖色票出去的時候變淡，後面的頁面看得比較清楚 */
+  transition: opacity 0.15s;
+}
+.appearance-panel.is-dragging .appearance-body {
+  opacity: 0.45;
 }
 
 .appearance-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 20px 6px;
+  padding: 12px 12px 0 18px;
 }
 .appearance-head h2 {
-  margin: 0 0 4px;
-  font-size: 22px;
+  margin: 0;
+  font-size: 20px;
 }
 .appearance-close {
   flex: none;
@@ -88,7 +94,7 @@
 }
 
 .appearance-section {
-  padding: 12px 20px;
+  padding: 8px 18px 14px;
 }
 .appearance-section h3 {
   margin: 0 0 10px;
@@ -99,7 +105,7 @@
 }
 
 /* 選項裡真正的 radio 藏起來（還是可以用鍵盤選），外框標出選到哪個 */
-.appearance-dialog input[type='radio'] {
+.appearance-panel input[type='radio'] {
   position: absolute;
   flex: none;
   width: 1px;
@@ -111,12 +117,12 @@
   pointer-events: none;
 }
 
-/* ---- 風格：兩張縮圖卡 ---- */
+/* ---- 風格：一種一張色票，兩張一排 ---- */
 
 .appearance-styles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 .appearance-option {
   position: relative;
@@ -128,7 +134,19 @@
   border-radius: var(--radius-card);
   font-size: 14px;
   cursor: pointer;
+  /* 色票可以拖，不要選到上面的字 */
+  user-select: none;
+  -webkit-user-select: none;
   transition: border-color 0.15s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .appearance-option {
+    cursor: grab;
+  }
+}
+.appearance-panel.is-dragging,
+.appearance-panel.is-dragging .appearance-option {
+  cursor: grabbing;
 }
 .appearance-option:hover {
   border-color: var(--line);
@@ -178,9 +196,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 10;
   box-sizing: border-box;
-  padding: 8px 10px;
+  padding: 7px 10px;
   overflow: hidden;
   border: var(--stroke) solid var(--line);
   border-radius: var(--radius-card);
@@ -241,8 +259,17 @@
   color: var(--on-accent);
   text-shadow: none;
 }
-[data-preview^='ink'] .thumb-mark {
+[data-preview^='ink'] .thumb-mark,
+[data-preview^='mist'] .thumb-mark {
   color: var(--accent);
+}
+/* 山嵐的縮圖：站名跟真的一樣是細一點的明體，標題是黑體 */
+[data-preview^='mist'] .thumb-bar b {
+  font-family: var(--display);
+  letter-spacing: 0.06em;
+}
+[data-preview^='mist'] .thumb-title {
+  font-weight: 700;
 }
 /* 縮圖裡的站名和名字跟真的一樣用手寫的芫荽 */
 [data-preview^='doodle'] .thumb-bar b,
@@ -259,6 +286,57 @@
 [data-preview^='doodle'] .thumb-button {
   border: 2px solid var(--pen);
   box-shadow: var(--shadow-ctl);
+}
+/* 貼紙的縮圖：站名是一張橘色小貼紙，標題底下錯開一層橘，卡片和按鈕有實心的影子 */
+[data-preview^='sticker'] .thumb-bar {
+  border-bottom: 1.5px dashed var(--border);
+}
+[data-preview^='sticker'] .thumb-bar b {
+  padding: 0 4px;
+  border: 1.5px solid var(--ink);
+  border-radius: 5px;
+  background: var(--pop);
+  color: var(--on-pop);
+  font-weight: 900;
+  font-size: 10px;
+  rotate: -3deg;
+}
+[data-preview^='sticker'] .thumb-title {
+  text-shadow: -1.5px 2px 0 var(--pop);
+}
+[data-preview^='sticker'] .thumb-cards span {
+  border-width: 1.5px;
+  border-radius: 6px;
+  box-shadow: -2px 2px 0 var(--ink-shadow);
+}
+[data-preview^='sticker'] .thumb-button {
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: -1.5px 2px 0 var(--ink-shadow);
+  font-weight: 700;
+}
+
+/* 拖曳時跟著游標的小圓貼紙：自己帶著那個風格的變數（data-preview），位置由 Appearance.tsx 用 translate 寫 */
+.appearance-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  box-sizing: border-box;
+  border: max(2px, var(--stroke)) solid var(--line);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent) 0 28%, var(--surface) 30% 50%, var(--bg) 52%);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.3);
+  pointer-events: none;
+  animation: appearance-ghost 0.18s cubic-bezier(0.3, 1.5, 0.6, 1);
+}
+@keyframes appearance-ghost {
+  from {
+    scale: 0.3;
+    opacity: 0;
+  }
 }
 
 /* ---- 深淺：三段式選擇 ---- */
@@ -306,21 +384,24 @@
   font-size: 13px;
   color: var(--text);
 }
-
-.appearance-foot {
-  display: flex;
-  justify-content: flex-end;
-  padding: 10px 20px 20px;
+/* 「拖到頁面上」只有滑鼠做得到 */
+.appearance-tip-drag {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .appearance-tip-drag {
+    display: inline;
+  }
 }
 
 /* ---- 塗鴉：框線抖一點、標題底下畫波浪線、選到的深淺用螢光筆塗 ---- */
 
-:root[data-style='doodle'] .appearance-dialog {
+:root[data-style='doodle'] .appearance-panel {
   --pop-tilt: -1.5deg;
   border-color: transparent;
   box-shadow: none;
 }
-:root[data-style='doodle'] .appearance-dialog::before {
+:root[data-style='doodle'] .appearance-panel::before {
   content: '';
   position: absolute;
   inset: -2px;
@@ -333,9 +414,8 @@
 :root[data-style='doodle'] .appearance-head h2::after {
   content: '';
   display: block;
-  width: 4.5em;
-  height: 10px;
-  margin-top: 2px;
+  width: 3em;
+  height: 8px;
   background: var(--accent);
   -webkit-mask: var(--squiggle) 0 0 / 100% 100% no-repeat;
   mask: var(--squiggle) 0 0 / 100% 100% no-repeat;
@@ -351,6 +431,47 @@
 :root[data-style='doodle'] .appearance-option:has(input:focus-visible),
 :root[data-style='doodle'] .appearance-themes label:has(input:focus-visible) {
   outline-style: dashed;
+}
+
+/* ---- 山嵐：面板只淡入，不彈一下 ---- */
+
+:root[data-style='mist'] .appearance-panel:popover-open {
+  animation: mist-fade 0.2s ease-out;
+}
+
+/* ---- 貼紙：選到的色票是一張貼起來的貼紙，選到的深淺是橘底粗框 ---- */
+
+:root[data-style='sticker'] .appearance-panel {
+  --pop-tilt: 1.5deg;
+}
+:root[data-style='sticker'] .appearance-head h2 {
+  font-weight: 900;
+}
+:root[data-style='sticker'] .appearance-option {
+  transition:
+    border-color 0.15s,
+    translate 0.12s,
+    box-shadow 0.12s;
+}
+:root[data-style='sticker'] .appearance-option:has(input:checked) {
+  border-color: var(--ink);
+  box-shadow: var(--shadow-ctl);
+  translate: 1px -1px;
+}
+:root[data-style='sticker'] .appearance-check {
+  border: 2px solid var(--ink);
+  background: var(--pop);
+  color: var(--on-pop);
+}
+:root[data-style='sticker'] .appearance-themes label:has(input:checked) {
+  border-color: var(--ink);
+  background: var(--pop);
+  color: var(--on-pop);
+  font-weight: 700;
+}
+:root[data-style='sticker'] .appearance-option:has(input:focus-visible),
+:root[data-style='sticker'] .appearance-themes label:has(input:focus-visible) {
+  outline: 3px solid var(--pop);
 }
 
 /* ---- 平板與手機 ---- */
@@ -370,38 +491,51 @@
   }
 }
 
-/* 手機：改成從畫面下面滑上來的面板 */
+/* 手機：改成從畫面下面滑上來的面板，上半個畫面還是看得到頁面 */
 @media (max-width: 560px) {
-  .appearance-dialog {
+  .appearance-panel {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
     width: 100%;
-    margin: auto 0 0;
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }
-  .appearance-dialog[open] {
-    animation-name: appearance-sheet;
+  .appearance-panel:popover-open,
+  :root[data-style='mist'] .appearance-panel:popover-open {
+    animation: appearance-sheet 0.22s ease-out;
   }
-  :root[data-style='doodle'] .appearance-dialog::before {
+  :root[data-style='doodle'] .appearance-panel::before {
     border-bottom-width: 0;
     box-shadow: none;
   }
   .appearance-body {
-    max-height: 88dvh;
+    max-height: 72dvh;
     padding-bottom: env(safe-area-inset-bottom);
   }
-  .appearance-head,
-  .appearance-section,
-  .appearance-foot {
-    padding-inline: 16px;
+  .appearance-head {
+    padding: 8px 8px 0 16px;
+  }
+  .appearance-section {
+    padding: 4px 16px 12px;
   }
   .appearance-styles {
-    gap: 12px;
+    gap: 10px;
   }
+  .appearance-option {
+    gap: 4px;
+    padding: 6px;
+  }
+  /* 縮圖壓扁一點、說明收起來，四張色票加深淺才不會佔掉大半個畫面 */
   .appearance-thumb {
-    aspect-ratio: 1;
+    aspect-ratio: 2 / 1;
+    gap: 4px;
+    padding: 6px 8px;
   }
-  .appearance-foot button {
-    flex: 1;
+  .thumb-button,
+  .appearance-option-text small {
+    display: none;
   }
 }
 @keyframes appearance-sheet {
@@ -420,7 +554,125 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .appearance-dialog[open] {
+  .appearance-panel:popover-open,
+  .appearance-ghost {
     animation: none;
+  }
+}
+
+/* ---- 換外觀的轉場（View Transitions，由 theme.ts 發動） ----
+   舊畫面是一張不動的圖墊在下面，新畫面蓋在上面，用遮罩一點一點露出來。
+   theme.ts 在 <html> 上寫：data-vt（要換成的風格，決定怎麼露出來）、
+   --vt-x／--vt-y（從畫面上哪個點開始）、--vt-max（那個點到最遠角落的距離）。
+   --vt-t 是進度，0 到 1；註冊成數字，瀏覽器才知道怎麼補中間的值。 */
+
+@property --vt-t {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+@keyframes vt-progress {
+  to {
+    --vt-t: 1;
+  }
+}
+
+:root[data-vt]::view-transition-old(root),
+:root[data-vt]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+:root[data-vt]::view-transition-new(root) {
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* 墨與陽：一滴墨暈開，邊緣是糊的，旁邊濺出三滴小的 */
+:root[data-vt='ink']::view-transition-new(root) {
+  --r: calc(var(--vt-max) * var(--vt-t));
+  --blot:
+    radial-gradient(circle at var(--vt-x) var(--vt-y), #000 var(--r), transparent calc(var(--r) * 1.06 + 22px)),
+    radial-gradient(
+      circle at calc(var(--vt-x) - 17vmax) calc(var(--vt-y) + 9vmax),
+      #000 calc(var(--r) * 0.5),
+      transparent calc(var(--r) * 0.56 + 8px)
+    ),
+    radial-gradient(
+      circle at calc(var(--vt-x) + 13vmax) calc(var(--vt-y) + 15vmax),
+      #000 calc(var(--r) * 0.38),
+      transparent calc(var(--r) * 0.43 + 6px)
+    ),
+    radial-gradient(
+      circle at calc(var(--vt-x) + 21vmax) calc(var(--vt-y) - 7vmax),
+      #000 calc(var(--r) * 0.28),
+      transparent calc(var(--r) * 0.32 + 5px)
+    );
+  -webkit-mask-image: var(--blot);
+  mask-image: var(--blot);
+  animation: vt-progress 0.85s cubic-bezier(0.3, 0.6, 0.3, 1) both;
+}
+
+/* 塗鴉：拿筆由左往右塗。筆尖那一段是一條一條的斜線（還沒塗滿），後面跟著塗實 */
+:root[data-vt='doodle']::view-transition-new(root) {
+  --p: calc(var(--vt-t) * 150%);
+  --scribble:
+    linear-gradient(100deg, #000 calc(var(--p) - 50%), transparent calc(var(--p) - 42%)),
+    repeating-linear-gradient(-58deg, #000 0 15px, transparent 15px 27px),
+    linear-gradient(100deg, #000 calc(var(--p) - 4%), transparent var(--p));
+  -webkit-mask-image: var(--scribble);
+  mask-image: var(--scribble);
+  /* 第一層（塗實的）加上「斜線 ∩ 筆尖掃過的範圍」 */
+  -webkit-mask-composite: source-over, source-in;
+  mask-composite: add, intersect;
+  animation: vt-progress 0.8s cubic-bezier(0.4, 0.1, 0.4, 1) both;
+}
+
+/* 山嵐：霧從下面慢慢漫上來，邊緣很寬、很淡 */
+:root[data-vt='mist']::view-transition-new(root) {
+  --p: calc(var(--vt-t) * 170%);
+  --fog: linear-gradient(to top, #000 calc(var(--p) - 70%), transparent var(--p));
+  -webkit-mask-image: var(--fog);
+  mask-image: var(--fog);
+  animation: vt-progress 0.9s ease-in-out both;
+}
+
+/* 貼紙：一個圓先「啵」一聲彈出來，再撐滿整個畫面。圓的外面是貼紙的白邊和黑框：
+   新畫面切成圓，舊畫面挖一個大一圈的洞，中間露出來的那一圈是底下這層畫的白和黑 */
+:root[data-vt='sticker']::view-transition-image-pair(root),
+:root[data-vt='sticker']::view-transition-old(root),
+:root[data-vt='sticker']::view-transition-new(root) {
+  --r: calc(26px + var(--vt-max) * var(--vt-t));
+  animation: vt-sticker 0.8s both;
+}
+:root[data-vt='sticker']::view-transition-image-pair(root) {
+  background: radial-gradient(
+    circle at var(--vt-x) var(--vt-y),
+    #fff calc(var(--r) + 5px),
+    #1f1a14 calc(var(--r) + 5.5px)
+  );
+}
+:root[data-vt='sticker']::view-transition-new(root) {
+  clip-path: circle(var(--r) at var(--vt-x) var(--vt-y));
+}
+:root[data-vt='sticker']::view-transition-old(root) {
+  --hole: radial-gradient(
+    circle at var(--vt-x) var(--vt-y),
+    transparent calc(var(--r) + 10px),
+    #000 calc(var(--r) + 10.5px)
+  );
+  -webkit-mask-image: var(--hole);
+  mask-image: var(--hole);
+}
+@keyframes vt-sticker {
+  0% {
+    --vt-t: -0.03;
+    animation-timing-function: cubic-bezier(0.3, 2.2, 0.5, 1);
+  }
+  30% {
+    --vt-t: 0.07;
+    animation-timing-function: cubic-bezier(0.6, 0, 0.3, 1);
+  }
+  100% {
+    --vt-t: 1;
   }
 }

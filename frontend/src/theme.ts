@@ -1,11 +1,14 @@
 // 外觀偏好存在 localStorage，分成兩個獨立的選擇：
 // - 深淺（theme）：跟隨系統／亮色／深色 → <html data-theme>，跟隨系統時不設
-// - 風格（style）：墨與陽／塗鴉 → <html data-style>，墨與陽是預設、不設
+// - 風格（style）：墨與陽／塗鴉／山嵐／貼紙 → <html data-style>，墨與陽是預設、不設
 // index.html 裡有一段同樣邏輯的 inline script，在畫面出來前先套用，避免閃一下
 import { useSyncExternalStore } from 'react'
+import { flushSync } from 'react-dom'
 
 export type ThemePreference = 'system' | 'light' | 'dark'
-export type StylePreference = 'ink' | 'doodle'
+export type StylePreference = 'ink' | 'doodle' | 'mist' | 'sticker'
+/** 畫面上的一個點（clientX／clientY），新的外觀從這裡暈開 */
+export type Origin = { x: number; y: number }
 
 const THEME_KEY = 'theme'
 const STYLE_KEY = 'style'
@@ -37,7 +40,8 @@ function readTheme(): ThemePreference {
 }
 
 function readStyle(): StylePreference {
-  return read(STYLE_KEY) === 'doodle' ? 'doodle' : 'ink'
+  const value = read(STYLE_KEY)
+  return value === 'doodle' || value === 'mist' || value === 'sticker' ? value : 'ink'
 }
 
 // 存不進 localStorage 時，這次開著的畫面還是照選的走
@@ -65,25 +69,70 @@ function applyToRoot() {
   const root = document.documentElement
   if (theme === 'system') delete root.dataset.theme
   else root.dataset.theme = theme
-  if (style === 'doodle') {
-    loadDoodleFont()
-    root.dataset.style = 'doodle'
-  } else {
+  if (style === 'ink') {
     delete root.dataset.style
+  } else {
+    // 山嵐用的是本來就載入的字，只有塗鴉要另外下載
+    if (style === 'doodle') loadDoodleFont()
+    root.dataset.style = style
   }
   refresh()
 }
 
-export function setThemePreference(preference: ThemePreference) {
-  theme = preference
-  write(THEME_KEY, preference === 'system' ? null : preference)
-  applyToRoot()
+// ---- 換外觀的轉場 ----
+// 用 View Transitions：瀏覽器先把舊畫面拍成一張圖，新畫面從 origin 那個點蓋上去。
+// 怎麼蓋看「要換成的風格」（<html data-vt>，動畫在 components/Appearance.css）：
+// 墨與陽是墨暈開、塗鴉是用筆塗滿、山嵐是霧漫上來、貼紙是一個帶白邊黑框的圓彈開。
+// 瀏覽器不支援、使用者要求減少動態，或沒給 origin（別的分頁改的）就直接換。
+
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+let transitionSeq = 0
+
+function change(update: () => void, origin?: Origin) {
+  const root = document.documentElement
+  if (!origin || !document.startViewTransition || reduceMotion.matches || document.hidden) {
+    update()
+    applyToRoot()
+    return
+  }
+  const seq = ++transitionSeq
+  const farX = Math.max(origin.x, window.innerWidth - origin.x)
+  const farY = Math.max(origin.y, window.innerHeight - origin.y)
+  root.style.setProperty('--vt-x', `${origin.x}px`)
+  root.style.setProperty('--vt-y', `${origin.y}px`)
+  // 從 origin 到最遠的角落，圓要長到這麼大才蓋得滿
+  root.style.setProperty('--vt-max', `${Math.ceil(Math.hypot(farX, farY))}px`)
+  const transition = document.startViewTransition(() => {
+    update()
+    root.dataset.vt = style
+    // 馬上重畫（例如首頁的太陽換成別的），瀏覽器拍新畫面時才是換好的樣子
+    flushSync(applyToRoot)
+  })
+  const done = () => {
+    // 動畫還沒跑完又換了一次：留給後面那次收
+    if (seq !== transitionSeq) return
+    delete root.dataset.vt
+    root.style.removeProperty('--vt-x')
+    root.style.removeProperty('--vt-y')
+    root.style.removeProperty('--vt-max')
+  }
+  transition.finished.then(done, done)
 }
 
-export function setStylePreference(preference: StylePreference) {
-  style = preference
-  write(STYLE_KEY, preference === 'ink' ? null : preference)
-  applyToRoot()
+export function setThemePreference(preference: ThemePreference, origin?: Origin) {
+  if (preference === theme) return
+  change(() => {
+    theme = preference
+    write(THEME_KEY, preference === 'system' ? null : preference)
+  }, origin)
+}
+
+export function setStylePreference(preference: StylePreference, origin?: Origin) {
+  if (preference === style) return
+  change(() => {
+    style = preference
+    write(STYLE_KEY, preference === 'ink' ? null : preference)
+  }, origin)
 }
 
 // ---- 讓元件跟著外觀重畫（例如首頁的太陽） ----

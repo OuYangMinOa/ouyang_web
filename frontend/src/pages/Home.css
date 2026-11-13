@@ -445,7 +445,280 @@ a.home-item:hover .home-item-go {
   opacity: 0.85;
 }
 
+/* ---- 山嵐風格（<html data-style="mist">） ---- */
+
+/* 不會動的山景（components/MistScene.tsx），取代 3D 粒子太陽；顏色是 index.css 的 --mist-* */
+.mist-scene {
+  position: absolute;
+  inset: 0 0 36px;
+  width: 100%;
+  height: calc(100% - 36px);
+}
+.mist-halo-stop {
+  stop-color: var(--mist-halo);
+}
+/* 山腳的霧 */
+.mist-fog-stop {
+  stop-color: var(--mist-fog);
+}
+/* 畫面的左、右、下三邊淡出成頁面的底色 */
+.mist-edge-stop {
+  stop-color: var(--bg);
+}
+.mist-disc {
+  fill: var(--mist-disc);
+}
+.mist-stars {
+  fill: var(--text-h);
+  opacity: var(--mist-stars);
+}
+.mist-ridge-1 {
+  fill: var(--mist-ridge-1);
+}
+.mist-ridge-2 {
+  fill: var(--mist-ridge-2);
+}
+.mist-ridge-3 {
+  fill: var(--mist-ridge-3);
+}
+.mist-ridge-4 {
+  fill: var(--mist-ridge-4);
+}
+.mist-ridge-5 {
+  fill: var(--mist-ridge-5);
+}
+
+/* 名字當 logo：細一點的明體，字距拉開 */
+:root[data-style='mist'] .home-name {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(40px, 5.4vw, 64px);
+  letter-spacing: 0.12em;
+}
+:root[data-style='mist'] .home-items {
+  border-top-color: var(--border);
+}
+/* 作品前面的字放在一塊淡淡的松綠底上 */
+:root[data-style='mist'] .home-item-glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font: 600 18px/1 var(--display);
+}
+/* 滑過只換顏色，箭頭不滑動 */
+:root[data-style='mist'] a.home-item:hover .home-item-go {
+  transform: none;
+}
+
+/* 便條紙排整齊：不歪、不貼紙膠帶，新留言淡入 */
+:root[data-style='mist'] .notes {
+  gap: 14px;
+}
+:root[data-style='mist'] .note {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transform: none;
+}
+:root[data-style='mist'] .note::before {
+  content: none;
+}
+:root[data-style='mist'] .note.fresh {
+  animation: mist-fade 0.4s ease-out;
+}
+
+/* ---- 貼紙風格（<html data-style="sticker">） ---- */
+
+/* 太陽貼紙和旁邊的小貼紙（components/StickerSun.tsx），取代 3D 粒子太陽。
+   每張都是同一個形狀畫三層：實心的影子、一圈白邊、黑框加顏色 */
+.sticker-sun {
+  position: absolute;
+  inset: 0 0 36px;
+  width: 100%;
+  height: calc(100% - 36px);
+  overflow: visible;
+}
+.sticker-die-shadow {
+  fill: var(--ink-shadow);
+  stroke: var(--ink-shadow);
+  stroke-width: 12;
+  stroke-linejoin: round;
+}
+.sticker-die-edge {
+  fill: var(--edge);
+  stroke: var(--edge);
+  stroke-width: 12;
+  stroke-linejoin: round;
+}
+.sticker-die-face {
+  fill: var(--pop);
+  stroke: var(--ink);
+  stroke-width: 3.5;
+  stroke-linejoin: round;
+}
+.sticker-die.is-surface .sticker-die-face {
+  fill: var(--surface);
+}
+.sticker-die.is-yellow .sticker-die-face {
+  fill: var(--pop-yellow);
+}
+.sticker-die.is-pink .sticker-die-face {
+  fill: var(--pop-pink);
+}
+.sticker-die.is-sky .sticker-die-face {
+  fill: var(--pop-sky);
+}
+.sticker-die.is-mint .sticker-die-face {
+  fill: var(--pop-mint);
+}
+.sticker-die-text {
+  fill: var(--text-h);
+  font: 900 19px var(--sans);
+  letter-spacing: 0.04em;
+}
+.sticker-sun-disc {
+  fill: var(--pop-yellow);
+  stroke: var(--ink);
+  stroke-width: 3.5;
+}
+.sticker-sun-face {
+  fill: none;
+  stroke: var(--on-pop);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.sticker-sun-cheek {
+  fill: var(--pop-pink);
+}
+/* 每張貼紙慢慢地上下浮，錯開時間才不會一起動 */
+.sticker-die-lift {
+  animation: sticker-bob 5s ease-in-out infinite;
+}
+.sticker-die:nth-child(2n) .sticker-die-lift {
+  animation-delay: -1.7s;
+}
+.sticker-die:nth-child(3n) .sticker-die-lift {
+  animation-delay: -3.1s;
+}
+@keyframes sticker-bob {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* 名字：最粗的黑體，底下錯開一層橘 */
+:root[data-style='sticker'] .home-name {
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: -4px 5px 0 var(--pop);
+}
+:root[data-style='sticker'] .home-profile {
+  border-top: 2px dashed var(--border);
+}
+:root[data-style='sticker'] .home-profile > div {
+  border-bottom: 2px dashed var(--border);
+}
+:root[data-style='sticker'] .home-profile dt {
+  font-weight: 700;
+}
+:root[data-style='sticker'] .home-section,
+:root[data-style='sticker'] .home-foot {
+  border-top: 2px dashed var(--border);
+}
+:root[data-style='sticker'] .home-head h2 {
+  font-weight: 900;
+}
+:root[data-style='sticker'] .home-head h2::after {
+  content: ' ✦';
+  color: var(--pop);
+}
+
+/* 作品目錄：一項一張貼紙，前面的字放在一塊橘色的方塊上，滑過往右上浮起來 */
+:root[data-style='sticker'] .home-items {
+  display: grid;
+  gap: 18px;
+  padding: 4px 3px 9px 7px;
+  border-top: 0;
+}
+:root[data-style='sticker'] .home-item {
+  align-items: center;
+  padding: 14px 16px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+:root[data-style='sticker'] a.home-item {
+  transition:
+    translate 0.12s,
+    box-shadow 0.12s;
+}
+:root[data-style='sticker'] a.home-item:hover {
+  background: var(--surface);
+  translate: 2px -3px;
+  box-shadow:
+    0 0 0 3px var(--edge),
+    -7px 10px 0 3px var(--ink-shadow);
+}
+:root[data-style='sticker'] a.home-item:focus-visible {
+  outline: 3px solid var(--pop);
+  outline-offset: 5px;
+}
+:root[data-style='sticker'] .home-item-glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  box-sizing: border-box;
+  border: 2px solid var(--ink);
+  border-radius: 11px;
+  background: var(--pop);
+  color: var(--on-pop);
+  font-size: 19px;
+  font-weight: 900;
+}
+:root[data-style='sticker'] .home-item-name {
+  font-weight: 900;
+}
+:root[data-style='sticker'] a.home-item:hover .home-item-go {
+  color: var(--text-h);
+}
+
+/* 便條紙：也是貼紙，紙膠帶換成粉紅色、有黑框 */
+:root[data-style='sticker'] .notes {
+  padding: 0 3px 9px 7px;
+}
+:root[data-style='sticker'] .note {
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+}
+:root[data-style='sticker'] .note::before {
+  top: -11px;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  background: var(--pop-pink);
+}
+
+@media (max-width: 640px) {
+  :root[data-style='sticker'] .home-item {
+    align-items: start;
+    padding: 12px;
+  }
+  :root[data-style='sticker'] .home-item-glyph {
+    font-size: 16px;
+    line-height: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .sticker-die-lift,
+  :root[data-style='sticker'] a.home-item {
+    animation: none;
+    transition: none;
+  }
   .note.fresh {
     animation: none;
   }

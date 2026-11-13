@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@600;900&display=swap"
     />
     <!-- 在 React 載入前套用使用者選的深淺和風格，避免先閃一下預設的樣子（邏輯同 src/theme.ts）。
          塗鴉風格的字（全站粉圓，名字和站名用芫荽）只有選了塗鴉才載入 -->
@@ -20,8 +20,9 @@
         var root = document.documentElement
         var theme = localStorage.getItem('theme')
         if (theme === 'light' || theme === 'dark') root.dataset.theme = theme
-        if (localStorage.getItem('style') === 'doodle') {
-          root.dataset.style = 'doodle'
+        var style = localStorage.getItem('style')
+        if (style === 'doodle' || style === 'mist' || style === 'sticker') root.dataset.style = style
+        if (style === 'doodle') {
           var font = document.createElement('link')
           font.id = 'doodle-font'
           font.rel = 'stylesheet'
