@@ -37,6 +37,21 @@ trap 'docker logout ghcr.io >/dev/null' EXIT
 
 docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK"
 
+# AI 助手網路搜尋用的 SearXNG，staging 和 prod 共用一個（見 searxng/compose.yaml）。
+# 複製到兩個環境共用的資料夾再啟動，兩邊輪流部署時掛載路徑才會一樣，不會一直重建容器。
+# 搜尋只是 AI 助手的一個工具，啟動失敗不要擋住部署：app 會回「搜尋服務暫時連不上」
+searxng_dir="$(cd .. && pwd)/searxng"
+mkdir -p "$searxng_dir"
+cp searxng/compose.yaml searxng/settings.yml "$searxng_dir/"
+if [ ! -s "$searxng_dir/secret" ]; then
+  (umask 077 && head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$searxng_dir/secret")
+fi
+if ! SEARXNG_SECRET=$(cat "$searxng_dir/secret") \
+  SEARXNG_SETTINGS_SHA=$(sha256sum "$searxng_dir/settings.yml" | cut -d' ' -f1) \
+  docker compose -p ouyang-web-searxng -f "$searxng_dir/compose.yaml" up -d --wait; then
+  echo "warning: SearXNG failed to start, AI web search will be unavailable" >&2
+fi
+
 docker compose pull app
 # 先啟動新容器、等它 healthy，再停掉舊容器；多等幾秒讓 Traefik 把新容器加進負載平衡
 docker rollout --timeout 60 --wait-after-healthy 3 app

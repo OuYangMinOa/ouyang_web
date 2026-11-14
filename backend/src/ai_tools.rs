@@ -129,14 +129,14 @@ pub async fn all_tools(pool: &SqlitePool) -> Result<(Vec<Tool>, Vec<Server>), sq
 }
 
 /// 這個使用者的對話裡可以用的工具
-pub async fn available(pool: &SqlitePool, user: &CurrentUser) -> Result<Vec<Tool>, sqlx::Error> {
+pub async fn available(state: &AppState, user: &CurrentUser) -> Result<Vec<Tool>, sqlx::Error> {
     let is_admin = user.has(AdminUsers::NAME);
-    let (tools, _) = all_tools(pool).await?;
+    let (tools, _) = all_tools(&state.pool).await?;
     Ok(tools
         .into_iter()
         .filter(|tool| tool.enabled)
         .filter(|tool| match &tool.source {
-            Source::Builtin(_) => true,
+            Source::Builtin(kind) => ai_builtin::usable(state, *kind),
             Source::Mcp { server, .. } => server.enabled && (server.public || is_admin),
         })
         .collect())
@@ -196,7 +196,7 @@ pub struct MyTools {
 }
 
 pub async fn mine(State(state): State<AppState>, user: CurrentUser) -> Result<Json<MyTools>, AppError> {
-    let tools = available(&state.pool, &user).await?;
+    let tools = available(&state, &user).await?;
     let supported = state.ai.active_supports_tools(&state.pool).await.unwrap_or(true);
     Ok(Json(MyTools {
         supported,

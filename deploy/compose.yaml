@@ -21,6 +21,8 @@ services:
       HONEYPOT_AWS_SECRET_ACCESS_KEY: ${HONEYPOT_AWS_SECRET_ACCESS_KEY:-}
       # 系統管理的主機監控讀主機的 /proc（整台的 CPU、記憶體、網路，以及主機上每個服務和 bot 的行程）
       HOST_PROC: /host/proc
+      # AI 助手的網路搜尋：staging 和 prod 共用的 SearXNG（deploy/searxng/，deploy.sh 啟動）；設成空的就關掉搜尋
+      SEARXNG_URL: ${SEARXNG_URL-http://searxng:8080}
     extra_hosts:
       - host.docker.internal:host-gateway
     volumes:
