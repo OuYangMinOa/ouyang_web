@@ -40,6 +40,7 @@ mod short_links;
 mod tetris;
 mod tetris_scores;
 mod threads;
+mod towerdefense;
 mod visits;
 
 /// tests/ 底下的 .rs 都要在上面 mod 進來，不然不會編譯、也不會跑
