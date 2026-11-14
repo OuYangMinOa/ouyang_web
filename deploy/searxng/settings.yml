@@ -1,0 +1,19 @@
+# SearXNG 的設定：只寫跟預設不一樣的地方，其他沿用 SearXNG 內建的預設值。
+# 改了這個檔案，下次部署會自動重建 SearXNG 容器（見 compose.yaml 的標籤）。
+use_default_settings: true
+
+server:
+  # 真正的金鑰由環境變數 SEARXNG_SECRET 給（deploy.sh 產生），這裡只是佔位
+  secret_key: "set-by-SEARXNG_SECRET"
+  # 只在內網給 AI 助手用，不需要擋機器人（limiter 還要另外架 Valkey）
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+search:
+  # 1 是中等的安全搜尋
+  safe_search: 1
+  # 後端用 JSON API 查（預設只開 html，沒有 json 時 /search?format=json 會回 403）
+  formats:
+    - html
+    - json

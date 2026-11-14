@@ -6,6 +6,7 @@ pub mod ai_calendar;
 pub mod ai_chat;
 pub mod ai_tools;
 pub mod ai_usage;
+pub mod ai_web;
 pub mod antique;
 pub mod arena;
 pub mod auth;
@@ -146,6 +147,8 @@ pub struct AppState {
     pub mcp: Arc<mcp::Mcp>,
     /// 前端 build 時產生的本站功能清單（frontend/scripts/site-catalog.mjs），AI 助手的 site_search 查這份
     pub site_catalog: PathBuf,
+    /// AI 助手的網路搜尋（SearXNG）和讀網頁，見 ai_web.rs
+    pub web: Arc<ai_web::Web>,
     /// 聊天室裡有人連線中的視窗（訊息存在資料庫，見 chat.rs）
     pub chat: Arc<chat::Chat>,
     /// Web Push：VAPID 金鑰和送推播用的 HTTP client（見 webpush.rs）
@@ -196,6 +199,7 @@ impl AppState {
             ai_running: Arc::default(),
             mcp: Arc::default(),
             site_catalog: PathBuf::from("../frontend/dist/site-catalog.json"),
+            web: Arc::default(),
             chat: Arc::default(),
             push: Arc::default(),
         }

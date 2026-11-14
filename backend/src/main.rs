@@ -11,7 +11,7 @@ use std::{
 };
 
 use backend::{
-    AppState, access_log, ai,
+    AppState, access_log, ai, ai_web,
     auth::upsert_admin,
     draw_words, healthcheck,
     honeypot::Honeypot,
@@ -89,6 +89,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     monitor::spawn(state.monitor.clone(), pool.clone());
     // AI 服務掛掉時要馬上知道，前端的 AI 功能才能先告訴使用者
     ai::spawn(state.ai.clone(), pool.clone());
+    // AI 助手的網路搜尋：SEARXNG_URL 沒設定就沒有 web_search（讀網頁不用設定）
+    state.web = Arc::new(ai_web::Web::from_env());
     let draining = state.draining.clone();
     let access = state.access_log.clone();
     let app = router(state, &static_dir);

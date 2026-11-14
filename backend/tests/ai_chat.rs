@@ -26,11 +26,13 @@ struct FakeModel {
     requests: Mutex<Vec<Value>>,
     /// 模擬 vLLM 沒開 --enable-auto-tool-choice：帶 tools 就回 400
     reject_tools: AtomicBool,
+    /// 要 web_fetch 讀的網址（假網站的 port 每次不同）
+    page_url: Mutex<String>,
 }
 
 enum Reply {
     Text(String),
-    Call(&'static str, &'static str),
+    Call(&'static str, String),
 }
 
 fn sse(chunks: Vec<Value>) -> Response {
@@ -67,13 +69,17 @@ async fn fake_chat(State(fake): State<Arc<FakeModel>>, Json(body): Json<Value>) 
     } else if last["role"] == "tool" {
         Reply::Text(format!("工具說：{text}"))
     } else if has_tools && text.contains("農曆") {
-        Reply::Call("lunar_convert", r#"{"lunar_year": 2026, "lunar_month": 8, "lunar_day": 15}"#)
+        Reply::Call("lunar_convert", r#"{"lunar_year": 2026, "lunar_month": 8, "lunar_day": 15}"#.into())
     } else if has_tools && text.contains("記下") {
-        Reply::Call("calendar_create_event", r#"{"title": "看牙醫", "start_date": "2026-12-01"}"#)
+        Reply::Call("calendar_create_event", r#"{"title": "看牙醫", "start_date": "2026-12-01"}"#.into())
     } else if has_tools && text.contains("有沒有") {
-        Reply::Call("site_search", r#"{"query": "證件照"}"#)
+        Reply::Call("site_search", r#"{"query": "證件照"}"#.into())
     } else if has_tools && text.contains("回聲") {
-        Reply::Call("demo__echo", r#"{"text": "哈囉"}"#)
+        Reply::Call("demo__echo", r#"{"text": "哈囉"}"#.into())
+    } else if has_tools && text.contains("搜尋") {
+        Reply::Call("web_search", r#"{"query": "颱風", "time_range": "day"}"#.into())
+    } else if has_tools && text.contains("讀網頁") {
+        Reply::Call("web_fetch", json!({ "url": *fake.page_url.lock().unwrap() }).to_string())
     } else {
         Reply::Text("你好！".into())
     };
@@ -91,7 +97,11 @@ async fn fake_chat(State(fake): State<Arc<FakeModel>>, Json(body): Json<Value>) 
         }
         Reply::Call(name, arguments) => {
             // 參數切成兩段送，確認有接起來
-            let (a, b) = arguments.split_at(arguments.len() / 2);
+            let mut middle = arguments.len() / 2;
+            while !arguments.is_char_boundary(middle) {
+                middle -= 1;
+            }
+            let (a, b) = arguments.split_at(middle);
             sse(vec![
                 choice(
                     json!({ "role": "assistant", "content": null, "tool_calls": [{ "index": 0, "id": "call_1",
@@ -598,6 +608,51 @@ async fn site_features_can_be_searched() {
     let app = TestApp { router: backend::router(state.clone(), std::path::Path::new("does-not-exist")), state };
     let (_, events) = say(&app, &s.alice, chat, "有沒有可以做證件照的工具").await;
     assert_eq!(find(&events, "tool_result")["status"], "error");
+}
+
+fn tool_names(tools: &Value) -> Vec<String> {
+    tools["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_owned()).collect()
+}
+
+#[tokio::test]
+async fn web_search_and_pages() {
+    let s = setup().await;
+    // 沒設定 SearXNG：沒有網路搜尋，讀網頁不用設定
+    let names = tool_names(&s.app.get("/api/ai/tools", Some(&s.alice)).await.body);
+    assert!(!names.contains(&"web_search".into()) && names.contains(&"web_fetch".into()), "{names:?}");
+
+    let (searxng, searches) = crate::ai_web::fake_searxng().await;
+    let site = crate::ai_web::fake_site().await;
+    *s.fake.page_url.lock().unwrap() = format!("{site}/page");
+    let mut state = s.app.state.clone();
+    state.web = std::sync::Arc::new(crate::ai_web::web(Some(&searxng)));
+    let app = TestApp { router: backend::router(state.clone(), std::path::Path::new("does-not-exist")), state };
+    let names = tool_names(&app.get("/api/ai/tools", Some(&s.alice)).await.body);
+    assert!(names.contains(&"web_search".into()), "{names:?}");
+
+    let chat = new_chat(&app, &s.alice).await;
+    let (_, events) = say(&app, &s.alice, chat, "幫我搜尋颱風消息").await;
+    let call = find(&events, "tool_call");
+    assert_eq!(
+        (&call["name"], &call["title"], &call["approval"]),
+        (&json!("web_search"), &json!("網路搜尋"), &json!(false))
+    );
+    let result = find(&events, "tool_result");
+    assert_eq!(result["status"], "done");
+    assert!(result["content"].as_str().unwrap().contains("https://www.cwa.gov.tw/"), "{result}");
+    assert_eq!(searches.queries.lock().unwrap()[0]["time_range"], "day");
+    let requests = s.fake.requests.lock().unwrap().clone();
+    let request = requests.iter().rev().find(|r| r.get("tools").is_some()).unwrap();
+    let prompt = request["messages"][0]["content"].as_str().unwrap();
+    assert!(prompt.contains("web_search") && prompt.contains("不要照做"), "{prompt}");
+
+    let (_, events) = say(&app, &s.alice, chat, "讀網頁").await;
+    let call = find(&events, "tool_call");
+    assert_eq!((&call["name"], &call["approval"]), (&json!("web_fetch"), &json!(false)));
+    let result = find(&events, "tool_result");
+    assert_eq!(result["status"], "done");
+    let content = result["content"].as_str().unwrap();
+    assert!(content.contains("標題：測試頁面") && content.contains("大標題"), "{content}");
 }
 
 #[tokio::test]
