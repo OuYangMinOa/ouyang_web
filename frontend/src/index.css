@@ -197,6 +197,32 @@
   --mg-ink-c: #1c1a17;
   --mg-ink-d: #fffaf3;
   --mg-ink-e: #f2d27a;
+  /* 迷宮塔防（3D 畫面也讀這一組）：棋盤的側邊、兩種格子、格線、通道、岩石底下的格子，飛行路線、入口、出口，
+     八個座位的顏色（塔底座的色環），七種塔在商店上的代表色 */
+  --td-board: #b9a57f;
+  --td-tile-a: #b7c98a;
+  --td-tile-b: #a9bd7b;
+  --td-tile-line: #8fa565;
+  --td-walk: #dcc99c;
+  --td-rock-tile: #a8a399;
+  --td-air: #5b6fd6;
+  --td-spawn: #7c3aed;
+  --td-exit: #0f9d8a;
+  --td-p0: #d1372b;
+  --td-p1: #2463c8;
+  --td-p2: #23874a;
+  --td-p3: #d99a00;
+  --td-p4: #8b3fc7;
+  --td-p5: #0e8f9c;
+  --td-p6: #d9569b;
+  --td-p7: #6b5a48;
+  --td-bolt: #8a5a2b;
+  --td-cannon: #4a4f57;
+  --td-frost: #3f8fc4;
+  --td-tesla: #c79a00;
+  --td-poison: #3f9b4b;
+  --td-sniper: #a8412e;
+  --td-beacon: #c2410c;
 
   color-scheme: light;
 }
@@ -377,6 +403,30 @@
     --mg-ink-c: #100e0c;
     --mg-ink-d: #100e0c;
     --mg-ink-e: #c2410c;
+    --td-board: #3a332b;
+    --td-tile-a: #3f5136;
+    --td-tile-b: #37482f;
+    --td-tile-line: #2b3a25;
+    --td-walk: #6a5c44;
+    --td-rock-tile: #4c4943;
+    --td-air: #8fa0ff;
+    --td-spawn: #a78bfa;
+    --td-exit: #2dd4bf;
+    --td-p0: #f0574b;
+    --td-p1: #5b9bff;
+    --td-p2: #5fd38d;
+    --td-p3: #ffd23f;
+    --td-p4: #c084fc;
+    --td-p5: #38d0dd;
+    --td-p6: #ff8cc6;
+    --td-p7: #c9b08e;
+    --td-bolt: #d4a373;
+    --td-cannon: #a8b0bb;
+    --td-frost: #7cc7f5;
+    --td-tesla: #ffd23f;
+    --td-poison: #7ddc86;
+    --td-sniper: #ff8f7a;
+    --td-beacon: #ff9d5c;
     color-scheme: dark;
   }
 }
@@ -549,6 +599,30 @@
   --mg-ink-c: #100e0c;
   --mg-ink-d: #100e0c;
   --mg-ink-e: #c2410c;
+  --td-board: #3a332b;
+  --td-tile-a: #3f5136;
+  --td-tile-b: #37482f;
+  --td-tile-line: #2b3a25;
+  --td-walk: #6a5c44;
+  --td-rock-tile: #4c4943;
+  --td-air: #8fa0ff;
+  --td-spawn: #a78bfa;
+  --td-exit: #2dd4bf;
+  --td-p0: #f0574b;
+  --td-p1: #5b9bff;
+  --td-p2: #5fd38d;
+  --td-p3: #ffd23f;
+  --td-p4: #c084fc;
+  --td-p5: #38d0dd;
+  --td-p6: #ff8cc6;
+  --td-p7: #c9b08e;
+  --td-bolt: #d4a373;
+  --td-cannon: #a8b0bb;
+  --td-frost: #7cc7f5;
+  --td-tesla: #ffd23f;
+  --td-poison: #7ddc86;
+  --td-sniper: #ff8f7a;
+  --td-beacon: #ff9d5c;
   color-scheme: dark;
 }
 

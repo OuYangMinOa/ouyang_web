@@ -45,6 +45,10 @@ pub mod telephone;
 pub mod tetris;
 pub mod tetris_scores;
 pub mod threads;
+pub mod towerdefense;
+pub mod towerdefense_bot;
+pub mod towerdefense_field;
+pub mod towerdefense_spec;
 pub mod undercover;
 pub mod uno;
 pub mod visits;
@@ -114,6 +118,7 @@ pub struct AppState {
     pub poker: Arc<party::Parties<poker::Poker>>,
     pub werewolf: Arc<party::Parties<werewolf::Werewolf>>,
     pub chinesecheckers: Arc<party::Parties<chinesecheckers::ChineseCheckers>>,
+    pub towerdefense: Arc<party::Parties<towerdefense::TowerDefense>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
@@ -182,6 +187,7 @@ impl AppState {
             poker: Arc::default(),
             werewolf: Arc::default(),
             chinesecheckers: Arc::default(),
+            towerdefense: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
@@ -329,6 +335,9 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/werewolf/party/{code}/ws", get(party::connect::<werewolf::Werewolf>))
         .route("/games/chinesecheckers/party", post(party::create::<chinesecheckers::ChineseCheckers>))
         .route("/games/chinesecheckers/party/{code}/ws", get(party::connect::<chinesecheckers::ChineseCheckers>))
+        .route("/games/towerdefense/spec", get(towerdefense_spec::spec))
+        .route("/games/towerdefense/party", post(party::create::<towerdefense::TowerDefense>))
+        .route("/games/towerdefense/party/{code}/ws", get(party::connect::<towerdefense::TowerDefense>))
         .route("/games/lobby", post(lobby::create))
         .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))

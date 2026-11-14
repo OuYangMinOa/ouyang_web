@@ -203,6 +203,17 @@ export const GAMES: GameInfo[] = [
     fullscreen: true,
   },
   {
+    id: 'towerdefense',
+    name: '迷宮塔防',
+    icon: '🏰',
+    blurb: '整個畫面都是戰場的 3D 塔防：怪物一波一波從入口走向出口，蓋塔擋住牠們。塔會擋路，所以怎麼排迷宮和蓋什麼塔一樣重要。可以大家一起守同一塊場地（合作），也可以各守各的、花錢派怪去打別人（對抗）。1～8 人連線，人不夠可以加電腦，手機也能玩。',
+    tags: ['線上', '合作', '電腦', '3D'],
+    category: '多人對戰',
+    component: lazyPage(() => import('./towerdefense')),
+    lobby: { kind: 'party', players: '1～8 人，可以加電腦' },
+    fullscreen: true,
+  },
+  {
     id: 'snake',
     name: '貪食蛇',
     icon: '🐍',

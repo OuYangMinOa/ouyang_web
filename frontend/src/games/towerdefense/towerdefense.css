@@ -1,0 +1,932 @@
+/* 迷宮塔防：整個畫面都是遊戲，蓋住網站的頁首和側邊欄；資源、商店、面板浮在 3D 畫面上。
+   棋盤和座位的顏色是 index.css 的 --td-*（亮色、深色都有定義），3D 畫面也讀同一組 */
+.td-root {
+  --t-pad: 10px;
+  --t-top: max(var(--t-pad), env(safe-area-inset-top));
+  --t-bottom: max(var(--t-pad), env(safe-area-inset-bottom));
+  --t-left: max(var(--t-pad), env(safe-area-inset-left));
+  --t-right: max(var(--t-pad), env(safe-area-inset-right));
+  --t-glass: color-mix(in srgb, var(--surface) 88%, transparent);
+  --t-line: color-mix(in srgb, var(--border) 85%, transparent);
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text-h);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.td-view,
+.td-view canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+.td-view .td-overlay {
+  pointer-events: none;
+}
+.td-root .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.td-root .ok {
+  color: var(--ok);
+}
+.td-root .danger {
+  color: var(--danger);
+}
+.td-root .accent {
+  color: var(--accent);
+}
+
+.td-chip {
+  background: var(--t-glass);
+  border: 1px solid var(--t-line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* 上方：左邊離開和資源，中間波次，右邊按鈕 */
+.td-top {
+  position: absolute;
+  top: var(--t-top);
+  left: var(--t-left);
+  right: var(--t-right);
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+.td-top > * {
+  pointer-events: auto;
+}
+.td-top-start,
+.td-top-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.td-top-end {
+  justify-content: flex-end;
+}
+button.td-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 18px;
+  line-height: 1;
+  background: var(--t-glass);
+  color: var(--text-h);
+  border: 1px solid var(--t-line);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+button.td-icon:hover,
+button.td-icon.on {
+  border-color: var(--accent);
+}
+button.td-speed {
+  display: grid;
+  place-items: center;
+  width: auto;
+  min-width: 44px;
+  padding: 0 6px;
+  font-size: 15px;
+}
+button.td-speed small {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.td-res {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.td-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0 10px;
+  min-height: 44px;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.td-stat strong {
+  font-size: 18px;
+}
+.td-stat small {
+  font-size: 12px;
+  color: var(--ok);
+}
+.td-stat.danger strong {
+  color: var(--danger);
+}
+.td-stat.subtle {
+  opacity: 0.85;
+}
+
+.td-wave {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 5px 8px 5px 14px;
+  min-height: 44px;
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+}
+.td-wave-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+.td-wave-main strong {
+  font-size: 17px;
+}
+.td-wave-timer {
+  font-size: 14px;
+}
+.td-wave-timer .party-timer {
+  font-weight: 700;
+  color: var(--accent);
+}
+.td-next {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.td-next-item {
+  font-weight: 700;
+}
+button.td-ready {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+button.td-ready.on {
+  background: transparent;
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+button.td-ready small {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* 漏怪：畫面四周紅一下 */
+.td-leak {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px 20px var(--danger);
+  opacity: 0;
+  animation: td-leak 0.6s ease-out;
+}
+@keyframes td-leak {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.td-feed {
+  position: absolute;
+  top: calc(var(--t-top) + 56px);
+  right: var(--t-right);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+  max-width: min(360px, calc(100% - var(--t-left) - var(--t-right)));
+}
+.td-feed li {
+  padding: 4px 10px;
+  font-size: 13px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: td-in 0.2s ease-out;
+}
+.td-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--t-top) + 64px);
+  transform: translateX(-50%);
+  z-index: 7;
+  padding: 8px 16px;
+  font-weight: 700;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: td-toast 0.2s ease-out;
+}
+.td-toast.danger,
+.td-feed li.danger {
+  border-color: var(--danger);
+}
+/* 觀戰、出局、在看別人的場地：放在下面那一疊的最上面，不蓋住場地 */
+.td-dock > .td-watch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  max-width: 100%;
+  padding: 6px 8px 6px 14px;
+  font-size: 14px;
+}
+.td-watch button {
+  min-height: 40px;
+}
+.td-offline {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translateX(-50%);
+  z-index: 9;
+  padding: 8px 16px;
+  color: var(--danger);
+  font-weight: 700;
+}
+button.td-show-results {
+  position: absolute;
+  left: 50%;
+  bottom: var(--t-bottom);
+  transform: translateX(-50%);
+  z-index: 6;
+  min-height: 44px;
+  padding: 0 20px;
+  color: var(--text-h);
+  font-weight: 700;
+}
+
+/* 下面：選到的塔（或蓋塔的說明）、派兵、商店 */
+.td-dock {
+  position: absolute;
+  left: var(--t-left);
+  right: var(--t-right);
+  bottom: var(--t-bottom);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.td-dock > * {
+  pointer-events: auto;
+  width: min(720px, 100%);
+  box-sizing: border-box;
+}
+.td-dock .party-notice {
+  margin: 0;
+}
+.td-dock-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.td-shop {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+button.td-shop-item,
+button.td-send-toggle {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 1px;
+  min-height: 60px;
+  padding: 4px 2px;
+  border-radius: 12px;
+  background: var(--t-glass);
+  color: var(--text-h);
+  border: 1px solid var(--t-line);
+  border-top: 3px solid var(--tower, var(--accent));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-weight: 500;
+  line-height: 1.15;
+}
+button.td-send-toggle {
+  flex: none;
+  width: 60px;
+  border-top-color: var(--danger);
+  font-size: 12px;
+}
+button.td-shop-item:hover:not(:disabled),
+button.td-send-toggle:hover {
+  border-color: var(--tower, var(--accent));
+}
+button.td-shop-item.on,
+button.td-send-toggle.on {
+  background: color-mix(in srgb, var(--tower, var(--danger)) 22%, var(--surface));
+  border-color: var(--tower, var(--danger));
+}
+button.td-shop-item.poor .td-shop-cost {
+  color: var(--danger);
+}
+button.td-shop-item.poor .td-shop-icon {
+  opacity: 0.45;
+}
+.td-shop-icon {
+  font-size: 22px;
+  line-height: 1.1;
+}
+.td-shop-name {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.td-shop-cost,
+.td-cost {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.td-shop-cost::before,
+.td-cost::before {
+  content: '🪙';
+  font-size: 0.8em;
+  margin-right: 2px;
+}
+
+.td-info {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.td-info p {
+  margin: 0;
+}
+.td-info-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.td-info-head strong {
+  font-size: 16px;
+}
+.td-info-head .chip {
+  margin: 0;
+}
+.td-info-stats {
+  font-variant-numeric: tabular-nums;
+}
+.td-level {
+  margin-left: 6px;
+  color: var(--accent);
+}
+.td-owner {
+  font-size: 13px;
+  color: var(--seat, var(--text));
+  font-weight: 700;
+}
+button.td-x {
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--t-line);
+  font-size: 20px;
+  line-height: 1;
+}
+.td-tower {
+  border-left: 4px solid var(--seat, var(--t-line));
+}
+.td-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.td-actions button {
+  flex: 1 1 auto;
+  min-height: 44px;
+}
+.td-modes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 13px;
+}
+.td-modes button {
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--t-line);
+  border-radius: 10px;
+}
+.td-modes button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.td-send {
+  padding: 10px 12px;
+  background: var(--t-glass);
+  border: 1px solid var(--t-line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.td-send-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.td-send-head .muted {
+  font-size: 12px;
+}
+.td-send-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+button.td-send-item {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  min-height: 64px;
+  padding: 4px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--t-line);
+  font-size: 13px;
+  line-height: 1.25;
+}
+button.td-send-item small {
+  font-size: 11px;
+}
+button.td-send-item:hover:not(:disabled) {
+  border-color: var(--danger);
+}
+
+/* 玩家列表：桌機在右邊，窄螢幕蓋在上面 */
+.td-side {
+  position: absolute;
+  top: calc(var(--t-top) + 56px);
+  right: var(--t-right);
+  z-index: 7;
+  width: min(380px, calc(100% - var(--t-left) - var(--t-right)));
+  max-height: calc(100% - var(--t-top) - var(--t-bottom) - 150px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+.td-players {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.td-players li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--t-line);
+  border-left: 4px solid var(--seat);
+  font-size: 14px;
+}
+.td-players li.me {
+  background: color-mix(in srgb, var(--seat) 12%, transparent);
+}
+.td-players li.out {
+  opacity: 0.6;
+}
+.td-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--seat);
+  margin-right: 6px;
+  vertical-align: baseline;
+}
+.td-player-name {
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.td-player-name .chip {
+  margin: 0 0 0 6px;
+}
+.td-player-stats {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.td-player-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.td-player-actions:empty {
+  display: none;
+}
+.td-player-actions button {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+/* 選單、結算這些蓋在畫面上的面板 */
+.td-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  box-sizing: border-box;
+  padding: calc(var(--t-top) + 54px) var(--t-right) var(--t-bottom) var(--t-left);
+  pointer-events: none;
+}
+.td-center {
+  align-items: center;
+  justify-content: center;
+  padding-top: var(--t-top);
+  background: var(--scrim);
+  pointer-events: auto;
+}
+.td-panel {
+  pointer-events: auto;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(460px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding: 18px 20px 20px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 93%, transparent);
+  border: 1px solid var(--t-line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.td-panel h1,
+.td-panel h2,
+.td-panel h3 {
+  margin: 0;
+  color: var(--text-h);
+}
+.td-panel h2.ok {
+  color: var(--ok);
+}
+.td-panel h2.danger {
+  color: var(--danger);
+}
+.td-title {
+  font-size: 26px;
+}
+.td-help {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.td-help ul {
+  margin: 0;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 4px;
+}
+.td-guide {
+  display: grid;
+  gap: 10px;
+}
+.td-cards {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.td-cards li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.td-cards p {
+  margin: 2px 0 0;
+}
+.td-cards .chip {
+  margin: 0 0 0 6px;
+}
+.td-card-icon {
+  font-size: 26px;
+  line-height: 1.2;
+}
+.td-result {
+  width: min(680px, 100%);
+}
+.td-result h2 {
+  font-size: 30px;
+}
+.td-final {
+  margin: 0;
+  font-size: 17px;
+}
+.td-pause {
+  width: min(400px, 100%);
+}
+.td-pause > button {
+  min-height: 44px;
+}
+.td-chat summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  cursor: pointer;
+  color: var(--text-h);
+}
+/* 主要按鈕黏在面板底部 */
+.td-sticky {
+  position: sticky;
+  bottom: -20px;
+  margin: 0 -20px -20px;
+  padding: 10px 20px 20px;
+  background: linear-gradient(transparent, var(--surface) 30%);
+}
+.td-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.td-table th,
+.td-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.td-table th {
+  font-size: 13px;
+  font-weight: 500;
+}
+.td-table td .chip {
+  margin: 0 0 0 6px;
+}
+.td-table tr.me td {
+  font-weight: 700;
+}
+
+@keyframes td-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+@keyframes td-toast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .td-leak,
+  .td-feed li,
+  .td-toast {
+    animation: none;
+  }
+}
+
+/* 中等寬度：波次那一條放不下三段，換到第二行 */
+@media (max-width: 900px) {
+  .td-top {
+    flex-wrap: wrap;
+  }
+  .td-wave {
+    order: 3;
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+  .td-feed,
+  .td-side {
+    top: calc(var(--t-top) + 108px);
+  }
+  .td-toast {
+    top: calc(var(--t-top) + 112px);
+  }
+  .td-side {
+    max-height: calc(100% - var(--t-top) - var(--t-bottom) - 200px);
+  }
+}
+
+@media (max-width: 560px) {
+  .td-root {
+    --t-pad: 8px;
+  }
+  /* 左邊（離開、生命、錢）要多少給多少，右邊的按鈕靠右 */
+  .td-top-start {
+    flex: 1 1 auto;
+  }
+  .td-top-end {
+    flex: 0 0 auto;
+  }
+  .td-res {
+    flex-wrap: nowrap;
+  }
+  button.td-icon {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    font-size: 16px;
+  }
+  button.td-speed {
+    width: auto;
+    min-width: 40px;
+  }
+  .td-wide-only {
+    display: none;
+  }
+  .td-stat {
+    min-height: 40px;
+    padding: 0 8px;
+    gap: 3px;
+  }
+  .td-stat strong {
+    font-size: 16px;
+  }
+  .td-stat.subtle {
+    display: none;
+  }
+  .td-wave {
+    padding: 4px 6px 4px 10px;
+    gap: 4px 8px;
+  }
+  .td-wave-main strong {
+    font-size: 15px;
+  }
+  .td-next .muted {
+    display: none;
+  }
+  .td-shop {
+    gap: 3px;
+  }
+  button.td-shop-item,
+  button.td-send-toggle {
+    min-height: 54px;
+    border-radius: 10px;
+  }
+  button.td-send-toggle {
+    width: 44px;
+    font-size: 11px;
+  }
+  .td-shop-name {
+    display: none;
+  }
+  .td-shop-icon {
+    font-size: 20px;
+  }
+  .td-shop-cost {
+    font-size: 12px;
+  }
+  .td-shop-cost::before {
+    content: none;
+  }
+  .td-info {
+    padding: 8px 10px;
+    font-size: 13px;
+    gap: 4px;
+  }
+  .td-feed {
+    display: none;
+  }
+  .td-panel {
+    padding: 14px 14px 16px;
+  }
+  .td-sticky {
+    bottom: -16px;
+    margin: 0 -14px -16px;
+    padding: 10px 14px 16px;
+  }
+}
+
+/* 矮的畫面（手機橫放）：面板不要蓋住整個場地 */
+@media (max-height: 480px) {
+  .td-layer {
+    padding-top: calc(var(--t-top) + 50px);
+  }
+  .td-center {
+    padding-top: var(--t-top);
+  }
+  .td-info p.muted,
+  .td-info > p:not(.td-info-stats) {
+    display: none;
+  }
+  button.td-shop-item,
+  button.td-send-toggle {
+    min-height: 48px;
+  }
+}
+
+/* 表格在窄螢幕改成一人一張卡片 */
+@media (max-width: 640px) {
+  table.responsive.td-table tr {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px 10px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+  }
+  table.responsive.td-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+    font-size: 13px;
+  }
+  table.responsive.td-table td.primary {
+    grid-column: 1 / -1;
+    font-size: 15px;
+  }
+  table.responsive.td-table td.primary::before {
+    content: none;
+  }
+  table.responsive.td-table td:not(.primary)::before {
+    content: attr(data-label) ' ';
+    color: var(--text);
+    font-weight: 400;
+  }
+}
