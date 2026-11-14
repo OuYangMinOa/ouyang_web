@@ -1,0 +1,29 @@
+# AI 助手網路搜尋（web_search）用的 SearXNG。staging 和 prod 共用一個，以固定專案名稱 ouyang-web-searxng 啟動（見 deploy.sh）。
+# 注意：任一環境部署時都會套用自己這份設定，所以修改這裡會同時影響 staging 和 prod。
+#
+# 只接在 ouyang-web 網路上、不對外開 port；沒有 traefik.enable 標籤，Traefik 不會轉流量給它（exposedbydefault=false）。
+# app 容器用 http://searxng:8080 連（compose.yaml 的 SEARXNG_URL）。
+# deploy.sh 會把這個資料夾複製到兩個環境共用的 ~/ouyang_web/searxng/ 再啟動：
+# 直接用 <env>/searxng/ 的話，兩邊輪流部署時掛載的路徑不一樣，容器每次都會被重建。
+services:
+  searxng:
+    # 升級時 tag 和 digest 一起改（Docker Hub 的 searxng/searxng，tag 是「日期-commit」）
+    image: docker.io/searxng/searxng:2026.11.13-219b63b20@sha256:048e613ce4a7ddc35dfb05a0b8ede795a054187b3c3b89518adc37d5e03a8297
+    restart: unless-stopped
+    environment:
+      # 第一次部署時 deploy.sh 產生，存在 ~/ouyang_web/searxng/secret
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?SEARXNG_SECRET is required}
+      # settings.yml 是唯讀掛進去的，不要去改擁有者
+      FORCE_OWNERSHIP: "false"
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+    labels:
+      # bind mount 的檔案內容變了 compose 看不出來；把雜湊放進標籤，settings.yml 改了才會重建容器
+      - ouyang.searxng.settings-sha256=${SEARXNG_SETTINGS_SHA:-}
+    networks:
+      - ouyang-web
+    mem_limit: 512m
+
+networks:
+  ouyang-web:
+    external: true

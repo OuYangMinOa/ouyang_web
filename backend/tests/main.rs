@@ -12,6 +12,7 @@ mod common;
 mod access_log;
 mod ai;
 mod ai_chat;
+mod ai_web;
 mod api;
 mod auth;
 mod bigtwo;
