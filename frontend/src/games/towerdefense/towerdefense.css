@@ -1,5 +1,5 @@
 /* 迷宮塔防：整個畫面都是遊戲，蓋住網站的頁首和側邊欄；資源、商店、面板浮在 3D 畫面上。
-   棋盤和座位的顏色是 index.css 的 --td-*（亮色、深色都有定義），3D 畫面也讀同一組 */
+   場地和座位的顏色是 index.css 的 --td-*（亮色、深色都有定義），3D 畫面也讀同一組 */
 .td-root {
   --t-pad: 10px;
   --t-top: max(var(--t-pad), env(safe-area-inset-top));
@@ -8,6 +8,8 @@
   --t-right: max(var(--t-pad), env(safe-area-inset-right));
   --t-glass: color-mix(in srgb, var(--surface) 88%, transparent);
   --t-line: color-mix(in srgb, var(--border) 85%, transparent);
+  /* 面板裡一小塊一小塊的底（數值、圖的底） */
+  --t-well: color-mix(in srgb, var(--text-h) 6%, transparent);
   position: fixed;
   inset: 0;
   z-index: 1200;
@@ -50,6 +52,35 @@
   color: var(--accent);
 }
 
+/* 小符號（SVG，跟著文字的顏色）；愛心是紅的、金幣是金的 */
+.td-glyph {
+  display: block;
+  flex: none;
+}
+.td-glyph-heart,
+.td-lives {
+  color: var(--danger);
+}
+.td-glyph-coin {
+  color: var(--td-gold);
+}
+/* 塔和怪物的小圖（3D 模型拍出來的），還沒拍好時是表情符號 */
+.td-art {
+  display: block;
+  flex: none;
+  width: var(--art);
+  height: var(--art);
+  object-fit: contain;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+.td-art-emoji {
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--art) * 0.6);
+  line-height: 1;
+}
+
 .td-chip {
   background: var(--t-glass);
   border: 1px solid var(--t-line);
@@ -57,6 +88,32 @@
   box-shadow: var(--shadow);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+}
+/* 小標籤：物理／魔法、飛行、魔王… */
+.td-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  min-height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--t-line);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.td-tag.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.td-tag.air {
+  border-color: var(--td-air);
+  color: var(--td-air);
+}
+.td-tag.gold {
+  border-color: var(--td-gold);
+  color: var(--td-gold);
 }
 
 /* 上方：左邊離開和資源，中間波次，右邊按鈕 */
@@ -88,12 +145,13 @@
 }
 button.td-icon {
   flex: none;
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 44px;
   min-height: 44px;
   padding: 0;
   border-radius: 12px;
-  font-size: 18px;
   line-height: 1;
   background: var(--t-glass);
   color: var(--text-h);
@@ -105,13 +163,14 @@ button.td-icon:hover,
 button.td-icon.on {
   border-color: var(--accent);
 }
+button.td-icon.on {
+  color: var(--accent);
+}
 button.td-speed {
-  display: grid;
-  place-items: center;
+  gap: 1px;
   width: auto;
   min-width: 44px;
   padding: 0 6px;
-  font-size: 15px;
 }
 button.td-speed small {
   font-size: 11px;
@@ -127,13 +186,13 @@ button.td-speed small {
 }
 .td-stat {
   display: flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 0 10px;
-  min-height: 44px;
   align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  min-height: 44px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  color: var(--text-h);
 }
 .td-stat strong {
   font-size: 18px;
@@ -142,21 +201,36 @@ button.td-speed small {
   font-size: 12px;
   color: var(--ok);
 }
-.td-stat.danger strong {
+.td-stat.subtle {
+  color: var(--text);
+}
+.td-stat.subtle strong {
+  font-size: 16px;
+}
+/* 生命快沒了：數字變紅、愛心一跳一跳；漏怪的那一下整格晃一下 */
+.td-lives.low strong {
   color: var(--danger);
 }
-.td-stat.subtle {
-  opacity: 0.85;
+.td-lives.low .td-glyph {
+  animation: td-beat 0.9s ease-in-out infinite;
+}
+.td-lives.hit {
+  animation: td-shake 0.42s ease-out;
+}
+.td-bump {
+  display: inline-block;
+  animation: td-bump 0.32s ease-out;
 }
 
 .td-wave {
+  position: relative;
   flex: 0 1 auto;
   display: flex;
   align-items: center;
-  gap: 4px 12px;
+  gap: 4px 10px;
   flex-wrap: wrap;
   justify-content: center;
-  padding: 5px 8px 5px 14px;
+  padding: 5px 8px 7px 14px;
   min-height: 44px;
   box-sizing: border-box;
   font-variant-numeric: tabular-nums;
@@ -170,21 +244,49 @@ button.td-speed small {
 .td-wave-main strong {
   font-size: 17px;
 }
-.td-wave-timer {
+.td-wave-main strong small {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.td-wave-timer,
+.td-wave-left {
   font-size: 14px;
+  color: var(--text);
+}
+.td-wave-left b {
+  color: var(--text-h);
 }
 .td-wave-timer .party-timer {
   font-weight: 700;
   color: var(--accent);
 }
-.td-next {
+button.td-next {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid transparent;
   font-size: 13px;
   white-space: nowrap;
 }
+button.td-next:hover,
+button.td-next.on {
+  border-color: var(--t-line);
+  background: var(--t-well);
+}
+.td-next-label {
+  font-size: 12px;
+  color: var(--text);
+}
 .td-next-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
   font-weight: 700;
 }
 button.td-ready {
@@ -206,6 +308,123 @@ button.td-ready small {
   font-size: 12px;
   opacity: 0.85;
 }
+/* 這一波打了多少：貼在波次那一條的底邊 */
+.td-wave-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 3px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--t-well);
+  overflow: hidden;
+}
+.td-wave-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.3s ease-out;
+}
+/* 點開「下一波」：每種怪的說明 */
+.td-wave-details {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(420px, calc(100vw - var(--t-left) - var(--t-right)));
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  display: grid;
+  gap: 10px;
+  white-space: normal;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.td-wave-details h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.td-wave-details ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.td-wave-details li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.td-wave-details li strong {
+  margin-right: 6px;
+}
+.td-wave-details .td-tag {
+  margin: 0 4px 2px 0;
+}
+.td-wave-details p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* 新的一波：畫面中間跳出「第幾波」 */
+.td-banner {
+  position: absolute;
+  left: 50%;
+  top: 23%;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: td-banner 2.7s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.td-banner-kicker {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  margin-right: -0.35em;
+  color: var(--accent);
+  text-shadow:
+    0 1px 0 var(--surface),
+    0 0 10px var(--surface);
+}
+.td-banner strong {
+  font-size: clamp(34px, 8vw, 62px);
+  line-height: 1.1;
+  color: var(--text-h);
+  text-shadow:
+    0 2px 0 var(--surface),
+    0 0 22px var(--surface),
+    0 0 6px var(--surface);
+}
+.td-banner.boss strong,
+.td-banner.boss .td-banner-kicker {
+  color: var(--danger);
+}
+.td-banner-mons {
+  display: flex;
+  gap: 10px;
+  padding: 2px 14px 2px 10px;
+  border-radius: 999px;
+  background: var(--t-glass);
+  border: 1px solid var(--t-line);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
 
 /* 漏怪：畫面四周紅一下 */
 .td-leak {
@@ -216,14 +435,6 @@ button.td-ready small {
   box-shadow: inset 0 0 90px 20px var(--danger);
   opacity: 0;
   animation: td-leak 0.6s ease-out;
-}
-@keyframes td-leak {
-  from {
-    opacity: 0.55;
-  }
-  to {
-    opacity: 0;
-  }
 }
 
 .td-feed {
@@ -337,50 +548,73 @@ button.td-show-results {
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
+  gap: 5px;
 }
 button.td-shop-item,
 button.td-send-toggle {
+  position: relative;
   display: grid;
   justify-items: center;
   align-content: center;
-  gap: 1px;
-  min-height: 60px;
-  padding: 4px 2px;
+  gap: 0;
+  min-height: 84px;
+  padding: 4px 2px 5px;
   border-radius: 12px;
   background: var(--t-glass);
   color: var(--text-h);
   border: 1px solid var(--t-line);
-  border-top: 3px solid var(--tower, var(--accent));
+  border-bottom: 3px solid var(--tower, var(--danger));
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   font-weight: 500;
-  line-height: 1.15;
+  line-height: 1.2;
+  transition:
+    transform 0.12s ease-out,
+    background-color 0.12s;
 }
 button.td-send-toggle {
   flex: none;
-  width: 60px;
-  border-top-color: var(--danger);
+  gap: 2px;
+  width: 64px;
   font-size: 12px;
+  color: var(--danger);
 }
 button.td-shop-item:hover:not(:disabled),
 button.td-send-toggle:hover {
-  border-color: var(--tower, var(--accent));
+  border-color: var(--tower, var(--danger));
+  transform: translateY(-2px);
 }
 button.td-shop-item.on,
 button.td-send-toggle.on {
   background: color-mix(in srgb, var(--tower, var(--danger)) 22%, var(--surface));
   border-color: var(--tower, var(--danger));
+  transform: translateY(-3px);
+}
+/* 圖的後面一圈淡淡的底：深色主題下深色的模型（火砲、重弩）才看得清楚 */
+.td-shop .td-shop-art {
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--text-h) 11%, transparent) 0 58%, transparent 62%);
 }
 button.td-shop-item.poor .td-shop-cost {
   color: var(--danger);
 }
-button.td-shop-item.poor .td-shop-icon {
-  opacity: 0.45;
+button.td-shop-item.poor .td-art {
+  filter: saturate(0.3);
+  opacity: 0.55;
 }
-.td-shop-icon {
-  font-size: 22px;
-  line-height: 1.1;
+/* 快捷鍵（1～7）：有鍵盤的才顯示 */
+.td-key {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0.75;
+}
+.td-root.touch .td-key {
+  display: none;
 }
 .td-shop-name {
   font-size: 12px;
@@ -388,20 +622,16 @@ button.td-shop-item.poor .td-shop-icon {
 }
 .td-shop-cost,
 .td-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.td-shop-cost::before,
-.td-cost::before {
-  content: '🪙';
-  font-size: 0.8em;
-  margin-right: 2px;
-}
 
+/* 塔的說明和面板：左邊一張圖，右邊名字、數值、按鈕 */
 .td-info {
-  display: grid;
-  gap: 6px;
   padding: 10px 12px;
   font-size: 14px;
   line-height: 1.5;
@@ -409,24 +639,126 @@ button.td-shop-item.poor .td-shop-icon {
 .td-info p {
   margin: 0;
 }
+.td-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.td-card > .td-card-art {
+  box-sizing: content-box;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--t-well);
+}
+.td-card-body {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+/* 沒有圖的時候（只選了格子、還沒選塔）整塊都是內容 */
+.td-card > .td-card-body:first-child {
+  grid-column: 1 / -1;
+}
+/* 按鈕、提示這些橫跨整張卡片 */
+.td-card-foot {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.td-card-foot:empty {
+  display: none;
+}
 .td-info-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+  min-height: 40px;
 }
 .td-info-head strong {
   font-size: 16px;
+  margin-right: 2px;
 }
-.td-info-head .chip {
+.td-blurb {
+  font-size: 13px;
+  color: var(--text);
+}
+.td-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  font-size: 13px;
+}
+.td-gain {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+.td-gain.more {
+  color: var(--ok);
+}
+.td-gain.short {
+  color: var(--danger);
+}
+.td-gain.short .td-glyph {
+  color: inherit;
+}
+.td-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 4px;
   margin: 0;
 }
-.td-info-stats {
-  font-variant-numeric: tabular-nums;
+.td-stats > div {
+  padding: 3px 8px 4px;
+  border-radius: 8px;
+  background: var(--t-well);
+  min-width: 0;
 }
+.td-stats dt {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.td-stats dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.td-stats .up b {
+  color: var(--ok);
+}
+.td-arrow {
+  margin: 0 4px;
+  font-weight: 400;
+  opacity: 0.55;
+}
+/* 等級：四顆金珠，練到幾級亮幾顆（和場地上塔前面那一排一樣） */
 .td-level {
-  margin-left: 6px;
-  color: var(--accent);
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.td-level i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--td-gold);
+  box-sizing: border-box;
+}
+.td-level i.on {
+  background: var(--td-gold);
 }
 .td-owner {
   font-size: 13px;
@@ -434,6 +766,9 @@ button.td-shop-item.poor .td-shop-icon {
   font-weight: 700;
 }
 button.td-x {
+  flex: none;
+  display: grid;
+  place-items: center;
   margin-left: auto;
   width: 40px;
   height: 40px;
@@ -443,7 +778,6 @@ button.td-x {
   background: transparent;
   color: var(--text-h);
   border: 1px solid var(--t-line);
-  font-size: 20px;
   line-height: 1;
 }
 .td-tower {
@@ -457,7 +791,17 @@ button.td-x {
 }
 .td-actions button {
   flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 44px;
+  font-weight: 700;
+}
+.td-max {
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 .td-modes {
   display: flex;
@@ -520,6 +864,11 @@ button.td-send-item {
   line-height: 1.25;
 }
 button.td-send-item small {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+}
+button.td-send-item small .td-cost {
   font-size: 11px;
 }
 button.td-send-item:hover:not(:disabled) {
@@ -533,7 +882,7 @@ button.td-send-item:hover:not(:disabled) {
   right: var(--t-right);
   z-index: 7;
   width: min(380px, calc(100% - var(--t-left) - var(--t-right)));
-  max-height: calc(100% - var(--t-top) - var(--t-bottom) - 150px);
+  max-height: calc(100% - var(--t-top) - var(--t-bottom) - 170px);
   overflow-y: auto;
   overscroll-behavior: contain;
   box-sizing: border-box;
@@ -589,6 +938,13 @@ button.td-send-item:hover:not(:disabled) {
   gap: 2px 12px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+.td-player-stats > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-h);
 }
 .td-player-actions {
   grid-column: 2;
@@ -600,6 +956,8 @@ button.td-send-item:hover:not(:disabled) {
   display: none;
 }
 .td-player-actions button {
+  display: inline-flex;
+  align-items: center;
   min-height: 40px;
   padding: 0 12px;
 }
@@ -655,6 +1013,9 @@ button.td-send-item:hover:not(:disabled) {
   color: var(--danger);
 }
 .td-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 26px;
 }
 .td-help {
@@ -667,6 +1028,53 @@ button.td-send-item:hover:not(:disabled) {
   padding-left: 1.2em;
   display: grid;
   gap: 4px;
+}
+/* 選地圖：每張一小格，上面是縮圖 */
+.td-maps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: 6px;
+}
+button.td-map {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 6px 6px 5px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1.3;
+}
+button.td-map.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+button.td-map:disabled {
+  opacity: 1;
+}
+button.td-map:disabled:not(.active) {
+  opacity: 0.45;
+}
+.td-minimap {
+  display: block;
+  width: 100%;
+  height: 54px;
+  --mini: var(--td-tile-a);
+}
+/* 縮圖的底色跟著地貌走（3D 場地的色調是程式調的，這裡用現成的顏色混出差不多的） */
+.td-minimap.forest {
+  --mini: color-mix(in srgb, var(--td-tile-b) 78%, var(--td-exit));
+}
+.td-minimap.autumn {
+  --mini: color-mix(in srgb, var(--td-tile-a) 72%, var(--td-p3));
+}
+.td-minimap.canyon {
+  --mini: color-mix(in srgb, var(--td-tile-a) 22%, var(--td-walk));
 }
 .td-guide {
   display: grid;
@@ -689,15 +1097,21 @@ button.td-send-item:hover:not(:disabled) {
   font-size: 13px;
   line-height: 1.5;
 }
+.td-cards li > .td-art {
+  box-sizing: content-box;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--t-well);
+}
+.td-cards li strong {
+  margin-right: 6px;
+  font-size: 14px;
+}
 .td-cards p {
   margin: 2px 0 0;
 }
-.td-cards .chip {
-  margin: 0 0 0 6px;
-}
-.td-card-icon {
-  font-size: 26px;
-  line-height: 1.2;
+.td-cards .td-tag {
+  margin: 0 4px 2px 0;
 }
 .td-result {
   width: min(680px, 100%);
@@ -713,6 +1127,10 @@ button.td-send-item:hover:not(:disabled) {
   width: min(400px, 100%);
 }
 .td-pause > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: 44px;
 }
 .td-chat summary {
@@ -764,11 +1182,98 @@ button.td-send-item:hover:not(:disabled) {
     transform: translate(-50%, -6px);
   }
 }
+@keyframes td-leak {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes td-banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 14px) scale(0.9);
+  }
+  9% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(1);
+  }
+}
+@keyframes td-bump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.16);
+    color: var(--td-gold);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes td-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  45% {
+    transform: translateX(4px);
+  }
+  70% {
+    transform: translateX(-2px);
+  }
+}
+@keyframes td-beat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.22);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .td-leak,
   .td-feed li,
-  .td-toast {
+  .td-toast,
+  .td-bump,
+  .td-lives.hit,
+  .td-lives.low .td-glyph {
     animation: none;
+  }
+  .td-banner {
+    animation-name: td-banner-calm;
+  }
+  button.td-shop-item,
+  button.td-send-toggle {
+    transition: none;
+  }
+  button.td-shop-item:hover:not(:disabled),
+  button.td-send-toggle:hover,
+  button.td-shop-item.on,
+  button.td-send-toggle.on {
+    transform: none;
+  }
+}
+@keyframes td-banner-calm {
+  0%,
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 
@@ -782,6 +1287,12 @@ button.td-send-item:hover:not(:disabled) {
     flex: 1 1 100%;
     justify-content: space-between;
   }
+  .td-wave-details {
+    left: 0;
+    right: 0;
+    width: auto;
+    transform: none;
+  }
   .td-feed,
   .td-side {
     top: calc(var(--t-top) + 108px);
@@ -790,7 +1301,10 @@ button.td-send-item:hover:not(:disabled) {
     top: calc(var(--t-top) + 112px);
   }
   .td-side {
-    max-height: calc(100% - var(--t-top) - var(--t-bottom) - 200px);
+    max-height: calc(100% - var(--t-top) - var(--t-bottom) - 220px);
+  }
+  .td-banner {
+    top: 27%;
   }
 }
 
@@ -812,19 +1326,18 @@ button.td-send-item:hover:not(:disabled) {
     width: 40px;
     height: 40px;
     min-height: 40px;
-    font-size: 16px;
   }
   button.td-speed {
     width: auto;
     min-width: 40px;
   }
-  .td-wide-only {
+  button.td-icon.td-wide-only {
     display: none;
   }
   .td-stat {
     min-height: 40px;
     padding: 0 8px;
-    gap: 3px;
+    gap: 4px;
   }
   .td-stat strong {
     font-size: 16px;
@@ -833,43 +1346,73 @@ button.td-send-item:hover:not(:disabled) {
     display: none;
   }
   .td-wave {
-    padding: 4px 6px 4px 10px;
-    gap: 4px 8px;
+    padding: 4px 6px 7px 10px;
+    gap: 2px 6px;
   }
   .td-wave-main strong {
     font-size: 15px;
   }
-  .td-next .muted {
+  .td-wave-main {
+    gap: 6px;
+  }
+  .td-wave-timer,
+  .td-wave-left {
+    font-size: 13px;
+  }
+  button.td-next {
+    padding: 0 4px;
+    gap: 4px;
+  }
+  .td-next-label {
     display: none;
+  }
+  button.td-ready {
+    padding: 0 10px;
   }
   .td-shop {
     gap: 3px;
   }
   button.td-shop-item,
   button.td-send-toggle {
-    min-height: 54px;
+    min-height: 62px;
+    padding: 2px 1px 4px;
     border-radius: 10px;
   }
   button.td-send-toggle {
-    width: 44px;
+    width: 46px;
     font-size: 11px;
   }
-  .td-shop-name {
+  .td-shop-name,
+  .td-key {
     display: none;
   }
-  .td-shop-icon {
-    font-size: 20px;
+  .td-shop .td-shop-art {
+    width: 36px;
+    height: 36px;
   }
   .td-shop-cost {
     font-size: 12px;
   }
-  .td-shop-cost::before {
-    content: none;
+  .td-shop-cost .td-glyph {
+    display: none;
   }
   .td-info {
     padding: 8px 10px;
     font-size: 13px;
-    gap: 4px;
+  }
+  .td-card {
+    gap: 8px;
+  }
+  .td-card > .td-card-art {
+    width: 44px;
+    height: 44px;
+    padding: 3px;
+  }
+  .td-card-body {
+    gap: 5px;
+  }
+  .td-stats {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   }
   .td-feed {
     display: none;
@@ -892,13 +1435,26 @@ button.td-send-item:hover:not(:disabled) {
   .td-center {
     padding-top: var(--t-top);
   }
-  .td-info p.muted,
-  .td-info > p:not(.td-info-stats) {
+  .td-blurb,
+  .td-hint .muted {
     display: none;
   }
   button.td-shop-item,
   button.td-send-toggle {
-    min-height: 48px;
+    min-height: 54px;
+  }
+  .td-shop .td-shop-art {
+    width: 30px;
+    height: 30px;
+  }
+  .td-shop-name {
+    display: none;
+  }
+  .td-banner {
+    top: 30%;
+  }
+  .td-banner strong {
+    font-size: 30px;
   }
 }
 

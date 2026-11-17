@@ -1,9 +1,12 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
 import { ChatBox, PartyEntry, PartyHeader, PartyLobby, PartyNotice } from '../shared/Party'
 import { Segmented } from '../shared/ui'
-import { MONSTER_LOOK, TOWER_LOOK } from './models'
-import { seatName, type Difficulty, type GameMode, type Spec, type TdRoom, type TdView } from './online'
-import { levelText, reachText, seatColor } from './stats'
+import { Glyph, MonsterArt, TowerArt } from './Art'
+import { pondCells } from './board'
+import { routesOf } from './maze'
+import { seatName, tileAt, type Difficulty, type GameMode, type MapSpec, type Spec, type TdRoom, type TdView } from './online'
+import { biomeOf } from './palette'
+import { levelText, reachText, seatColor, traitsOf } from './stats'
 
 /** 選單、大廳的選項、說明、結算、對戰中的選單（連線和開局在 index.tsx） */
 
@@ -23,6 +26,77 @@ const WAVES = [
   { value: 0, label: '無限' },
 ]
 
+/** 地圖的縮圖：岩石、池塘、入口（圓）、出口（菱形），和還沒蓋塔時怪物會走的路 */
+function MiniMap({ map }: { map: MapSpec }) {
+  const { blocks, paths, spawns, exits } = useMemo(() => {
+    const ponds = pondCells(map)
+    const blocks: { x: number; y: number; pond: boolean }[] = []
+    for (let c = 0; c < map.w * map.h; c++) {
+      if (tileAt(map, c) === 'rock') blocks.push({ x: c % map.w, y: Math.floor(c / map.w), pond: ponds.has(c) })
+    }
+    const at = (cell: number) => [(cell % map.w) + 0.5, Math.floor(cell / map.w) + 0.5]
+    return {
+      blocks,
+      paths: (routesOf(map, () => false)?.paths ?? []).map((path) => path.map((cell) => at(cell).join(',')).join(' ')),
+      spawns: [...new Set(map.routes.map((r) => r[0]))].map(at),
+      exits: [...new Set(map.routes.map((r) => r[1]))].map(at),
+    }
+  }, [map])
+  return (
+    <svg className={`td-minimap ${biomeOf(map.id)}`} viewBox={`-0.6 -0.6 ${map.w + 1.2} ${map.h + 1.2}`} aria-hidden="true" focusable="false">
+      <rect width={map.w} height={map.h} rx="1" fill="var(--mini)" stroke="var(--td-tile-line)" strokeWidth="0.3" />
+      {blocks.map((b) => (
+        <rect
+          key={`${b.x},${b.y}`}
+          x={b.x + 0.08}
+          y={b.y + 0.08}
+          width="0.84"
+          height="0.84"
+          rx="0.3"
+          fill={b.pond ? 'var(--td-water)' : 'color-mix(in srgb, var(--text-h) 42%, var(--mini))'}
+        />
+      ))}
+      {paths.map((points, i) => (
+        <polyline key={i} points={points} fill="none" stroke="var(--accent)" strokeWidth="0.42" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+      ))}
+      {spawns.map(([x, y]) => (
+        <circle key={`${x},${y}`} cx={x} cy={y} r="0.85" fill="var(--td-spawn)" />
+      ))}
+      {exits.map(([x, y]) => (
+        <rect key={`${x},${y}`} x={x - 0.72} y={y - 0.72} width="1.44" height="1.44" rx="0.2" fill="var(--td-exit)" transform={`rotate(45 ${x} ${y})`} />
+      ))}
+    </svg>
+  )
+}
+
+/** 選地圖：每張一格，上面是縮圖 */
+function MapPicker({ maps, value, onChange, disabled }: { maps: MapSpec[]; value: string; onChange: (id: string) => void; disabled: boolean }) {
+  const id = useId()
+  return (
+    <div className="segmented-field">
+      <span className="segmented-label" id={id}>
+        地圖
+      </span>
+      <div className="td-maps" role="radiogroup" aria-labelledby={id}>
+        {maps.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            role="radio"
+            aria-checked={m.id === value}
+            className={`td-map${m.id === value ? ' active' : ''}`}
+            disabled={disabled}
+            onClick={() => onChange(m.id)}
+          >
+            <MiniMap map={m} />
+            {m.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** 房主選模式、地圖、難度；其他人看得到但不能改 */
 function Options({ party, spec }: { party: TdRoom; spec: Spec }) {
   const room = party.room
@@ -39,13 +113,7 @@ function Options({ party, spec }: { party: TdRoom; spec: Spec }) {
           ? '合作：大家守同一塊場地、共用生命，各自有各自的錢。怪物的血量跟著人數變多，打倒一隻每個人都拿到賞金。'
           : '對抗：每個人守自己的場地，出一樣的波次。可以花錢派怪去打別人（順便提高自己每波的收入），撐到最後的人贏。至少 2 個人，可以加電腦。'}
       </p>
-      <Segmented
-        label="地圖"
-        value={o.map}
-        options={spec.maps.map((m) => ({ value: m.id, label: m.name }))}
-        onChange={(id) => set({ map: id })}
-        disabled={locked}
-      />
+      <MapPicker maps={spec.maps} value={o.map} onChange={(id) => set({ map: id })} disabled={locked} />
       {map && (
         <p className="td-help">
           {map.blurb}（{map.w}×{map.h} 格）
@@ -67,12 +135,13 @@ function HowTo({ touch }: { touch: boolean }) {
   return (
     <div className="td-help">
       <ul>
-        <li>怪物一波一波從紫色的入口走向出口的水晶，走到一隻扣一條命（魔王扣 5 條）。</li>
+        <li>怪物一波一波從紫色的傳送門走向出口的水晶，走到一隻扣一條命（魔王扣 5 條）。</li>
         <li>
-          <strong>塔會擋路</strong>：怪物要繞過去，所以塔同時也是迷宮的牆。把路排得越長，怪物挨打越久；但不能完全堵死，地上的箭頭是怪物現在會走的路。
+          <strong>塔會擋路</strong>：怪物要繞過去，所以塔同時也是迷宮的牆。把路排得越長，怪物挨打越久；但不能完全堵死。
+          地上流動的箭頭是怪物現在會走的路，要蓋之前會先用綠色畫出新的路線、告訴你多繞了幾格。
         </li>
         <li>飛行的怪不走迷宮，從入口直直飛向出口；火砲和毒藤打不到牠們。</li>
-        <li>打倒怪物拿賞金，每一波開始還有補給金。塔可以升到 4 級，拆掉退七成（第一波開始前全額退，放心試排）。</li>
+        <li>打倒怪物拿賞金，每一波開始還有補給金。塔可以升到 4 級（越升越氣派），拆掉退七成（第一波開始前全額退，放心試排）。</li>
         <li>
           {touch
             ? '操作：點下面的塔、再點格子看範圍，再點一次同一格就蓋。點蓋好的塔可以升級、拆掉、改先打誰。一指拖曳移動畫面，兩指捏合縮放、扭轉旋轉。'
@@ -101,13 +170,17 @@ function Guide({ spec }: { spec: Spec }) {
         <ul className="td-cards">
           {spec.towers.map((t) => (
             <li key={t.id}>
-              <span className="td-card-icon" aria-hidden="true">
-                {TOWER_LOOK[t.id].icon}
-              </span>
+              <TowerArt id={t.id} size={48} />
               <div>
                 <strong>{t.name}</strong>
-                <span className="chip subtle">{reachText(t)}</span>
-                <span className="chip subtle">{t.levels[0].cost} 元</span>
+                {reachText(t)
+                  .split('・')
+                  .map((tag) => (
+                    <span key={tag} className="td-tag">
+                      {tag}
+                    </span>
+                  ))}
+                <span className="td-tag gold">{t.levels[0].cost} 元</span>
                 <p>{t.blurb}</p>
                 <p className="muted">
                   1 級：{levelText(t, t.levels[0])}
@@ -122,14 +195,14 @@ function Guide({ spec }: { spec: Spec }) {
         <ul className="td-cards">
           {spec.monsters.map((m) => (
             <li key={m.id}>
-              <span className="td-card-icon" aria-hidden="true">
-                {MONSTER_LOOK[m.id].icon}
-              </span>
+              <MonsterArt id={m.id} size={48} />
               <div>
                 <strong>{m.name}</strong>
-                {m.air && <span className="chip subtle">飛行</span>}
-                {m.phys < 1 && <span className="chip subtle">物理抗性 {Math.round((1 - m.phys) * 100)}%</span>}
-                {m.magic < 1 && <span className="chip subtle">魔法抗性 {Math.round((1 - m.magic) * 100)}%</span>}
+                {traitsOf(m).map((trait) => (
+                  <span key={trait} className={`td-tag${trait === '魔王' ? ' danger' : trait === '飛行' ? ' air' : ''}`}>
+                    {trait}
+                  </span>
+                ))}
                 <p>{m.blurb}</p>
               </div>
             </li>
@@ -319,7 +392,8 @@ export function PauseMenu({
           回到遊戲
         </button>
         <button type="button" className="secondary" onClick={onSound} aria-pressed={sound}>
-          {sound ? '🔊 音效：開' : '🔇 音效：關'}
+          <Glyph name={sound ? 'sound' : 'mute'} size={18} />
+          {sound ? '音效：開' : '音效：關'}
         </button>
         <ChatBox party={party} />
         <details className="td-chat">

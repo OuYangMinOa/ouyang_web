@@ -8,7 +8,8 @@
 //!   生命歸零就出局，剩最後一個人贏。
 //!
 //! 和 3D 賽車、機甲對戰不同，**模擬全部在伺服器**（`towerdefense_field.rs`），用戶端只負責畫：
-//! - 房間每個 `TICK`（0.1 秒）推進 1～3 步（看遊戲速度），再把每塊場地的怪物位置、這段時間的開火送出去（`tick` 事件）。
+//! - 房間每個 `TICK`（0.1 秒）推進 1～3 步（看遊戲速度），再把每塊場地的怪物位置、這段時間的開火、
+//!   被打倒的怪和賞金、這一波還有幾隻沒出來送出去（`tick` 事件）。
 //!   只送給正在看那塊場地的人（對抗模式可以切去看別人的，`Action::Look`）；觀戰的人每一塊都收得到。
 //! - 蓋塔、升級、拆掉都不重送整份 view，改送 `tower` 事件；view 裡有每塊場地的 `rev`（塔變一次加一），
 //!   用戶端靠它把 view 裡的塔和之後的事件接起來（重連、中途進來觀戰的人從 view 拿回所有的塔）。
@@ -583,6 +584,13 @@ impl TowerDefense {
             if !field.leaks.is_empty() {
                 event["x"] = json!(std::mem::take(&mut field.leaks));
             }
+            if !field.deaths.is_empty() {
+                event["d"] = json!(std::mem::take(&mut field.deaths));
+            }
+            let waiting = field.waiting();
+            if waiting > 0 {
+                event["r"] = json!(waiting);
+            }
             ctx.emit(To::SeatsAndSpectators(viewers), event);
         }
     }
@@ -1039,12 +1047,23 @@ mod tests {
         assert_eq!(ticks[0]["l"], json!([20]));
         assert_eq!(ticks[0]["c"], json!([1]));
         assert_eq!(ticks[0]["k"], json!([0]));
-        // 打倒第一隻：賞金進帳，開火跟著 tick 送出去
+        // 這一波還有 9 隻沒出來
+        assert_eq!(ticks[0]["r"], 9);
+        // 打倒第一隻：賞金進帳，開火跟著 tick 送出去，被打倒的怪和賞金也在裡面（畫面跳出「+5」用）
         let mut shots = 0;
+        let mut paid = 0;
         for _ in 0..80 {
-            shots += events(&t.tick(), "tick").iter().filter(|e| e["s"].is_array()).count();
+            let out = t.tick();
+            for e in events(&out, "tick") {
+                shots += usize::from(e["s"].is_array());
+                for d in e["d"].as_array().into_iter().flatten() {
+                    assert!(d[0].as_u64().unwrap() >= 1);
+                    paid += d[1].as_u64().unwrap();
+                }
+            }
         }
         assert!(shots >= 3);
+        assert_eq!(u64::from(t.g.players[0].gold), u64::from(START_GOLD) - 50 + paid);
         assert!(t.g.players[0].gold > START_GOLD - 50);
         assert!(t.g.players[0].kills >= 1);
         assert!(t.g.players[0].damage > 0.0);

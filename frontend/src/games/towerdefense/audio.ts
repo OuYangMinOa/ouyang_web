@@ -15,6 +15,7 @@ export type Sound =
   | 'boom'
   | 'leak'
   | 'wave'
+  | 'clear'
   | 'boss'
   | 'coin'
   | 'send'
@@ -136,6 +137,11 @@ export class TdAudio {
         // 號角：下一波來了
         s.tone('sawtooth', 196, 196, 0, 0.18, 0.2)
         s.tone('sawtooth', 294, 294, 0.16, 0.34, 0.24)
+        break
+      case 'clear':
+        // 這一波守住了：往上的兩個音
+        s.tone('triangle', 659, 659, 0, 0.12, 0.2)
+        s.tone('triangle', 988, 988, 0.1, 0.22, 0.22)
         break
       case 'boss':
         s.tone('sawtooth', 98, 98, 0, 0.3, 0.3)

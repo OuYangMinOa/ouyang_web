@@ -4,7 +4,6 @@ import {
   Color,
   ConeGeometry,
   CylinderGeometry,
-  DodecahedronGeometry,
   IcosahedronGeometry,
   OctahedronGeometry,
   SphereGeometry,
@@ -22,10 +21,10 @@ import type { MonsterId, TowerId } from './online'
  * 選單、記分板用的小圖示（表情符號）和名字以外的畫面資訊也放在這裡，用後端規格表的 id 對起來。
  */
 
-type Shape = BufferGeometry
+export type Shape = BufferGeometry
 
 /** 上色：整個零件同一個顏色；要先擺好位置（translate／rotate）再丟進來 */
-function tint(geometry: Shape, color: number): Shape {
+export function tint(geometry: Shape, color: number): Shape {
   const g = geometry.index ? geometry.toNonIndexed() : geometry
   g.deleteAttribute('uv')
   const c = new Color(color)
@@ -40,37 +39,40 @@ function tint(geometry: Shape, color: number): Shape {
   return g
 }
 
-function merge(parts: Shape[]): Shape {
+export function merge(parts: Shape[]): Shape {
   const merged = mergeGeometries(parts, false)
   for (const p of parts) p.dispose()
   merged.computeVertexNormals()
   return merged
 }
 
-const box = (w: number, h: number, d: number, x: number, y: number, z: number, color: number) =>
+export const box = (w: number, h: number, d: number, x: number, y: number, z: number, color: number) =>
   tint(new BoxGeometry(w, h, d).translate(x, y, z), color)
 
-const ball = (r: number, x: number, y: number, z: number, color: number, sy = 1, detail = 10) =>
+export const ball = (r: number, x: number, y: number, z: number, color: number, sy = 1, detail = 10) =>
   tint(new SphereGeometry(r, detail, Math.max(6, Math.round(detail * 0.7))).scale(1, sy, 1).translate(x, y, z), color)
 
-const tube = (top: number, bottom: number, h: number, x: number, y: number, z: number, color: number, sides = 10) =>
+export const tube = (top: number, bottom: number, h: number, x: number, y: number, z: number, color: number, sides = 10) =>
   tint(new CylinderGeometry(top, bottom, h, sides).translate(x, y + h / 2, z), color)
 
 /** 朝 +z 的圓柱（砲管） */
-const barrel = (r: number, length: number, y: number, z: number, color: number, sides = 8) =>
+const barrel = (r: number, length: number, y: number, z: number, color: number, sides = 8, x = 0) =>
   tint(
     new CylinderGeometry(r, r, length, sides)
       .rotateX(Math.PI / 2)
-      .translate(0, y, z + length / 2),
+      .translate(x, y, z + length / 2),
     color,
   )
 
-/** 一對眼睛（白底黑瞳），臉朝 +z；`r` 是眼白的半徑 */
+/**
+ * 一對眼睛（白底黑瞳），臉朝 +z；`r` 是眼白的半徑。
+ * 眼睛很小，球切得很粗就夠了：一大群怪同時在場上時，光是眼睛就佔了一半的三角形
+ */
 function eyes(r: number, gap: number, y: number, z: number, pupil = 0x1c1a17, white = 0xffffff): Shape[] {
   const out: Shape[] = []
   for (const side of [-1, 1]) {
-    out.push(ball(r, side * gap, y, z, white, 1, 8))
-    out.push(ball(r * 0.55, side * gap, y, z + r * 0.62, pupil, 1, 6))
+    out.push(tint(new SphereGeometry(r, 7, 5).translate(side * gap, y, z), white))
+    out.push(tint(new SphereGeometry(r * 0.55, 6, 4).translate(side * gap, y, z + r * 0.62), pupil))
   }
   return out
 }
@@ -278,143 +280,268 @@ const WOOD = 0x8a5a2b
 const WOOD_DARK = 0x6f4720
 const IRON = 0x4a4f57
 const IRON_DARK = 0x33373d
+const GOLD = 0xe0b040
+const BRONZE = 0xb08d57
+const RED = 0xc2410c
 
-/** 每種塔底下都有的石頭基座 */
-function pedestal(): Shape[] {
-  return [tube(0.36, 0.42, 0.16, 0, 0, 0, STONE, 8), tube(0.3, 0.36, 0.1, 0, 0.16, 0, STONE_DARK, 8)]
+/** 平放的一圈（箍、環） */
+const hoop = (r: number, thick: number, y: number, color: number) =>
+  tint(new TorusGeometry(r, thick, 4, 10).rotateX(Math.PI / 2).translate(0, y, 0), color)
+
+/** 繞著中心擺一圈：`make(角度, 第幾個)` 做一個，做 `count` 個 */
+function around(count: number, make: (angle: number, i: number) => Shape, offset = 0): Shape[] {
+  return Array.from({ length: count }, (_, i) => make(offset + (i / count) * Math.PI * 2, i))
 }
 
-/** 不會動的那一截（基座和塔身），原點在格子中心的地面 */
-export function towerBase(kind: TowerId): Shape {
+/**
+ * 每種塔底下都有的石頭基座，越高級越講究：2 級多一道鐵箍，3 級四個角多了石墩，4 級鐵箍換成金的、石墩戴上金頂。
+ * 升級不只是變大，一眼就看得出哪幾座是練過的。
+ */
+function pedestal(level: number): Shape[] {
+  const parts = [tube(0.36, 0.42, 0.16, 0, 0, 0, STONE, 8), tube(0.3, 0.36, 0.1, 0, 0.16, 0, STONE_DARK, 8)]
+  if (level >= 2) parts.push(hoop(0.345, 0.028, 0.17, level >= 4 ? GOLD : IRON))
+  if (level >= 3) {
+    parts.push(...around(4, (a) => box(0.1, 0.22, 0.1, Math.cos(a) * 0.37, 0.11, Math.sin(a) * 0.37, STONE_DARK), Math.PI / 4))
+  }
+  if (level >= 4) {
+    parts.push(
+      ...around(
+        4,
+        (a) => tint(new ConeGeometry(0.075, 0.09, 4).rotateY(Math.PI / 4).translate(Math.cos(a) * 0.37, 0.265, Math.sin(a) * 0.37), GOLD),
+        Math.PI / 4,
+      ),
+    )
+  }
+  return parts
+}
+
+/** 插在後面的小旗子（4 級的弩箭塔、重弩塔） */
+function banner(x: number, y: number, z: number, color: number): Shape[] {
+  return [box(0.02, 0.36, 0.02, x, y + 0.18, z, WOOD_DARK), box(0.02, 0.14, 0.18, x, y + 0.27, z - 0.1, color), ball(0.025, x, y + 0.37, z, GOLD, 1, 5)]
+}
+
+/** 不會動的那一截（基座和塔身），原點在格子中心的地面；`level` 是 1～4 */
+export function towerBase(kind: TowerId, level: number): Shape {
+  const parts = pedestal(level)
   switch (kind) {
     case 'bolt':
-      return merge([
-        ...pedestal(),
-        tube(0.12, 0.16, 0.48, 0, 0.26, 0, WOOD, 6),
-        tube(0.2, 0.14, 0.06, 0, 0.7, 0, WOOD_DARK, 6),
-      ])
+      parts.push(tube(0.12, 0.16, 0.48, 0, 0.26, 0, WOOD, 6), tube(0.2, 0.14, 0.06, 0, 0.7, 0, WOOD_DARK, 6))
+      if (level >= 2) parts.push(hoop(0.145, 0.02, 0.38, IRON), hoop(0.13, 0.02, 0.58, IRON))
+      if (level >= 3) {
+        // 斜撐
+        parts.push(...around(4, (a) => tint(new BoxGeometry(0.04, 0.34, 0.04).rotateZ(0.55).translate(0.2, 0.42, 0).rotateY(a), WOOD_DARK)))
+      }
+      if (level >= 4) parts.push(...banner(0, 0.3, -0.3, RED))
+      break
     case 'cannon':
-      return merge([
-        ...pedestal(),
-        tube(0.3, 0.33, 0.26, 0, 0.26, 0, IRON, 10),
-        tint(new TorusGeometry(0.31, 0.035, 5, 12).rotateX(Math.PI / 2).translate(0, 0.5, 0), 0xb08d57),
-      ])
+      parts.push(tube(0.3, 0.33, 0.26, 0, 0.26, 0, IRON, 10), hoop(0.31, 0.035, 0.5, level >= 4 ? GOLD : BRONZE))
+      if (level >= 2) parts.push(...around(8, (a) => ball(0.032, Math.cos(a) * 0.325, 0.38, Math.sin(a) * 0.325, 0xc9d3dc, 1, 5)))
+      if (level >= 3) parts.push(hoop(0.33, 0.03, 0.3, level >= 4 ? GOLD : BRONZE))
+      break
     case 'frost':
-      return merge([
-        ...pedestal(),
+      parts.push(
         tube(0.1, 0.24, 0.3, 0, 0.26, 0, 0x8fb8de, 6),
         tint(new ConeGeometry(0.07, 0.3, 4).rotateZ(0.5).translate(-0.2, 0.42, 0.05), 0xcdeeff),
         tint(new ConeGeometry(0.06, 0.26, 4).rotateZ(-0.6).translate(0.2, 0.4, -0.08), 0xcdeeff),
         tint(new ConeGeometry(0.06, 0.24, 4).rotateX(0.6).translate(0.02, 0.4, 0.2), 0xb4e2fb),
-      ])
-    case 'tesla':
-      return merge([
-        ...pedestal(),
-        tube(0.1, 0.2, 0.74, 0, 0.26, 0, IRON, 8),
-        tint(new TorusGeometry(0.2, 0.035, 5, 12).rotateX(Math.PI / 2).translate(0, 0.48, 0), 0xc77b3b),
-        tint(new TorusGeometry(0.16, 0.035, 5, 12).rotateX(Math.PI / 2).translate(0, 0.68, 0), 0xc77b3b),
-        tint(new TorusGeometry(0.13, 0.03, 5, 12).rotateX(Math.PI / 2).translate(0, 0.86, 0), 0xc77b3b),
-      ])
+      )
+      if (level >= 2) {
+        parts.push(
+          tint(new ConeGeometry(0.055, 0.24, 4).rotateX(-0.6).translate(-0.04, 0.4, -0.2), 0xb4e2fb),
+          tint(new ConeGeometry(0.05, 0.2, 4).rotateZ(0.9).translate(-0.27, 0.3, -0.12), 0xe8f8ff),
+        )
+      }
+      if (level >= 3) parts.push(tube(0.05, 0.11, 0.26, 0, 0.5, 0, 0xb4e2fb, 5))
+      if (level >= 4) {
+        parts.push(...around(6, (a) => tint(new ConeGeometry(0.04, 0.18, 4).translate(Math.cos(a) * 0.33, 0.33, Math.sin(a) * 0.33), 0xe8f8ff), 0.3))
+      }
+      break
+    case 'tesla': {
+      const copper = level >= 4 ? 0xe0a050 : 0xc77b3b
+      parts.push(tube(0.1, 0.2, 0.74, 0, 0.26, 0, IRON, 8), hoop(0.2, 0.035, 0.48, copper), hoop(0.16, 0.035, 0.68, copper), hoop(0.13, 0.03, 0.86, copper))
+      if (level >= 2) parts.push(hoop(0.235, 0.035, 0.36, copper))
+      if (level >= 3) {
+        // 往外伸的電極
+        parts.push(
+          ...around(level >= 4 ? 4 : 2, (a) =>
+            merge([
+              tint(new CylinderGeometry(0.018, 0.024, 0.3, 5).rotateZ(-0.9).translate(0.2, 0.74, 0).rotateY(a), IRON_DARK),
+              tint(new SphereGeometry(0.04, 6, 5).translate(0.33, 0.84, 0).rotateY(a), copper),
+            ]),
+          ),
+        )
+      }
+      break
+    }
     case 'poison':
-      return merge([
-        ...pedestal(),
+      parts.push(
         tube(0.07, 0.1, 0.3, 0, 0.26, 0, 0x4d7a2f, 6),
         tint(new ConeGeometry(0.2, 0.08, 6).translate(0, 0.32, 0), 0x3f9b4b),
         box(0.34, 0.03, 0.1, 0.16, 0.4, 0, 0x57b862),
         box(0.1, 0.03, 0.34, 0, 0.36, -0.16, 0x57b862),
-      ])
+      )
+      if (level >= 2) parts.push(box(0.34, 0.03, 0.1, -0.16, 0.34, 0, 0x4aa856), box(0.1, 0.03, 0.34, 0, 0.42, 0.16, 0x4aa856))
+      if (level >= 3) {
+        // 一圈往外長的刺
+        parts.push(...around(6, (a) => tint(new ConeGeometry(0.035, 0.2, 4).rotateZ(-1.1).translate(0.3, 0.3, 0).rotateY(a), 0x2f7d3a), 0.4))
+      }
+      if (level >= 4) {
+        // 兩顆小花苞
+        for (const side of [-1, 1]) {
+          parts.push(
+            tint(new CylinderGeometry(0.02, 0.028, 0.3, 5).rotateZ(-side * 0.5).translate(side * 0.2, 0.5, -0.06), 0x4d7a2f),
+            ball(0.07, side * 0.28, 0.66, -0.06, 0xa64ac9, 1.1, 7),
+          )
+        }
+      }
+      break
     case 'sniper':
-      return merge([
-        ...pedestal(),
+      parts.push(
         box(0.07, 0.9, 0.07, -0.15, 0.7, -0.15, WOOD),
         box(0.07, 0.9, 0.07, 0.15, 0.7, -0.15, WOOD),
         box(0.07, 0.9, 0.07, -0.15, 0.7, 0.15, WOOD),
         box(0.07, 0.9, 0.07, 0.15, 0.7, 0.15, WOOD),
         box(0.44, 0.06, 0.44, 0, 0.62, 0, WOOD_DARK),
         box(0.5, 0.07, 0.5, 0, 1.08, 0, WOOD_DARK),
-      ])
+      )
+      if (level >= 2) {
+        // 四面的斜撐
+        parts.push(...around(4, (a) => tint(new BoxGeometry(0.035, 0.52, 0.035).rotateZ(0.6).translate(0, 0.86, 0.17).rotateY(a), WOOD_DARK)))
+      }
+      if (level >= 3) {
+        const metal = level >= 4 ? GOLD : IRON
+        parts.push(...around(4, (a) => box(0.1, 0.1, 0.1, Math.cos(a) * 0.33, 1.09, Math.sin(a) * 0.33, metal), Math.PI / 4))
+      }
+      if (level >= 4) parts.push(...banner(-0.2, 1.1, -0.2, RED))
+      break
     case 'beacon':
-      return merge([
-        ...pedestal(),
-        tube(0.08, 0.13, 0.86, 0, 0.26, 0, 0xe9e2d0, 8),
-        tint(new TorusGeometry(0.13, 0.03, 5, 12).rotateX(Math.PI / 2).translate(0, 0.6, 0), 0xe0b040),
-        box(0.02, 0.26, 0.3, 0, 0.86, 0.19, 0xc2410c),
-      ])
+      parts.push(tube(0.08, 0.13, 0.86, 0, 0.26, 0, 0xe9e2d0, 8), hoop(0.13, 0.03, 0.6, GOLD), box(0.02, 0.26, 0.3, 0, 0.86, 0.19, RED))
+      if (level >= 2) parts.push(hoop(0.15, 0.03, 0.4, GOLD))
+      if (level >= 3) {
+        // 往兩邊吹的號角
+        parts.push(
+          ...around(level >= 4 ? 4 : 2, (a) => tint(new ConeGeometry(0.075, 0.24, 7, 1, true).rotateZ(Math.PI / 2).translate(0.2, 0.98, 0).rotateY(a), GOLD)),
+        )
+      }
+      if (level >= 4) parts.push(box(0.02, 0.26, 0.3, 0, 0.56, -0.19, RED), hoop(0.11, 0.025, 1.08, GOLD))
+      break
   }
+  return merge(parts)
 }
 
-/** 會轉的那一截，原點在轉軸上（裝在 `TOWER_LOOK[kind].headY` 的高度） */
-export function towerHead(kind: TowerId): Shape {
+/** 會轉的那一截，原點在轉軸上（裝在 `TOWER_LOOK[kind].headY` 的高度）；`level` 是 1～4 */
+export function towerHead(kind: TowerId, level: number): Shape {
   switch (kind) {
-    case 'bolt':
-      // 弩：弩身、兩片弓臂、搭在上面的箭
-      return merge([
-        box(0.1, 0.08, 0.56, 0, 0.02, 0.04, WOOD_DARK),
-        box(0.34, 0.05, 0.07, -0.17, 0.03, 0.22, 0xc9b38a),
-        box(0.34, 0.05, 0.07, 0.17, 0.03, 0.22, 0xc9b38a),
-        box(0.05, 0.05, 0.14, -0.33, 0.03, 0.16, 0xc9b38a),
-        box(0.05, 0.05, 0.14, 0.33, 0.03, 0.16, 0xc9b38a),
-        barrel(0.018, 0.5, 0.08, -0.14, 0xf2e6c8, 5),
-        tint(new ConeGeometry(0.04, 0.1, 5).rotateX(Math.PI / 2).translate(0, 0.08, 0.4), 0x9aa3ad),
-      ])
-    case 'cannon':
-      return merge([
-        ball(0.24, 0, 0.02, 0, IRON_DARK, 0.9, 10),
-        barrel(0.1, 0.5, 0.06, 0, IRON, 10),
-        barrel(0.125, 0.08, 0.06, 0.44, 0xb08d57, 10),
-        box(0.12, 0.12, 0.2, 0, 0.06, -0.22, IRON),
-      ])
-    case 'frost':
-      // 懸在半空的冰晶
-      return merge([
-        tint(new OctahedronGeometry(0.22, 0).scale(0.8, 1.35, 0.8), 0xbfeaff),
-        tint(new OctahedronGeometry(0.09, 0).translate(0.24, -0.05, 0), 0xe8f8ff),
-        tint(new OctahedronGeometry(0.07, 0).translate(-0.2, 0.1, 0.12), 0xe8f8ff),
-        tint(new OctahedronGeometry(0.06, 0).translate(-0.04, -0.12, -0.24), 0xe8f8ff),
-      ])
-    case 'tesla':
-      return merge([
-        ball(0.15, 0, 0, 0, 0xfff07a, 1, 10),
-        tint(new TorusGeometry(0.2, 0.02, 4, 12).rotateX(Math.PI / 2), 0xffd23f),
-      ])
-    case 'poison':
-      // 花苞：中間一顆毒囊、四片花瓣
-      return merge([
-        ball(0.17, 0, 0.06, 0, 0xa64ac9, 1.1, 10),
-        tint(new ConeGeometry(0.1, 0.3, 4).rotateZ(0.9).translate(-0.2, 0.02, 0), 0x57b862),
-        tint(new ConeGeometry(0.1, 0.3, 4).rotateZ(-0.9).translate(0.2, 0.02, 0), 0x57b862),
-        tint(new ConeGeometry(0.1, 0.3, 4).rotateX(0.9).translate(0, 0.02, 0.2), 0x3f9b4b),
-        tint(new ConeGeometry(0.1, 0.3, 4).rotateX(-0.9).translate(0, 0.02, -0.2), 0x3f9b4b),
-        ball(0.05, 0.06, 0.2, 0.04, 0xe3a6ff, 1, 6),
-      ])
-    case 'sniper':
-      // 重弩：長長的弩身、寬弓臂、瞄準鏡
-      return merge([
+    case 'bolt': {
+      // 弩：弩身、兩片弓臂、搭在上面的箭；3 級變成兩支箭，4 級三支、金箭頭
+      const tip = level >= 4 ? GOLD : 0x9aa3ad
+      const arm = level >= 2 ? 0.4 : 0.34
+      const parts = [
+        box(level >= 3 ? 0.16 : 0.1, 0.08, 0.56, 0, 0.02, 0.04, WOOD_DARK),
+        box(arm, 0.05, 0.07, -arm / 2, 0.03, 0.22, 0xc9b38a),
+        box(arm, 0.05, 0.07, arm / 2, 0.03, 0.22, 0xc9b38a),
+        box(0.05, 0.05, 0.14, -arm + 0.01, 0.03, 0.16, level >= 2 ? IRON : 0xc9b38a),
+        box(0.05, 0.05, 0.14, arm - 0.01, 0.03, 0.16, level >= 2 ? IRON : 0xc9b38a),
+      ]
+      const arrows = level >= 4 ? [-0.07, 0, 0.07] : level >= 3 ? [-0.045, 0.045] : [0]
+      for (const x of arrows) {
+        parts.push(
+          tint(new CylinderGeometry(0.018, 0.018, 0.5, 5).rotateX(Math.PI / 2).translate(x, 0.08, 0.11), 0xf2e6c8),
+          tint(new ConeGeometry(0.04, 0.1, 5).rotateX(Math.PI / 2).translate(x, 0.08, 0.4), tip),
+        )
+      }
+      if (level >= 2) parts.push(box(0.14, 0.1, 0.1, 0, 0.02, -0.26, IRON))
+      if (level >= 4) parts.push(box(0.18, 0.03, 0.2, 0, 0.075, -0.02, GOLD))
+      return merge(parts)
+    }
+    case 'cannon': {
+      // 砲：越升級砲管越長、越粗，4 級是雙管
+      const length = [0.5, 0.56, 0.6, 0.6][level - 1]
+      const bore = [0.1, 0.105, 0.125, 0.095][level - 1]
+      const ringColor = level >= 4 ? GOLD : BRONZE
+      const parts = [ball(level >= 3 ? 0.27 : 0.24, 0, 0.02, 0, IRON_DARK, 0.9, 10), box(level >= 4 ? 0.3 : 0.12, 0.12, 0.2, 0, 0.06, -0.22, IRON)]
+      for (const x of level >= 4 ? [-0.105, 0.105] : [0]) {
+        parts.push(barrel(bore, length, 0.06, 0, IRON, 10, x), barrel(bore + 0.025, 0.08, 0.06, length - 0.06, ringColor, 10, x))
+        if (level >= 2) parts.push(barrel(bore + 0.02, 0.05, 0.06, length * 0.45, ringColor, 10, x))
+      }
+      if (level >= 3) {
+        // 兩邊的砲耳
+        for (const side of [-1, 1]) {
+          parts.push(tint(new CylinderGeometry(0.09, 0.09, 0.07, 8).rotateZ(Math.PI / 2).translate(side * (level >= 4 ? 0.26 : 0.2), 0.03, 0.02), IRON))
+        }
+      }
+      return merge(parts)
+    }
+    case 'frost': {
+      // 懸在半空的冰晶：越升級越大顆、旁邊繞的碎冰越多
+      const size = [0.22, 0.24, 0.27, 0.3][level - 1]
+      const parts = [tint(new OctahedronGeometry(size, 0).scale(0.8, 1.35, 0.8), 0xbfeaff)]
+      const shards = [3, 5, 6, 8][level - 1]
+      parts.push(
+        ...around(shards, (a, i) =>
+          tint(new OctahedronGeometry(0.06 + (i % 3) * 0.015, 0).translate(Math.cos(a) * (size + 0.06), ((i % 3) - 1) * 0.11, Math.sin(a) * (size + 0.06)), 0xe8f8ff),
+        ),
+      )
+      if (level >= 4) parts.push(tint(new OctahedronGeometry(0.1, 0).scale(0.8, 1.3, 0.8).translate(0, size * 1.35 + 0.12, 0), 0xffffff))
+      return merge(parts)
+    }
+    case 'tesla': {
+      const size = [0.15, 0.165, 0.18, 0.2][level - 1]
+      const parts = [ball(size, 0, 0, 0, 0xfff07a, 1, 10), tint(new TorusGeometry(size + 0.05, 0.02, 4, 14).rotateX(Math.PI / 2), 0xffd23f)]
+      if (level >= 3) parts.push(tint(new TorusGeometry(size + 0.05, 0.02, 4, 14), 0xffd23f))
+      if (level >= 4) {
+        parts.push(
+          tint(new TorusGeometry(size + 0.05, 0.02, 4, 14).rotateY(Math.PI / 2), 0xffd23f),
+          ...around(4, (a) => ball(0.04, Math.cos(a) * (size + 0.14), 0, Math.sin(a) * (size + 0.14), 0xfffbe0, 1, 6), Math.PI / 4),
+        )
+      }
+      return merge(parts)
+    }
+    case 'poison': {
+      // 花苞：中間一顆毒囊，花瓣越升級越多層
+      const size = [0.17, 0.185, 0.2, 0.22][level - 1]
+      const petals = [4, 4, 6, 8][level - 1]
+      const parts = [ball(size, 0, 0.06, 0, 0xa64ac9, 1.1, 10), ball(0.05, 0.06, 0.06 + size * 1.02, 0.04, 0xe3a6ff, 1, 6)]
+      parts.push(
+        ...around(petals, (a, i) => tint(new ConeGeometry(0.1, 0.3, 4).rotateZ(-0.9).translate(size + 0.03, 0.02, 0).rotateY(a), i % 2 ? 0x3f9b4b : 0x57b862)),
+      )
+      if (level >= 2) parts.push(ball(0.04, -0.07, 0.06 + size * 0.95, -0.05, 0xe3a6ff, 1, 6))
+      if (level >= 4) {
+        parts.push(...around(4, (a) => tint(new ConeGeometry(0.07, 0.24, 4).rotateZ(-0.45).translate(size * 0.75, 0.2, 0).rotateY(a), 0x6fcf7a), Math.PI / 4))
+      }
+      return merge(parts)
+    }
+    case 'sniper': {
+      // 重弩：長長的弩身、寬弓臂、瞄準鏡；3 級加了護盾，4 級雙層弓臂、金箭頭
+      const metal = level >= 4 ? GOLD : IRON
+      const parts = [
         box(0.1, 0.1, 0.9, 0, 0.02, 0.1, WOOD_DARK),
         box(0.5, 0.05, 0.07, -0.25, 0.03, 0.48, IRON),
         box(0.5, 0.05, 0.07, 0.25, 0.03, 0.48, IRON),
         box(0.06, 0.05, 0.2, -0.49, 0.03, 0.38, IRON),
         box(0.06, 0.05, 0.2, 0.49, 0.03, 0.38, IRON),
         barrel(0.025, 0.86, 0.1, -0.1, 0xf2e6c8, 5),
-        tint(new ConeGeometry(0.055, 0.16, 5).rotateX(Math.PI / 2).translate(0, 0.1, 0.8), 0xc9d3dc),
-        barrel(0.04, 0.24, 0.17, -0.2, IRON_DARK, 6),
+        tint(new ConeGeometry(0.055, 0.16, 5).rotateX(Math.PI / 2).translate(0, 0.1, 0.8), level >= 4 ? GOLD : 0xc9d3dc),
+        barrel(level >= 2 ? 0.05 : 0.04, level >= 2 ? 0.3 : 0.24, 0.17, -0.2, IRON_DARK, 6),
         box(0.16, 0.14, 0.12, 0, 0, -0.36, WOOD),
-      ])
-    case 'beacon':
-      // 號角：一圈金環和中間的光球
-      return merge([
-        ball(0.11, 0, 0, 0, 0xfff2b0, 1, 10),
-        tint(new TorusGeometry(0.2, 0.03, 5, 14), 0xffd23f),
-        tint(new TorusGeometry(0.2, 0.03, 5, 14).rotateY(Math.PI / 2), 0xffd23f),
-      ])
+      ]
+      if (level >= 2) parts.push(box(0.14, 0.04, 0.14, 0, 0.09, 0.42, metal))
+      if (level >= 3) {
+        for (const side of [-1, 1]) parts.push(tint(new BoxGeometry(0.03, 0.22, 0.26).rotateY(side * 0.35).translate(side * 0.16, 0.06, 0.62), metal))
+      }
+      if (level >= 4) parts.push(box(0.4, 0.04, 0.06, -0.2, 0.11, 0.44, IRON_DARK), box(0.4, 0.04, 0.06, 0.2, 0.11, 0.44, IRON_DARK))
+      return merge(parts)
+    }
+    case 'beacon': {
+      // 號角：金環和中間的光球，越升級環越多
+      const size = [0.11, 0.125, 0.14, 0.16][level - 1]
+      const r = size + 0.09
+      const parts = [ball(size, 0, 0, 0, 0xfff2b0, 1, 10), tint(new TorusGeometry(r, 0.03, 5, 14), 0xffd23f), tint(new TorusGeometry(r, 0.03, 5, 14).rotateY(Math.PI / 2), 0xffd23f)]
+      if (level >= 3) parts.push(tint(new TorusGeometry(r, 0.03, 5, 14).rotateX(Math.PI / 2), 0xffd23f))
+      if (level >= 4) {
+        parts.push(...around(4, (a) => tint(new OctahedronGeometry(0.05, 0).translate(Math.cos(a) * (r + 0.1), 0, Math.sin(a) * (r + 0.1)), 0xfffbe0), Math.PI / 4))
+      }
+      return merge(parts)
+    }
   }
-}
-
-/** 地圖上的岩石 */
-export function rockGeometry(): Shape {
-  return merge([
-    tint(new DodecahedronGeometry(0.38, 0).scale(1.05, 0.8, 0.95).translate(0, 0.22, 0), 0x8d8a84),
-    tint(new DodecahedronGeometry(0.2, 0).translate(0.26, 0.12, 0.2), 0x77746f),
-    tint(new DodecahedronGeometry(0.16, 0).translate(-0.28, 0.1, -0.18), 0xa19e98),
-  ])
 }

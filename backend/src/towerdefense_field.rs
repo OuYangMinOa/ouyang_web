@@ -28,6 +28,8 @@ const DIRS: [(i32, i32); 8] = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1)
 const NO_DIR: usize = 8;
 /// 怪物狀態的編碼用的 64 個字（`encode`）
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+/// 快照裡怪物的 id 佔 3 個字（18 個位元）
+const ID_MASK: u32 = 0x3_FFFF;
 
 /// 一路：入口、出口、每一格到出口的距離、目前會走的路線（給畫面畫）
 pub struct Route {
@@ -149,6 +151,8 @@ pub struct Field {
     pub shots: Vec<Vec<u32>>,
     pub kills: Vec<Kill>,
     pub leaks: Vec<u32>,
+    /// 被打倒的怪和牠的賞金（怪物 id 和快照裡的一樣只留 18 個位元），給畫面跳出「+5」用；每個 tick 送出去時拿走
+    pub deaths: Vec<(u32, u32)>,
     /// 每個座位打出的傷害
     pub dealt: Vec<f64>,
 }
@@ -269,6 +273,7 @@ impl Field {
             shots: Vec::new(),
             kills: Vec::new(),
             leaks: Vec::new(),
+            deaths: Vec::new(),
             dealt: Vec::new(),
         };
         field.recompute();
@@ -456,6 +461,11 @@ impl Field {
         self.spawns.iter().any(|s| s.wave)
     }
 
+    /// 這一波還有幾隻怪沒出來（畫面上「剩幾隻」用）
+    pub fn waiting(&self) -> usize {
+        self.spawns.iter().filter(|s| s.wave).count()
+    }
+
     /// 場上沒有怪、也沒有排著要出來的
     pub fn idle(&self) -> bool {
         self.monsters.is_empty() && self.spawns.is_empty()
@@ -466,6 +476,7 @@ impl Field {
         self.monsters.clear();
         self.spawns.clear();
         self.pending.clear();
+        self.deaths.clear();
     }
 
     /// 生出一隻怪：站在 (x, y)，正要走去 `to`
@@ -804,6 +815,10 @@ impl Field {
             let spec = m.kind.spec();
             if m.dead {
                 self.kills.push(Kill { owner: m.killer.0, bounty: m.bounty, sent_by: m.sent_by });
+                // 沒有人在看、一直沒被拿走也不會越積越多
+                if self.deaths.len() < 2048 {
+                    self.deaths.push((m.id & ID_MASK, m.bounty));
+                }
                 if let Some((child, count)) = spec.split {
                     for _ in 0..count {
                         let small = Spawn {
@@ -857,7 +872,7 @@ impl Field {
             let status = u32::from(self.time < m.slow_until)
                 | u32::from(self.time < m.poison_until) << 1
                 | u32::from(m.sent_by.is_some()) << 2;
-            put(m.id & 0x3_FFFF, 3);
+            put(m.id & ID_MASK, 3);
             put(m.kind as u32, 1);
             put(coord(m.x), 2);
             put(coord(m.y), 2);
