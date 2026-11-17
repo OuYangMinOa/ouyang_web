@@ -197,14 +197,17 @@
   --mg-ink-c: #1c1a17;
   --mg-ink-d: #fffaf3;
   --mg-ink-e: #f2d27a;
-  /* 迷宮塔防（3D 畫面也讀這一組）：棋盤的側邊、兩種格子、格線、通道、岩石底下的格子，飛行路線、入口、出口，
-     八個座位的顏色（塔底座的色環），七種塔在商店上的代表色 */
+  /* 迷宮塔防（3D 畫面也讀這一組）：小島側面的土層、兩種草皮、草皮之間的縫、石板路、岩石底下的土、池塘的水、
+     金幣（賞金跳出來的數字），飛行路線、入口、出口，八個座位的顏色（塔底座的色環），七種塔在商店上的代表色。
+     四張地圖的地貌（草原、森林、秋天、峽谷）是從這一組調出來的，見 games/towerdefense/palette.ts */
   --td-board: #b9a57f;
   --td-tile-a: #b7c98a;
   --td-tile-b: #a9bd7b;
   --td-tile-line: #8fa565;
   --td-walk: #dcc99c;
   --td-rock-tile: #a8a399;
+  --td-water: #7fbcdc;
+  --td-gold: #a86a00;
   --td-air: #5b6fd6;
   --td-spawn: #7c3aed;
   --td-exit: #0f9d8a;
@@ -409,6 +412,8 @@
     --td-tile-line: #2b3a25;
     --td-walk: #6a5c44;
     --td-rock-tile: #4c4943;
+    --td-water: #2f5f7d;
+    --td-gold: #ffd23f;
     --td-air: #8fa0ff;
     --td-spawn: #a78bfa;
     --td-exit: #2dd4bf;
@@ -605,6 +610,8 @@
   --td-tile-line: #2b3a25;
   --td-walk: #6a5c44;
   --td-rock-tile: #4c4943;
+  --td-water: #2f5f7d;
+  --td-gold: #ffd23f;
   --td-air: #8fa0ff;
   --td-spawn: #a78bfa;
   --td-exit: #2dd4bf;

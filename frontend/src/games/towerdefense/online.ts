@@ -204,6 +204,10 @@ export type TickEvent = {
   s?: number[][]
   /** 走到出口的怪物 id */
   x?: number[]
+  /** 被打倒的怪物、這塊場地的人各拿到多少賞金：[怪物 id, 賞金] */
+  d?: [number, number][]
+  /** 這塊場地這一波還有幾隻怪沒出來 */
+  r?: number
   /** 每個座位的錢、每塊場地的生命和怪物數、每個座位打倒幾隻 */
   g: number[]
   l: number[]

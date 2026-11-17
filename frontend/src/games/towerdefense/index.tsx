@@ -5,11 +5,13 @@ import { lobbyPath, useLobby } from '../lobby/useLobby'
 import { PartyNotice } from '../shared/Party'
 import { load, save } from '../shared/storage'
 import { useParty } from '../shared/useParty'
+import { Glyph, TowerArt } from './Art'
 import { TdGame, type GameEvent, type TowerInfo } from './game'
-import { BuildInfo, Players, Resources, SendPanel, Shop, TowerPanel, WaveBar } from './Hud'
+import { BuildInfo, Players, Resources, SendPanel, Shop, TowerPanel, WaveBanner, WaveBar } from './Hud'
+import { IconsContext, type Icons } from './icons'
 import { loadSpec, seatName, type AimMode, type Spec, type TdAction, type TdParty, type TdView, type TowerId } from './online'
 import { Menu, PauseMenu, Results } from './Panels'
-import { createStats } from './stats'
+import { createStats, goldOf } from './stats'
 import './towerdefense.css'
 
 type Note = { id: number; text: string; tone: 'ok' | 'danger' | 'accent' | '' }
@@ -33,11 +35,17 @@ export default function TowerDefense() {
   const [error, setError] = useState<string | null>(null)
   /** 3D 畫面做好了沒（底下用到遊戲的 effect 等它好了再跑一次） */
   const [ready, setReady] = useState(false)
+  /** 塔和怪物的小圖：3D 畫面做好之後拍一次，拍不了就是 null（介面退回用表情符號） */
+  const [icons, setIcons] = useState<Icons | null>(null)
   const [stats] = useState(createStats)
   const [build, setBuild] = useState<TowerId | null>(null)
+  /** 滑鼠停在商店的哪一種塔上（先看說明，還沒選） */
+  const [peek, setPeek] = useState<TowerId | null>(null)
   /** 選到的那座塔，或選到的空格（兩個不會同時有） */
   const [tower, setTower] = useState<TowerInfo | null>(null)
   const [cell, setCell] = useState<number | null>(null)
+  /** 蓋在正在預覽的那一格，路線會多幾格 */
+  const [gain, setGain] = useState<number | null>(null)
   const [look, setLook] = useState(0)
   const [flags, setFlags] = useState<boolean[]>([])
   const [target, setTarget] = useState<number | null>(null)
@@ -71,6 +79,7 @@ export default function TowerDefense() {
     next: [] as [number, number][],
     build: null as TowerId | null,
     act: (() => {}) as (action: TdAction) => void,
+    afford: (() => true) as (kind: TowerId) => boolean,
   })
 
   const party = useParty<TdParty>('towerdefense', {
@@ -85,12 +94,10 @@ export default function TowerDefense() {
         case 'tower':
           game?.onTower(e)
           break
-        case 'wave': {
-          const boss = next.some(([kind]) => (spec?.monsters[kind]?.lives ?? 1) > 1)
-          say(boss ? `第 ${e.wave} 波：魔王來了！` : `第 ${e.wave} 波`, boss ? 'danger' : 'accent')
-          game?.play(boss ? 'boss' : 'wave')
+        case 'wave':
+          // 畫面中間的「第幾波」跟著 view 出來（見下面的 banner），這裡只管聲音
+          game?.play(next.some(([kind]) => (spec?.monsters[kind]?.lives ?? 1) > 1) ? 'boss' : 'wave')
           break
-        }
         case 'ready':
           setFlags(e.ready)
           break
@@ -128,8 +135,19 @@ export default function TowerDefense() {
   const { room, view } = party
   const me = view?.you ?? null
   const my = view && me !== null ? view.players[me] : null
+
+  /** 錢夠不夠蓋這種塔；不夠就說一聲（不用等伺服器回來才知道） */
+  function afford(kind: TowerId): boolean {
+    const t = spec?.towers.find((x) => x.id === kind)
+    if (!t || !view || me === null) return true
+    const cost = t.levels[0].cost
+    if (goldOf(view, stats.get(), me) >= cost) return true
+    say(`錢不夠：${t.name}要 ${cost}`, 'danger')
+    gameRef.current?.play('deny')
+    return false
+  }
   useEffect(() => {
-    latest.current = { name: (seat) => seatName(party, seat), me, next: view?.next ?? [], build, act: party.act }
+    latest.current = { name: (seat) => seatName(party, seat), me, next: view?.next ?? [], build, act: party.act, afford }
   })
 
   const battle = (room?.phase === 'playing' || room?.phase === 'results') && view !== null
@@ -165,7 +183,7 @@ export default function TowerDefense() {
             break
           case 'build': {
             const kind = latest.current.build
-            if (kind) latest.current.act({ type: 'build', cell: e.cell, kind })
+            if (kind && latest.current.afford(kind)) latest.current.act({ type: 'build', cell: e.cell, kind })
             break
           }
           case 'cancel':
@@ -181,6 +199,9 @@ export default function TowerDefense() {
             break
           case 'leak':
             setLeak((n) => n + 1)
+            break
+          case 'preview':
+            setGain(e.cell === null ? null : e.gain)
             break
         }
       }
@@ -202,6 +223,13 @@ export default function TowerDefense() {
     [spec, stats, say],
   )
 
+  // 塔和怪物的小圖：等第一個畫面出來之後再拍（要另外開一個小的 WebGL 畫面，會卡幾十毫秒）
+  useEffect(() => {
+    if (!ready) return
+    const timer = window.setTimeout(() => setIcons(gameRef.current?.icons() ?? null), 80)
+    return () => window.clearTimeout(timer)
+  }, [ready])
+
   // 選單的背景是房主選的那張地圖，慢慢轉
   const menuMap = room?.options.map ?? 'plains'
   useEffect(() => {
@@ -217,9 +245,12 @@ export default function TowerDefense() {
   if (currentGame !== gameNo) {
     setGameNo(currentGame)
     setBuild(null)
+    setPeek(null)
     setTower(null)
     setCell(null)
+    setGain(null)
     setFeed([])
+    setLeak(0)
     setMenu(false)
     setSending(false)
     setHideResults(false)
@@ -230,14 +261,39 @@ export default function TowerDefense() {
   }
   // 每次收到 view：準備好了沒、收入、派兵的目標以伺服器的為準
   const [seen, setSeen] = useState<TdView | null>(null)
+  /** 剛打完哪一波（場上清空、開始休息）：說一聲、響一聲 */
+  const [cleared, setCleared] = useState<{ game: number; wave: number } | null>(null)
   if (view !== seen) {
     setSeen(view)
+    if (seen && view && seen.game === view.game && seen.nextIn === null && view.nextIn !== null && view.wave > 0 && !view.ended) {
+      setCleared({ game: view.game, wave: view.wave })
+    }
     if (view) {
       setFlags(view.players.map((p) => p.ready))
       setTarget(view.target)
       if (view.you !== null) setIncome(view.players[view.you]?.income ?? 0)
     }
   }
+  // 新的一波：畫面中間跳出「第幾波」和這一波的怪。同一局裡波數往上加才跳（剛連上、重新整理時不跳）
+  const waveKey = battle && !ended ? `${view.game}:${view.wave}` : null
+  const [waveSeen, setWaveSeen] = useState<{ key: string | null; game: number; wave: number }>({ key: null, game: -1, wave: 0 })
+  const [banner, setBanner] = useState<{ key: string; wave: number; groups: [number, number][] } | null>(null)
+  if (waveKey !== waveSeen.key) {
+    if (view && waveKey && waveSeen.key && waveSeen.game === view.game && view.wave > waveSeen.wave && view.now.length) {
+      setBanner({ key: waveKey, wave: view.wave, groups: view.now })
+    } else if (!waveKey) setBanner(null)
+    setWaveSeen({ key: waveKey, game: view?.game ?? -1, wave: view?.wave ?? 0 })
+  }
+  useEffect(() => {
+    if (!banner) return
+    const timer = window.setTimeout(() => setBanner((b) => (b?.key === banner.key ? null : b)), 2700)
+    return () => window.clearTimeout(timer)
+  }, [banner])
+  useEffect(() => {
+    if (!cleared) return
+    say(`第 ${cleared.wave} 波守住了`, 'ok')
+    gameRef.current?.play('clear')
+  }, [cleared, say])
 
   // view 變了：塔、路線、誰是誰交給 3D 畫面
   useEffect(() => {
@@ -350,6 +406,7 @@ export default function TowerDefense() {
   function pickKind(kind: TowerId) {
     if (!home) return
     if (cell !== null) {
+      if (!afford(kind)) return
       party.act({ type: 'build', cell, kind })
       gameRef.current?.select(null, null)
       return
@@ -477,260 +534,276 @@ export default function TowerDefense() {
   const exitLabel = lobby.code ? '回到遊戲室' : '回到小遊戲'
   const present = view ? view.players.map((p, s) => ({ p, s })).filter(({ p, s }) => !view.bots.includes(s) && p.online && !p.out) : []
   const lookOwner = view && versus ? view.players.findIndex((p) => p.field === look) : -1
+  const buildSpec = spec?.towers.find((t) => t.id === build) ?? null
+  const peekSpec = spec?.towers.find((t) => t.id === peek) ?? null
 
   return (
-    <div className={`td-root${touch ? ' touch' : ''}`} onPointerDown={() => gameRef.current?.unlockAudio()}>
-      {spec && <div className="td-view" ref={mountGame} />}
+    <IconsContext value={icons}>
+      <div className={`td-root${touch ? ' touch' : ''}`} onPointerDown={() => gameRef.current?.unlockAudio()}>
+        {spec && <div className="td-view" ref={mountGame} />}
 
-      {battle && spec && (
-        <>
-          <div className="td-top" ref={topBar}>
-            <div className="td-top-start">
-              <button
-                type="button"
-                className="td-icon"
-                onClick={() => window.confirm('離開這個房間？') && leaveRoom()}
-                aria-label="離開房間"
-                title="離開房間"
-              >
-                ←
-              </button>
-              <Resources view={view} stats={stats} seat={me} look={look} income={income} />
-            </div>
-            <WaveBar
-              view={view}
-              spec={spec}
-              ready={me !== null && flags[me] === true}
-              readyCount={present.filter(({ s }) => flags[s]).length}
-              readyTotal={present.length}
-              canAct={active}
-              onReady={setReadyFlag}
-            />
-            <div className="td-top-end">
-              {my && !ended && (
+        {battle && spec && (
+          <>
+            <div className="td-top" ref={topBar}>
+              <div className="td-top-start">
                 <button
                   type="button"
-                  className={`td-icon td-speed${view.speed > 1 ? ' on' : ''}`}
-                  onClick={cycleSpeed}
-                  title="遊戲速度：照所有人裡最慢的那個（大家都調快才會變快）"
-                  aria-label={`遊戲速度：你選 ${my.speed} 倍，現在 ${view.speed} 倍`}
+                  className="td-icon"
+                  onClick={() => window.confirm('離開這個房間？') && leaveRoom()}
+                  aria-label="離開房間"
+                  title="離開房間"
                 >
-                  ⏩<small>{my.speed === view.speed ? `${view.speed}×` : `${my.speed}→${view.speed}×`}</small>
+                  <Glyph name="back" />
                 </button>
-              )}
-              <button
-                type="button"
-                className={`td-icon${board ? ' on' : ''}`}
-                onClick={() => setBoard((b) => !b)}
-                aria-pressed={board}
-                aria-label="玩家"
-                title="玩家（Tab）"
-              >
-                👥
-              </button>
-              {!ended && (
-                <button type="button" className="td-icon" onClick={() => setMenu(true)} aria-label="選單" title="選單（Esc）">
-                  ☰
-                </button>
-              )}
-              {canFullscreen() && (
-                <button
-                  type="button"
-                  className="td-icon td-wide-only"
-                  onClick={toggleFullscreen}
-                  aria-pressed={fullscreen}
-                  aria-label={fullscreen ? '離開全螢幕' : '全螢幕'}
-                  title={fullscreen ? '離開全螢幕（F）' : '全螢幕（F）'}
-                >
-                  {fullscreen ? '🗗' : '⛶'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {leak > 0 && <div className="td-leak" key={leak} aria-hidden="true" />}
-
-          {feed.length > 0 && (
-            <ol className="td-feed" aria-live="polite">
-              {feed.map((f) => (
-                <li key={f.id} className={`td-chip ${f.tone}`}>
-                  {f.text}
-                </li>
-              ))}
-            </ol>
-          )}
-          {toast && (
-            <div className={`td-toast td-chip ${toast.tone}`} key={toast.id} role="status">
-              {toast.text}
-            </div>
-          )}
-
-          {board && (
-            <div className="td-side td-chip">
-              <div className="td-info-head">
-                <strong>玩家</strong>
-                <button type="button" className="td-x" onClick={() => setBoard(false)} aria-label="關閉">
-                  ×
-                </button>
+                <Resources view={view} stats={stats} seat={me} look={look} income={income} leak={leak} />
               </div>
-              <Players
-                party={party}
+              <WaveBar
                 view={view}
+                spec={spec}
                 stats={stats}
                 look={look}
-                target={target}
-                aim={aim}
-                onLook={changeLook}
-                onGive={(seat, amount) => party.act({ type: 'give', seat, amount })}
-                onAim={(seat) => party.act({ type: 'aim', seat })}
+                ready={me !== null && flags[me] === true}
+                readyCount={present.filter(({ s }) => flags[s]).length}
+                readyTotal={present.length}
+                canAct={active}
+                onReady={setReadyFlag}
               />
-            </div>
-          )}
-
-          {!ended && (
-            <div className="td-dock">
-              <PartyNotice party={party} />
-              {(me === null || my?.out || (versus && my && look !== my.field)) && (
-                <div className="td-chip td-watch">
-                  <span>
-                    {me === null ? '觀戰中' : my?.out ? `你出局了（第 ${my.place} 名）` : '觀看中'}
-                    {versus && lookOwner >= 0 && (
-                      <>
-                        ：<strong>{seatName(party, lookOwner)}</strong> 的場地
-                      </>
-                    )}
-                  </span>
-                  {my && !my.out && look !== my.field && (
-                    <button type="button" onClick={() => changeLook(my.field)}>
-                      回到我的場地
-                    </button>
-                  )}
-                  {versus && (me === null || my?.out) && (
-                    <button type="button" className="secondary" onClick={() => changeLook((look + 1) % view.fields.length)}>
-                      換一個
-                    </button>
-                  )}
-                </div>
-              )}
-              {tower && towerSpec ? (
-                <TowerPanel
-                  tower={tower}
-                  spec={spec}
-                  view={view}
-                  stats={stats}
-                  seat={me}
-                  ownerName={tower.owner === me ? '你蓋的' : `${seatName(party, tower.owner)} 蓋的`}
-                  canManage={canManage}
-                  canUpgrade={home}
-                  onUpgrade={() => party.act({ type: 'upgrade', id: tower.id })}
-                  onSell={() => party.act({ type: 'sell', id: tower.id })}
-                  onMode={(mode: AimMode) => party.act({ type: 'mode', id: tower.id, mode })}
-                  onClose={cancel}
-                />
-              ) : home && (build || cell !== null) ? (
-                <BuildInfo
-                  tower={spec.towers.find((t) => t.id === build) ?? null}
-                  hint={
-                    cell !== null
-                      ? '選好格子了：按下面的塔就蓋在這一格'
-                      : touch
-                        ? '點格子看範圍，再點一次同一格就蓋'
-                        : '點格子就蓋；右鍵或 Esc 取消'
-                  }
-                  onCancel={cancel}
-                />
-              ) : null}
-              {sending && active && me !== null && versus && (
-                <SendPanel
-                  spec={spec}
-                  view={view}
-                  stats={stats}
-                  seat={me}
-                  targetName={target !== null ? seatName(party, target) : null}
-                  onSend={(unit) => party.act({ type: 'send', unit })}
-                />
-              )}
-              {active && (
-                <div className="td-dock-row" ref={shopRow}>
-                  {versus && (
-                    <button
-                      type="button"
-                      className={`td-send-toggle${sending ? ' on' : ''}`}
-                      aria-pressed={sending}
-                      onClick={() => setSending((s) => !s)}
-                      title="花錢派怪去打別人"
-                    >
-                      <span aria-hidden="true">⚔</span>
-                      派兵
-                    </button>
-                  )}
-                  <Shop spec={spec} view={view} stats={stats} seat={me} kind={home ? build : null} onPick={pickKind} disabled={!home} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {menu && !ended && (
-            <PauseMenu party={party} touch={touch} sound={sound} onSound={toggleSound} onResume={() => setMenu(false)} onLeave={leaveRoom} />
-          )}
-          {ended && !hideResults && (
-            <Results party={party} view={view} spec={spec} onLeave={leaveRoom} onHide={() => setHideResults(true)} />
-          )}
-          {ended && hideResults && (
-            <button type="button" className="td-chip td-show-results" onClick={() => setHideResults(false)}>
-              看結算
-            </button>
-          )}
-          {(party.error || !party.connected) && (
-            <div className="td-chip td-offline" role="alert">
-              {party.error ?? '連線中斷，重新連線中…'}
-            </div>
-          )}
-        </>
-      )}
-
-      {!battle && (
-        <>
-          <div className="td-top">
-            <div className="td-top-start">
-              <button type="button" className="td-icon" onClick={exit} aria-label={exitLabel} title={exitLabel}>
-                ←
-              </button>
-            </div>
-            <div className="td-top-end">
-              <button
-                type="button"
-                className="td-icon"
-                onClick={toggleSound}
-                aria-pressed={sound}
-                aria-label={sound ? '關掉音效' : '打開音效'}
-                title={sound ? '關掉音效（M）' : '打開音效（M）'}
-              >
-                {sound ? '🔊' : '🔇'}
-              </button>
-            </div>
-          </div>
-          <div className="td-layer td-menu">
-            <div className="td-panel">
-              <h1 className="td-title">
-                <span aria-hidden="true">🏰</span> 迷宮塔防
-              </h1>
-              {error ? (
-                <p className="error">{error}</p>
-              ) : spec ? (
-                <Menu party={party} spec={spec} touch={touch} onPractice={startPractice} />
-              ) : (
-                <p className="muted">載入中…</p>
-              )}
-              {!party.code && (
-                <button type="button" className="secondary" onClick={exit}>
-                  {exitLabel}
+              <div className="td-top-end">
+                {my && !ended && (
+                  <button
+                    type="button"
+                    className={`td-icon td-speed${view.speed > 1 ? ' on' : ''}`}
+                    onClick={cycleSpeed}
+                    title="遊戲速度：照所有人裡最慢的那個（大家都調快才會變快）"
+                    aria-label={`遊戲速度：你選 ${my.speed} 倍，現在 ${view.speed} 倍`}
+                  >
+                    <Glyph name="speed" size={16} />
+                    <small>{my.speed === view.speed ? `${view.speed}×` : `${my.speed}→${view.speed}×`}</small>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`td-icon${board ? ' on' : ''}`}
+                  onClick={() => setBoard((b) => !b)}
+                  aria-pressed={board}
+                  aria-label="玩家"
+                  title="玩家（Tab）"
+                >
+                  <Glyph name="players" />
                 </button>
-              )}
+                {!ended && (
+                  <button type="button" className="td-icon" onClick={() => setMenu(true)} aria-label="選單" title="選單（Esc）">
+                    <Glyph name="menu" />
+                  </button>
+                )}
+                {canFullscreen() && (
+                  <button
+                    type="button"
+                    className="td-icon td-wide-only"
+                    onClick={toggleFullscreen}
+                    aria-pressed={fullscreen}
+                    aria-label={fullscreen ? '離開全螢幕' : '全螢幕'}
+                    title={fullscreen ? '離開全螢幕（F）' : '全螢幕（F）'}
+                  >
+                    <Glyph name={fullscreen ? 'shrink' : 'expand'} />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
-    </div>
+
+            {leak > 0 && <div className="td-leak" key={leak} aria-hidden="true" />}
+            {banner && <WaveBanner key={banner.key} wave={banner.wave} groups={banner.groups} spec={spec} />}
+
+            {feed.length > 0 && (
+              <ol className="td-feed" aria-live="polite">
+                {feed.map((f) => (
+                  <li key={f.id} className={`td-chip ${f.tone}`}>
+                    {f.text}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {toast && (
+              <div className={`td-toast td-chip ${toast.tone}`} key={toast.id} role="status">
+                {toast.text}
+              </div>
+            )}
+
+            {board && (
+              <div className="td-side td-chip">
+                <div className="td-info-head">
+                  <strong>玩家</strong>
+                  <button type="button" className="td-x" onClick={() => setBoard(false)} aria-label="關閉">
+                    <Glyph name="close" size={18} />
+                  </button>
+                </div>
+                <Players
+                  party={party}
+                  view={view}
+                  stats={stats}
+                  look={look}
+                  target={target}
+                  aim={aim}
+                  onLook={changeLook}
+                  onGive={(seat, amount) => party.act({ type: 'give', seat, amount })}
+                  onAim={(seat) => party.act({ type: 'aim', seat })}
+                />
+              </div>
+            )}
+
+            {!ended && (
+              <div className="td-dock">
+                <PartyNotice party={party} />
+                {(me === null || my?.out || (versus && my && look !== my.field)) && (
+                  <div className="td-chip td-watch">
+                    <span>
+                      {me === null ? '觀戰中' : my?.out ? `你出局了（第 ${my.place} 名）` : '觀看中'}
+                      {versus && lookOwner >= 0 && (
+                        <>
+                          ：<strong>{seatName(party, lookOwner)}</strong> 的場地
+                        </>
+                      )}
+                    </span>
+                    {my && !my.out && look !== my.field && (
+                      <button type="button" onClick={() => changeLook(my.field)}>
+                        回到我的場地
+                      </button>
+                    )}
+                    {versus && (me === null || my?.out) && (
+                      <button type="button" className="secondary" onClick={() => changeLook((look + 1) % view.fields.length)}>
+                        換一個
+                      </button>
+                    )}
+                  </div>
+                )}
+                {tower && towerSpec ? (
+                  <TowerPanel
+                    tower={tower}
+                    spec={spec}
+                    view={view}
+                    stats={stats}
+                    seat={me}
+                    ownerName={tower.owner === me ? '你蓋的' : `${seatName(party, tower.owner)} 蓋的`}
+                    canManage={canManage}
+                    canUpgrade={home}
+                    onUpgrade={() => party.act({ type: 'upgrade', id: tower.id })}
+                    onSell={() => party.act({ type: 'sell', id: tower.id })}
+                    onMode={(mode: AimMode) => party.act({ type: 'mode', id: tower.id, mode })}
+                    onClose={cancel}
+                    onPeekUpgrade={(on) => gameRef.current?.setPeekUpgrade(on)}
+                  />
+                ) : home && (build || cell !== null) ? (
+                  <BuildInfo
+                    tower={buildSpec}
+                    gain={gain}
+                    view={view}
+                    stats={stats}
+                    seat={me}
+                    hint={
+                      cell !== null
+                        ? '選好格子了：按下面的塔就蓋在這一格'
+                        : touch
+                          ? '點格子看範圍，再點一次同一格就蓋'
+                          : '點格子就蓋；右鍵或 Esc 取消'
+                    }
+                    onCancel={cancel}
+                  />
+                ) : home && peekSpec ? (
+                  <BuildInfo tower={peekSpec} gain={null} view={view} stats={stats} seat={me} hint="按一下選這種塔，再點格子蓋" />
+                ) : null}
+                {sending && active && me !== null && versus && (
+                  <SendPanel
+                    spec={spec}
+                    view={view}
+                    stats={stats}
+                    seat={me}
+                    targetName={target !== null ? seatName(party, target) : null}
+                    onSend={(unit) => party.act({ type: 'send', unit })}
+                  />
+                )}
+                {active && (
+                  <div className="td-dock-row" ref={shopRow}>
+                    {versus && (
+                      <button
+                        type="button"
+                        className={`td-send-toggle${sending ? ' on' : ''}`}
+                        aria-pressed={sending}
+                        onClick={() => setSending((s) => !s)}
+                        title="花錢派怪去打別人"
+                      >
+                        <Glyph name="sword" size={22} />
+                        派兵
+                      </button>
+                    )}
+                    <Shop spec={spec} view={view} stats={stats} seat={me} kind={home ? build : null} onPick={pickKind} onPeek={setPeek} disabled={!home} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {menu && !ended && (
+              <PauseMenu party={party} touch={touch} sound={sound} onSound={toggleSound} onResume={() => setMenu(false)} onLeave={leaveRoom} />
+            )}
+            {ended && !hideResults && (
+              <Results party={party} view={view} spec={spec} onLeave={leaveRoom} onHide={() => setHideResults(true)} />
+            )}
+            {ended && hideResults && (
+              <button type="button" className="td-chip td-show-results" onClick={() => setHideResults(false)}>
+                看結算
+              </button>
+            )}
+            {(party.error || !party.connected) && (
+              <div className="td-chip td-offline" role="alert">
+                {party.error ?? '連線中斷，重新連線中…'}
+              </div>
+            )}
+          </>
+        )}
+
+        {!battle && (
+          <>
+            <div className="td-top">
+              <div className="td-top-start">
+                <button type="button" className="td-icon" onClick={exit} aria-label={exitLabel} title={exitLabel}>
+                  <Glyph name="back" />
+                </button>
+              </div>
+              <div className="td-top-end">
+                <button
+                  type="button"
+                  className="td-icon"
+                  onClick={toggleSound}
+                  aria-pressed={sound}
+                  aria-label={sound ? '關掉音效' : '打開音效'}
+                  title={sound ? '關掉音效（M）' : '打開音效（M）'}
+                >
+                  <Glyph name={sound ? 'sound' : 'mute'} />
+                </button>
+              </div>
+            </div>
+            <div className="td-layer td-menu">
+              <div className="td-panel">
+                <h1 className="td-title">
+                  <TowerArt id="bolt" level={4} size={44} />
+                  迷宮塔防
+                </h1>
+                {error ? (
+                  <p className="error">{error}</p>
+                ) : spec ? (
+                  <Menu party={party} spec={spec} touch={touch} onPractice={startPractice} />
+                ) : (
+                  <p className="muted">載入中…</p>
+                )}
+                {!party.code && (
+                  <button type="button" className="secondary" onClick={exit}>
+                    {exitLabel}
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </IconsContext>
   )
 }
