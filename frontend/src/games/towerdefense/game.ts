@@ -12,7 +12,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   Plane,
   PlaneGeometry,
@@ -332,7 +332,8 @@ export class TdGame {
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, this.coarse ? 1.75 : 2)
     this.renderer.setPixelRatio(this.pixelRatio)
     this.renderer.shadowMap.enabled = !this.coarse
-    this.renderer.shadowMap.type = PCFSoftShadowMap
+    // 影子的柔邊靠下面的 sun.shadow.radius；three 已經拿掉 PCFSoftShadowMap，設了只會跳警告、照樣用 PCF
+    this.renderer.shadowMap.type = PCFShadowMap
     host.appendChild(this.renderer.domElement)
     this.overlay = document.createElement('canvas')
     this.overlay.className = 'td-overlay'
@@ -645,6 +646,8 @@ export class TdGame {
 
   select(tower: number | null, cell: number | null) {
     const changed = tower !== this.selectedTower || cell !== this.selectedCell
+    // 換了一座塔或取消選取：「升級」按鈕跟著換掉或收起來，收不到 pointerleave，「指著升級」要在這裡清掉
+    if (tower !== this.selectedTower) this.peekUpgrade = false
     this.selectedTower = tower
     this.selectedCell = cell
     if (changed) this.emit({ type: 'pick', tower, cell })

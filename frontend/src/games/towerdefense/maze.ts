@@ -147,13 +147,3 @@ export function routesOf(map: MapSpec, tower: (cell: number) => boolean, extra: 
   }
   return { paths, length: total / ORTH }
 }
-
-/** 一條路線有多長（格） */
-export function pathLength(map: MapSpec, path: number[]): number {
-  let total = 0
-  for (let i = 0; i + 1 < path.length; i++) {
-    const straight = path[i] % map.w === path[i + 1] % map.w || Math.floor(path[i] / map.w) === Math.floor(path[i + 1] / map.w)
-    total += straight ? ORTH : DIAG
-  }
-  return total / ORTH
-}

@@ -185,9 +185,8 @@ export class Board {
   /** 整座島（含外面那一圈）的半寬、半高，鏡頭照這個把場地放進畫面 */
   readonly hw: number
   readonly hh: number
-  /** 入口、出口在世界座標的位置（特效用） */
+  /** 入口在世界座標的位置（特效用） */
   readonly spawns: [number, number][] = []
-  readonly exits: [number, number][] = []
   private readonly map: MapSpec
   private readonly biome: Biome
   private readonly ground: Ground
@@ -838,7 +837,6 @@ export class Board {
     const haloGeometry = this.keep(new RingGeometry(0.47, 0.56, 36).rotateX(-Math.PI / 2))
     for (const cell of exits) {
       const [x, z] = this.center(cell)
-      this.exits.push([x, z])
       this.put(dais, x, 0, z, Math.PI / 8, 1, 1)
       const core = new Mesh(
         crystal,
