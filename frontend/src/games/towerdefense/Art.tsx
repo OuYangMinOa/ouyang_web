@@ -27,6 +27,9 @@ export type GlyphName =
   | 'up'
   | 'check'
   | 'route'
+  | 'info'
+  | 'down'
+  | 'ping'
 
 const SHAPES: Record<GlyphName, ReactNode> = {
   back: <path d="M14.5 5 7.5 12l7 7" />,
@@ -80,6 +83,14 @@ const SHAPES: Record<GlyphName, ReactNode> = {
   up: <path d="M12 19.5V5.5M6 11.5l6-6 6 6" />,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   route: <path d="M5 18.5c0-5 4-3.5 7-6.5s2-6.5 7-6.5M16.5 3l2.8 2.5L16.5 8" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="8.4" />
+      <path d="M12 11.2v5M12 7.7v.2" />
+    </>
+  ),
+  down: <path d="m6 9.5 6 6 6-6" />,
+  ping: <path d="M12 21s-6.4-5.7-6.4-10.7a6.4 6.4 0 0 1 12.8 0C18.4 15.3 12 21 12 21ZM12 7.2v3.6M12 13.5v.2" />,
 }
 
 export function Glyph({ name, size = 20 }: { name: GlyphName; size?: number }) {

@@ -56,6 +56,8 @@ pub struct Tower {
     pub damage: f64,
     /// 號角塔給的傷害加成
     buff: f32,
+    /// 哪些隊友提議把它拆掉（每個座位一個位元；只有蓋的人能拆，其他人只能提議）
+    pub wants: u8,
 }
 
 pub struct Monster {
@@ -376,6 +378,7 @@ impl Field {
             kills: 0,
             damage: 0.0,
             buff: 0.0,
+            wants: 0,
         });
         self.tower_at[cell] = id;
         self.blocked[cell] = true;
@@ -426,6 +429,14 @@ impl Field {
     pub fn set_mode(&mut self, id: u32, mode: Mode) -> bool {
         let Some(i) = self.index(id) else { return false };
         self.towers[i].mode = mode;
+        self.rev += 1;
+        true
+    }
+
+    /// 改「誰提議拆掉這座塔」（每個座位一個位元）
+    pub fn set_wants(&mut self, id: u32, wants: u8) -> bool {
+        let Some(i) = self.index(id) else { return false };
+        self.towers[i].wants = wants;
         self.rev += 1;
         true
     }

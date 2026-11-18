@@ -39,6 +39,7 @@ import {
   wouldSeal,
   type MapSpec,
   type MonsterState,
+  type PingKind,
   type Spec,
   type TdView,
   type TickEvent,
@@ -47,6 +48,7 @@ import {
   type TowerRow,
 } from './online'
 import { readTheme, rgba } from './palette'
+import { PING, pickPing, pingLabel } from './pings'
 import { Trail, trailTexture } from './trail'
 
 /**
@@ -62,11 +64,13 @@ import { Trail, trailTexture } from './trail'
  * - **路線**是地上一條往出口流動的帶子（`trail.ts`）。要蓋塔時用和伺服器一樣的算法（`maze.ts`）先算出新的路線畫出來。
  * - **操作**：點一下選塔／選格子（選了塔種就是蓋塔），拖曳平移，滾輪或兩指縮放，右鍵（或兩指轉）旋轉。
  *   點了什麼、要蓋在哪用 `emit` 告訴外面，真正送出動作的是 `index.tsx`。
+ * - **標記**（多人）：按住 Alt（或外面先按了標記鈕、按住 G）再按場地，按著往旁邊拖選種類、放開送出（`pings.ts`）；
+ *   輪盤是外面的介面畫的，這裡只告訴它在哪、選到哪一種。收到的標記和「有人想拆這座塔」的記號畫在 2D 畫布上。
  */
 
 export type GameEvent =
   /** 每個 tick 的錢、生命、怪物數、打倒幾隻，以及每塊場地這一波還有幾隻沒出來 */
-  | { type: 'stats'; gold: number[]; lives: number[]; counts: number[]; kills: number[]; left: number[] }
+  | { type: 'stats'; gold: number[]; lives: number[]; counts: number[]; kills: number[]; left: number[]; damage: number[] }
   /** 選到一座塔、一個空格，或都沒選 */
   | { type: 'pick'; tower: number | null; cell: number | null }
   /** 想在這一格蓋現在選的那種塔 */
@@ -81,8 +85,27 @@ export type GameEvent =
   | { type: 'leak' }
   /** 蓋塔前的預覽：蓋在這一格，路線會多幾格（不是在預覽、或這一格不能蓋就是 null） */
   | { type: 'preview'; cell: number | null; gain: number | null }
+  /** 標記的輪盤：按在畫面的哪裡（`at` 是 null 就是收起來）、現在選到哪一種、按的那一格有沒有塔 */
+  | { type: 'wheel'; at: { x: number; y: number } | null; pick: PingKind; tower: boolean }
+  /** 放開了：在這一格標記 */
+  | { type: 'ping'; cell: number; kind: PingKind }
+  /** 有人提議拆掉一座塔、收回，或蓋的人說留著：`before`、`after` 是提議的座位（每個座位一個位元） */
+  | { type: 'want'; kind: number; owner: number; by: number; before: number; after: number }
 
-export type TowerInfo = { id: number; cell: number; kind: number; level: number; owner: number; mode: number; buff: number }
+export type TowerInfo = {
+  id: number
+  cell: number
+  kind: number
+  level: number
+  owner: number
+  mode: number
+  buff: number
+  /** 誰提議拆掉它（每個座位一個位元） */
+  wants: number
+}
+
+/** 場地上的一個標記 */
+type Ping = { cell: number; x: number; z: number; kind: PingKind; seat: number; text: string; at: number }
 
 type Tower = Omit<TowerInfo, 'buff'> & {
   yaw: number
@@ -137,6 +160,8 @@ const MONSTER_CAP = 400
 const BLOB_CAP = 1200
 const DEG = Math.PI / 180
 const POPUP_LIFE = 0.9
+/** 標記留在場地上多久（毫秒） */
+const PING_LIFE = 5000
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -263,6 +288,7 @@ export class TdGame {
   private pendingTowers: TowerEvent[] = []
   private look = 0
   private myField: number | null = null
+  private me: number | null = null
   private game = -1
   private speed = 1
   private showAir = false
@@ -293,6 +319,14 @@ export class TdGame {
   private armedCell: number | null = null
   /** 介面上指著「升級」：把升級後的射程也畫出來 */
   private peekUpgrade = false
+  /** 可不可以標記（多人、自己還在場上） */
+  private canPing = false
+  /** 外面按了標記鈕或按住 G：下一次按在場地上是標記，不是拖鏡頭 */
+  private pingArmed = false
+  /** 正按著要標記：按下去的位置、哪一格、現在拖到哪一種 */
+  private pingDrag: { id: number; x: number; y: number; cell: number; pick: PingKind } | null = null
+  private pings: Ping[] = []
+  private readonly pingShapes = new Map<PingKind, Path2D>()
   private readonly pointers = new Map<number, { x: number; y: number; sx: number; sy: number; moved: boolean; button: number; touch: boolean }>()
   private pinch: { dist: number; angle: number; cx: number; cy: number } | null = null
   /** 鏡頭要去的地方，和現在實際在的地方（慢慢跟上，縮放、換場地才不會一下跳過去） */
@@ -460,6 +494,7 @@ export class TdGame {
     this.fit(false)
     if (on) {
       this.reset()
+      this.cancelPing()
       this.buildKind = null
       this.selectedTower = this.selectedCell = this.armedCell = this.hoverCell = null
     }
@@ -475,6 +510,7 @@ export class TdGame {
     this.lives = -1
     this.left = []
     this.popups.length = 0
+    this.pings = []
     this.fx.clear()
   }
 
@@ -489,6 +525,7 @@ export class TdGame {
       this.look = view.look !== null && view.look < view.fields.length ? view.look : 0
     }
     this.setMap(view.map)
+    this.me = view.you
     this.myField = view.you !== null ? (view.players[view.you]?.field ?? null) : null
     this.speed = view.speed
     view.fields.forEach((fv, fi) => {
@@ -510,7 +547,7 @@ export class TdGame {
   }
 
   private putTower(field: FieldState, row: TowerRow, old: Tower | undefined) {
-    const [id, cell, kind, level, owner, mode] = row
+    const [id, cell, kind, level, owner, mode, wants = 0] = row
     const now = performance.now()
     field.towers.set(id, {
       id,
@@ -519,6 +556,7 @@ export class TdGame {
       level,
       owner,
       mode,
+      wants,
       yaw: old?.yaw ?? 0,
       aim: old?.aim ?? -1,
       bornAt: old?.bornAt ?? now - 1000,
@@ -593,6 +631,11 @@ export class TdGame {
           this.fx.glow([x, 0.7, z], 1.5, 0xffd23f, 0.45, 0.9)
           this.audio.play('upgrade')
         }
+      } else if (e.op === 'want') {
+        const before = old?.wants ?? 0
+        // 多了一個人提議：塔底下紅一圈（之後的記號畫在 2D 畫布上，見 `drawWants`）
+        if (shown && (tower.wants & ~before) !== 0) this.fx.ring(x, z, 0.85, this.theme.bad.getHex(), 0.55)
+        if (e.by !== undefined) this.emit({ type: 'want', kind: tower.kind, owner: tower.owner, by: e.by, before, after: tower.wants })
       }
     }
     if (e.paths) field.paths = e.paths
@@ -602,7 +645,7 @@ export class TdGame {
 
   onTick(e: TickEvent) {
     this.left[e.f] = e.r ?? 0
-    this.emit({ type: 'stats', gold: e.g, lives: e.l, counts: e.c, kills: e.k, left: this.left })
+    this.emit({ type: 'stats', gold: e.g, lives: e.l, counts: e.c, kills: e.k, left: this.left, damage: e.dm ?? [] })
     if (e.f !== this.look) return
     const at = performance.now()
     const sample = at - e.n * TICK_MS
@@ -628,6 +671,8 @@ export class TdGame {
     this.base = null
     this.lives = -1
     this.popups.length = 0
+    this.pings = []
+    this.cancelPing()
     this.fx.clear()
     this.select(null, null)
     this.emit({ type: 'towers' })
@@ -658,7 +703,66 @@ export class TdGame {
     const field = this.fields[this.look]
     const t = this.selectedTower !== null ? field?.towers.get(this.selectedTower) : undefined
     if (!t || !field) return null
-    return { id: t.id, cell: t.cell, kind: t.kind, level: t.level, owner: t.owner, mode: t.mode, buff: field.buffs.get(t.id) ?? 0 }
+    return this.info(field, t)
+  }
+
+  private info(field: FieldState, t: Tower): TowerInfo {
+    return { id: t.id, cell: t.cell, kind: t.kind, level: t.level, owner: t.owner, mode: t.mode, buff: field.buffs.get(t.id) ?? 0, wants: t.wants }
+  }
+
+  /** 自己蓋的塔裡，有人提議拆掉的那幾座（正在看自己的場地才有） */
+  wanted(): TowerInfo[] {
+    const field = this.myField !== null && this.myField === this.look ? this.fields[this.look] : undefined
+    if (!field || this.me === null) return []
+    const out: TowerInfo[] = []
+    for (const t of field.towers.values()) if (t.owner === this.me && t.wants !== 0) out.push(this.info(field, t))
+    return out
+  }
+
+  /** 選這座塔；它不在畫面裡（鏡頭移開了、被下面的面板蓋住）就把鏡頭移過去 */
+  focusTower(id: number) {
+    const tower = this.fields[this.look]?.towers.get(id)
+    if (!tower) return
+    this.select(id, null)
+    const [x, z] = this.cellCenter(tower.cell)
+    const h = Math.max(1, this.host.clientHeight)
+    this.p.set(x, 0.5, z).project(this.camera)
+    const top = 1 - (2 * this.insets.top) / h
+    const bottom = -1 + (2 * (this.insets.bottom + 190)) / h
+    if (Math.abs(this.p.x) < 0.9 && this.p.y < top && this.p.y > bottom) return
+    this.cam.tx = x
+    this.cam.tz = z
+    this.camTouched = true
+    this.clampCamera()
+  }
+
+  /** 可不可以標記（多人才有） */
+  setPings(on: boolean) {
+    this.canPing = on
+    if (!on) this.cancelPing()
+  }
+
+  /** 外面按了標記鈕、或按住 G：下一次按在場地上是標記 */
+  setPinging(on: boolean) {
+    this.pingArmed = on
+  }
+
+  /** 有人（也可能是自己）在正在看的場地上標記了一格 */
+  showPing(e: { f: number; seat: number; cell: number; kind: PingKind }, name: string) {
+    if (e.f !== this.look || this.preview || !this.map) return
+    const [x, z] = this.cellCenter(e.cell)
+    const onTower = this.fields[this.look]?.byCell.has(e.cell) === true
+    const text = e.kind === 'note' ? name : `${name}：${pingLabel(e.kind, onTower)}`
+    // 同一個人在同一格再按一次：換掉舊的，不要疊兩個
+    this.pings = this.pings.filter((p) => p.seat !== e.seat || p.cell !== e.cell).slice(-11)
+    this.pings.push({ cell: e.cell, x, z, kind: e.kind, seat: e.seat, text, at: performance.now() })
+    this.audio.play(e.kind === 'danger' ? 'alarm' : e.kind === 'ask' ? 'ask' : 'ping')
+  }
+
+  private cancelPing() {
+    if (!this.pingDrag) return
+    this.pingDrag = null
+    this.emit({ type: 'wheel', at: null, pick: 'note', tower: false })
   }
 
   /** 這一格現在能不能蓋（只是先擋一下，伺服器會再檢查）：回傳不能蓋的原因 */
@@ -992,6 +1096,19 @@ export class TdGame {
     if (this.preview) return
     this.audio.unlock()
     this.renderer.domElement.setPointerCapture(e.pointerId)
+    if (this.pingDrag) {
+      // 標記到一半又按了別的（另一根手指、右鍵）：這次不標了
+      this.cancelPing()
+      if (e.button === 2) return
+    } else if (this.canPing && (this.pingArmed || e.altKey) && e.button === 0 && this.pointers.size === 0) {
+      // 標記：按著往旁邊拖選種類，放開才送出（沒拖就是「注意這裡」）
+      const cell = this.cellAt(e.clientX, e.clientY)
+      if (cell !== null) {
+        this.pingDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, cell, pick: 'note' }
+        this.emit({ type: 'wheel', at: { x: e.clientX, y: e.clientY }, pick: 'note', tower: this.fields[this.look]?.byCell.has(cell) === true })
+        return
+      }
+    }
     this.pointers.set(e.pointerId, {
       x: e.clientX,
       y: e.clientY,
@@ -1007,6 +1124,16 @@ export class TdGame {
 
   private readonly onMove = (e: PointerEvent) => {
     if (this.preview) return
+    const drag = this.pingDrag
+    if (drag?.id === e.pointerId) {
+      const pick = pickPing(e.clientX - drag.x, e.clientY - drag.y)
+      if (pick !== drag.pick) {
+        drag.pick = pick
+        this.audio.play('click')
+        this.emit({ type: 'wheel', at: { x: drag.x, y: drag.y }, pick, tower: this.fields[this.look]?.byCell.has(drag.cell) === true })
+      }
+      return
+    }
     const p = this.pointers.get(e.pointerId)
     if (!p) {
       // 沒按著的滑鼠：預覽游標底下那一格
@@ -1053,6 +1180,12 @@ export class TdGame {
   }
 
   private readonly onUp = (e: PointerEvent) => {
+    const drag = this.pingDrag
+    if (drag?.id === e.pointerId) {
+      this.cancelPing()
+      this.emit({ type: 'ping', cell: drag.cell, kind: drag.pick })
+      return
+    }
     const p = this.pointers.get(e.pointerId)
     this.pointers.delete(e.pointerId)
     this.pinch = null
@@ -1065,6 +1198,7 @@ export class TdGame {
   }
 
   private readonly onCancel = (e: PointerEvent) => {
+    if (this.pingDrag?.id === e.pointerId) this.cancelPing()
     this.pointers.delete(e.pointerId)
     this.pinch = null
   }
@@ -1654,7 +1788,166 @@ export class TdGame {
     }
   }
 
-  /** 疊在上面的 2D 畫布：血條（受過傷的怪和魔王才畫）、賞金跳出來的數字、魔王的大血條 */
+  /** 世界上的一點在畫面上的哪裡（CSS 像素）；在鏡頭後面是 null */
+  private screen(x: number, y: number, z: number): [number, number] | null {
+    this.p.set(x, y, z).project(this.camera)
+    if (this.p.z > 1) return null
+    return [((this.p.x + 1) / 2) * this.host.clientWidth, ((1 - this.p.y) / 2) * this.host.clientHeight]
+  }
+
+  /** 一行有描邊的小字（標記是誰按的） */
+  private label(pen: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, ratio: number) {
+    pen.font = `700 ${Math.round(13 * ratio)}px ${this.font}`
+    pen.textAlign = 'center'
+    pen.textBaseline = 'middle'
+    pen.lineJoin = 'round'
+    pen.lineWidth = 3.5 * ratio
+    // 靠近畫面邊邊時往裡面推，字才不會被切掉
+    const half = pen.measureText(text).width / 2 + 4 * ratio
+    const cx = clamp(x * ratio, half, Math.max(half, this.overlay.width - half))
+    pen.strokeStyle = rgba(this.theme.surface, 0.92)
+    pen.strokeText(text, cx, y * ratio)
+    pen.fillStyle = color
+    pen.fillText(text, cx, y * ratio)
+  }
+
+  /** 一顆圓圓的記號：底是介面的底色、外圈和裡面的圖是 `color`（亮色、深色主題都看得清楚） */
+  private bubble(pen: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, ratio: number) {
+    pen.beginPath()
+    pen.arc(x * ratio, y * ratio, r * ratio, 0, Math.PI * 2)
+    pen.fillStyle = rgba(this.theme.surface, 0.94)
+    pen.fill()
+    pen.lineWidth = 2.6 * ratio
+    pen.strokeStyle = color
+    pen.stroke()
+  }
+
+  /** 有人提議拆掉的塔：頭上一顆「拆」，自己的塔會一閃一閃 */
+  private drawWants(pen: CanvasRenderingContext2D, ratio: number) {
+    const field = this.fields[this.look]
+    if (!field) return
+    const t = this.theme
+    for (const tower of field.towers.values()) {
+      if (!tower.wants) continue
+      const spec = this.spec.towers[tower.kind]
+      if (!spec) continue
+      const [x, z] = this.cellCenter(tower.cell)
+      const at = this.screen(x, (TOWER_LOOK[spec.id].headY + 0.62) * (1 + 0.07 * (tower.level - 1)), z)
+      if (!at) continue
+      const mine = tower.owner === this.me
+      const beat = this.calm ? 0 : (this.time * (mine ? 1.6 : 0.9) + tower.id * 0.37) % 1
+      const cy = at[1] - 6 - (this.calm ? 0 : Math.sin(this.time * 3 + tower.id) * 2)
+      if (mine) {
+        // 自己的：外面多一圈往外擴的光，一眼就看到
+        pen.globalAlpha = 1 - beat
+        pen.beginPath()
+        pen.arc(at[0] * ratio, cy * ratio, (13 + beat * 12) * ratio, 0, Math.PI * 2)
+        pen.lineWidth = 2 * ratio
+        pen.strokeStyle = t.badCss
+        pen.stroke()
+        pen.globalAlpha = 1
+      }
+      this.bubble(pen, at[0], cy, mine ? 13 : 11, t.badCss, ratio)
+      pen.font = `700 ${Math.round((mine ? 14 : 12) * ratio)}px ${this.font}`
+      pen.textAlign = 'center'
+      pen.textBaseline = 'middle'
+      pen.fillStyle = t.badCss
+      pen.fillText('拆', at[0] * ratio, (cy + 0.5) * ratio)
+    }
+  }
+
+  /** 場地上的標記：地上一圈一圈往外擴，上面一顆有圖的圓和是誰按的；跑到畫面外面的貼在邊邊，還是看得到有人在叫 */
+  private drawPings(pen: CanvasRenderingContext2D, ratio: number, tile: number) {
+    if (!this.pings.length) return
+    const now = performance.now()
+    const t = this.theme
+    const w = this.host.clientWidth
+    const h = this.host.clientHeight
+    const squash = Math.sin(this.view.pitch)
+    let kept = 0
+    for (const ping of this.pings) {
+      const age = now - ping.at
+      if (age >= PING_LIFE) continue
+      this.pings[kept++] = ping
+      const at = this.screen(ping.x, 0.05, ping.z)
+      if (!at) continue
+      const look = PING[ping.kind]
+      const seatColor = t.ownersCss[ping.seat % t.ownersCss.length] ?? t.text
+      const color = look.color === '--danger' ? t.badCss : look.color === '--ok' ? t.okCss : look.color === '--td-air' ? t.airCss : look.color === '--td-gold' ? t.goldCss : seatColor
+      const fade = age > PING_LIFE - 500 ? (PING_LIFE - age) / 500 : 1
+      // 貼在畫面裡（上下讓開按鈕）；被推過的就是在畫面外面
+      const gx = clamp(at[0], 24, w - 24)
+      const gy = clamp(at[1], this.insets.top + 44, h - this.insets.bottom - 22)
+      const off = gx !== at[0] || gy !== at[1]
+      pen.globalAlpha = fade
+      if (!off) {
+        // 地上的圈：前三秒一圈一圈往外擴
+        const reach = clamp(tile * 0.95, 14, 56)
+        for (let k = 0; k < 2; k++) {
+          const phase = age / 1100 - k * 0.5
+          if (phase < 0 || phase > 3) continue
+          const grow = this.calm ? 0.6 : phase % 1
+          pen.globalAlpha = fade * (this.calm ? 0.7 : 1 - grow)
+          pen.beginPath()
+          pen.ellipse(gx * ratio, gy * ratio, reach * (0.25 + grow * 0.75) * ratio, reach * (0.25 + grow * 0.75) * squash * ratio, 0, 0, Math.PI * 2)
+          pen.lineWidth = 2.4 * ratio
+          pen.strokeStyle = color
+          pen.stroke()
+        }
+        pen.globalAlpha = fade
+      }
+      // 上面那一顆：剛出現時從上面掉下來彈一下
+      const drop = this.calm ? 1 : pop(clamp(age / 260, 0, 1))
+      const bob = this.calm || off ? 0 : Math.sin(age / 260) * 2
+      const r = 15
+      const by = off ? gy : gy - (34 + bob) * drop - (1 - drop) * 30
+      if (!off) {
+        // 尖尖的腳指著那一格
+        pen.beginPath()
+        pen.moveTo(gx * ratio, (gy - 3) * ratio)
+        pen.lineTo((gx - 6) * ratio, (by + r - 3) * ratio)
+        pen.lineTo((gx + 6) * ratio, (by + r - 3) * ratio)
+        pen.closePath()
+        pen.fillStyle = color
+        pen.fill()
+      } else {
+        // 在畫面外面：一個小箭頭指向它在的方向
+        const angle = Math.atan2(at[1] - gy, at[0] - gx)
+        pen.save()
+        pen.translate(gx * ratio, by * ratio)
+        pen.rotate(angle)
+        pen.beginPath()
+        pen.moveTo((r + 9) * ratio, 0)
+        pen.lineTo((r + 1) * ratio, -6 * ratio)
+        pen.lineTo((r + 1) * ratio, 6 * ratio)
+        pen.closePath()
+        pen.fillStyle = color
+        pen.fill()
+        pen.restore()
+      }
+      this.bubble(pen, gx, by, r, color, ratio)
+      let shape = this.pingShapes.get(ping.kind)
+      if (!shape) {
+        shape = new Path2D(look.path)
+        this.pingShapes.set(ping.kind, shape)
+      }
+      const size = (19 / 24) * ratio
+      pen.save()
+      pen.translate(gx * ratio - 12 * size, by * ratio - 12 * size)
+      pen.scale(size, size)
+      pen.lineWidth = 2.5
+      pen.lineCap = 'round'
+      pen.lineJoin = 'round'
+      pen.strokeStyle = color
+      pen.stroke(shape)
+      pen.restore()
+      this.label(pen, ping.text, gx, off ? by + r + 11 : gy + 13, seatColor, ratio)
+    }
+    this.pings.length = kept
+    pen.globalAlpha = 1
+  }
+
+  /** 疊在上面的 2D 畫布：血條（受過傷的怪和魔王才畫）、賞金跳出來的數字、標記、魔王的大血條 */
   private drawOverlay(dt: number) {
     const pen = this.pen
     if (!pen) return
@@ -1718,6 +2011,9 @@ export class TdGame {
       this.popups.length = kept
       pen.globalAlpha = 1
     }
+
+    this.drawWants(pen, ratio)
+    this.drawPings(pen, ratio, tile)
 
     // 魔王上場：上面多一條大血條（最多兩條）
     bosses.sort((a, b) => a.id - b.id)
