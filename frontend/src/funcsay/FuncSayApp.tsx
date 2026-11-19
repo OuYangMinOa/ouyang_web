@@ -19,7 +19,7 @@ export default function FuncSayApp() {
   const [loadError, setLoadError] = useState('')
   const [votes, setVotes] = useState<Map<number, Vote>>(() => new Map())
   const [favorites, setFavorites] = useState<number[]>([])
-  const [politics, setPoliticsState] = useState<Politics>(() => load('politics', 'hide'))
+  const [politics, setPoliticsState] = useState<Politics>(() => load('politics', 'all'))
   const [toast, setToast] = useState<Toast | null>(null)
   const [attempt, setAttempt] = useState(0)
   // 送出中的語錄，回來之前再按不理它

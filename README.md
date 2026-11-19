@@ -1380,7 +1380,7 @@ PUT /api/funcsay/{id}/favorite    {"favorite":true|false}  →  204             
   同一個容器裡投票一次處理一個，避免連點時多算。
 - 收藏只存在這裡（`funcsay_favorites`），跟語錄服務無關。
 - 整份清單在記憶體快取 60 秒，Android 那邊投的票最多晚一分鐘才看得到；自己投完會馬上換上語錄服務回來的最新數字。語錄服務連不上時沿用上一次的清單。
-- 出處開頭的「政治:」是分類：拿掉之後標成 `politics`。跟 Android APP 一樣預設不顯示政治類，篩選存在瀏覽器的 localStorage。
+- 出處開頭的「政治:」是分類：拿掉之後標成 `politics`。預設全部顯示（Android APP 預設不顯示政治類），可以篩掉或只看政治類，選擇存在瀏覽器的 localStorage。
 - 語錄服務把空的出處印成字串 `"None"`，這裡當作沒有出處。
 - staging 和 prod 連的是同一個語錄服務，**在 test.ouyang.app 按的讚也會算進正式的票數**；兩邊的帳號資料庫是分開的，所以同一個人在兩邊各能投一次。
 - 本機開發要另外指定：`FUNCSAY_API_URL=http://ouyang.app:7666 cargo run`。這是正式的資料，本機按讚一樣會改到正式的票數；沒設定時頁面顯示資料來源沒有設定。

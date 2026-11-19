@@ -34,11 +34,11 @@ export function sendFavorite(id: number, favorite: boolean) {
   return api<void>(`/funcsay/${id}/favorite`, { method: 'PUT', body: JSON.stringify({ favorite }) })
 }
 
-/** 政治類要不要顯示：Android APP 預設不顯示，這裡也一樣 */
+/** 政治類要不要顯示：預設全部顯示（Android APP 預設是不顯示） */
 export type Politics = 'hide' | 'all' | 'only'
 export const POLITICS: { value: Politics; label: string }[] = [
+  { value: 'all', label: '全部' },
   { value: 'hide', label: '不含政治' },
-  { value: 'all', label: '全部（含政治）' },
   { value: 'only', label: '只看政治' },
 ]
 
