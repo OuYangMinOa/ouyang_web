@@ -13,7 +13,9 @@ use std::{
 use backend::{
     AppState, access_log, ai, ai_web,
     auth::upsert_admin,
-    draw_words, healthcheck,
+    draw_words,
+    funcsay::FuncSay,
+    healthcheck,
     honeypot::Honeypot,
     monitor::{self, Monitor},
     router,
@@ -91,6 +93,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ai::spawn(state.ai.clone(), pool.clone());
     // AI 助手的網路搜尋：SEARXNG_URL 沒設定就沒有 web_search（讀網頁不用設定）
     state.web = Arc::new(ai_web::Web::from_env());
+    // 幹話語錄：主機上的語錄服務（FUNCSAY_API_URL），沒設定時頁面顯示連不上
+    state.funcsay = Arc::new(FuncSay::from_env());
     let draining = state.draining.clone();
     let access = state.access_log.clone();
     let app = router(state, &static_dir);

@@ -1,0 +1,285 @@
+/* ---- 幹話語錄 ---- */
+
+.funcsay {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.funcsay h1 {
+  margin: 0 0 16px;
+}
+
+.funcsay-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+}
+.funcsay-head h1 {
+  margin: 0;
+}
+
+.funcsay-hint {
+  margin-bottom: 12px;
+}
+
+/* 搜尋、政治類、排序；窄螢幕時搜尋獨佔一行 */
+.funcsay-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.funcsay-toolbar input[type='search'] {
+  flex: 1 1 220px;
+}
+.funcsay-toolbar select {
+  flex: 0 0 auto;
+}
+@container (max-width: 520px) {
+  .funcsay-toolbar input[type='search'] {
+    flex-basis: 100%;
+  }
+  .funcsay-toolbar select {
+    flex: 1 1 0;
+  }
+}
+
+.funcsay-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.funcsay-empty {
+  padding: 24px 0;
+}
+
+.funcsay-login {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 20px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* ---- 語錄卡片 ---- */
+
+.funcsay-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.funcsay-card {
+  padding: 16px 18px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.funcsay-text {
+  margin: 0;
+  color: var(--text-h);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.funcsay-source {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.funcsay-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+}
+
+.funcsay-meta {
+  display: inline-flex;
+  align-items: center;
+  margin-right: auto;
+  color: var(--text);
+  font: 13px var(--mono);
+}
+.funcsay-meta .chip {
+  margin-bottom: 0;
+  font-family: inherit;
+}
+
+.funcsay-actions {
+  display: flex;
+  gap: 2px;
+  margin-right: -8px;
+}
+
+button.funcsay-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+button.funcsay-btn svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+@media (hover: hover) {
+  button.funcsay-btn:hover {
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+    color: var(--text-h);
+  }
+}
+button.funcsay-btn.on svg {
+  fill: currentColor;
+  fill-opacity: 0.25;
+}
+button.funcsay-btn.love.on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-weight: 600;
+}
+button.funcsay-btn.hate.on {
+  color: var(--text-h);
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  font-weight: 600;
+}
+button.funcsay-btn.fav.on {
+  color: var(--accent);
+}
+button.funcsay-btn.fav.on svg {
+  fill-opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button.funcsay-btn.on svg {
+    animation: funcsay-pop 0.25s ease-out;
+  }
+}
+@keyframes funcsay-pop {
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+/* ---- 隨機一則：大字置中 ---- */
+
+.funcsay-random {
+  display: flex;
+  flex-direction: column;
+}
+
+.funcsay-card.large {
+  padding: 40px 28px 14px;
+  text-align: center;
+}
+.funcsay-card.large .funcsay-text {
+  font-size: clamp(22px, 5cqi, 32px);
+  line-height: 1.45;
+}
+.funcsay-card.large .funcsay-source {
+  max-width: 60ch;
+  margin: 16px auto 0;
+}
+.funcsay-card.large .funcsay-foot {
+  margin-top: 28px;
+  text-align: left;
+}
+@container (max-width: 520px) {
+  .funcsay-card.large {
+    padding: 28px 16px 10px;
+  }
+}
+
+.funcsay-random-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.funcsay-random-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.funcsay-random-controls button svg {
+  width: 18px;
+  height: 18px;
+}
+.funcsay-random-controls select {
+  flex: 0 0 auto;
+}
+@container (max-width: 520px) {
+  .funcsay-random-controls > * {
+    flex: 1 1 0;
+  }
+}
+
+/* 複製、要登入的提示；固定在上方 */
+.funcsay-toast {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+  animation: funcsay-toast 0.25s ease-out;
+}
+.funcsay-toast-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+@keyframes funcsay-toast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}

@@ -1360,6 +1360,31 @@ GET /api/music/s/{hex}.{ext}   同上，分享用：檔名（不含副檔名）�
   Telegram 只幫網域產生預覽（貼 IP 的不會），路徑裡有中文的也不會（編不編碼都一樣），
   所以檔名不是單純英數字時改用 `/api/music/s/` 的十六進位網址，例如 `三蛋一體.mp3` → `/api/music/s/E4B889E89B8BE4B880E9AB94.mp3`。
 
+## 幹話語錄
+
+`/funcsay` 全部語錄、`/funcsay/random` 隨機一則、`/funcsay/favorites` 我的收藏。沒登入也能看，登入後可以按讚、倒讚和收藏。
+後端在 `backend/src/funcsay.rs`，前端在 `frontend/src/funcsay/`。
+
+語錄本身放在主機上另一個服務：Func-say 的 FastAPI（:7666，資料在 MariaDB 的 `FUNC_TABLE`），Android APP（`D:\project\Func-say`）也是讀它。
+後端經過 `host.docker.internal` 連過去（`compose.yaml` 的 `FUNCSAY_API_URL`），不走公開的 IP。
+
+```
+GET /api/funcsay                  {"quotes":[{id,text,source,politics,love,hate}],"mine":{"votes":{"<id>":"love"|"hate"},"favorites":[id…]}}
+                                  沒登入時 mine 是 null；favorites 新收藏的在前
+PUT /api/funcsay/{id}/vote        {"vote":"love"|"hate"|null}  →  {"quote":{…投完的票數},"vote"}     要登入，null 是收回
+PUT /api/funcsay/{id}/favorite    {"favorite":true|false}  →  204                                       要登入
+```
+
+- 讚和倒讚的總數就是語錄服務的 `LOVE`／`HATE`，跟 Android APP 是同一份。這裡另外記每個帳號按了什麼（`funcsay_votes`），同一個帳號對同一則只算一票：
+  按讚是語錄服務 LOVE +1，從讚換成倒讚是 LOVE -1、HATE +1，收回是 -1。先改語錄服務、成功了才記下來；換邊時第二步失敗會把第一步改回去。
+  同一個容器裡投票一次處理一個，避免連點時多算。
+- 收藏只存在這裡（`funcsay_favorites`），跟語錄服務無關。
+- 整份清單在記憶體快取 60 秒，Android 那邊投的票最多晚一分鐘才看得到；自己投完會馬上換上語錄服務回來的最新數字。語錄服務連不上時沿用上一次的清單。
+- 出處開頭的「政治:」是分類：拿掉之後標成 `politics`。跟 Android APP 一樣預設不顯示政治類，篩選存在瀏覽器的 localStorage。
+- 語錄服務把空的出處印成字串 `"None"`，這裡當作沒有出處。
+- staging 和 prod 連的是同一個語錄服務，**在 test.ouyang.app 按的讚也會算進正式的票數**；兩邊的帳號資料庫是分開的，所以同一個人在兩邊各能投一次。
+- 本機開發要另外指定：`FUNCSAY_API_URL=http://ouyang.app:7666 cargo run`。這是正式的資料，本機按讚一樣會改到正式的票數；沒設定時頁面顯示資料來源沒有設定。
+
 ## 天氣與環境
 
 `/weather`：總覽、`/weather/typhoon` 颱風、`/weather/forecast` 全台天氣、`/weather/quake` 地震。後端在 `backend/src/weather/`，外部資料都由後端抓、整理過再給前端。
