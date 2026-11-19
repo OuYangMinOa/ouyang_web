@@ -21,6 +21,7 @@ mod chat;
 mod draw;
 mod draw_words;
 mod feedback;
+mod funcsay;
 mod game_monitor;
 mod game_settings;
 mod games;

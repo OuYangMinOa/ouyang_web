@@ -19,6 +19,7 @@ pub mod contact;
 pub mod draw;
 pub mod draw_words;
 pub mod feedback;
+pub mod funcsay;
 pub mod game_monitor;
 pub mod game_settings;
 pub mod games;
@@ -158,6 +159,8 @@ pub struct AppState {
     pub chat: Arc<chat::Chat>,
     /// Web Push：VAPID 金鑰和送推播用的 HTTP client（見 webpush.rs）
     pub push: Arc<webpush::WebPush>,
+    /// 幹話語錄：主機上語錄服務的網址和清單快取（見 funcsay.rs）
+    pub funcsay: Arc<funcsay::FuncSay>,
 }
 
 impl AppState {
@@ -208,6 +211,7 @@ impl AppState {
             web: Arc::default(),
             chat: Arc::default(),
             push: Arc::default(),
+            funcsay: Arc::default(),
         }
     }
 }
@@ -356,6 +360,9 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/threads/downloads", get(threads::downloads))
         .route("/threads/downloads/{id}", delete(threads::delete_download))
         .route("/threads/files/{token}", get(youtube::file))
+        .route("/funcsay", get(funcsay::list))
+        .route("/funcsay/{id}/vote", put(funcsay::vote))
+        .route("/funcsay/{id}/favorite", put(funcsay::favorite))
         .route("/links", get(short_links::list).post(short_links::create))
         .route("/links/{id}", get(short_links::get).put(short_links::update).delete(short_links::delete))
         .route("/links/{id}/stats", get(short_links::stats))

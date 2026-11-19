@@ -68,6 +68,9 @@ const ChatPage = lazyPage(() => import('./chat/ChatPage'))
 const AdminAiTools = lazyPage(() => import('./pages/admin/AiTools'))
 const AdminAiUsage = lazyPage(() => import('./pages/admin/AiUsage'))
 const AdminDrawWords = lazyPage(() => import('./pages/admin/DrawWords'))
+const FuncSayApp = lazyPage(() => import('./funcsay/FuncSayApp'))
+const FuncSayList = lazyPage(() => import('./funcsay/QuoteList'))
+const FuncSayRandom = lazyPage(() => import('./funcsay/RandomQuote'))
 // 詳細頁帶著產生 QR Code 的 bwip-js
 const LinksPage = lazyPage(() => import('./links/LinksPage'))
 const LinkPage = lazyPage(() => import('./links/LinkPage'))
@@ -78,6 +81,10 @@ function Lazy({ page: Page }: { page: ComponentType }) {
       <Page />
     </Suspense>
   )
+}
+
+function FuncSayFavorites() {
+  return <FuncSayList favoritesOnly />
 }
 
 type Health = { status: string; env: string; version: string; db: boolean }
@@ -226,6 +233,14 @@ function App() {
                   <Route element={<MusicApp />}>
                     <Route index element={<MusicLibrary />} />
                     <Route path="favorites" element={<MusicLibrary favoritesOnly />} />
+                  </Route>
+                </Route>
+                <Route path="/funcsay" element={<AppLayout />}>
+                  {/* 語錄和自己按過的讚在外層抓一次，切換頁面不用重抓 */}
+                  <Route element={<Lazy page={FuncSayApp} />}>
+                    <Route index element={<Lazy page={FuncSayList} />} />
+                    <Route path="random" element={<Lazy page={FuncSayRandom} />} />
+                    <Route path="favorites" element={<Lazy page={FuncSayFavorites} />} />
                   </Route>
                 </Route>
                 <Route path="/weather" element={<AppLayout />}>

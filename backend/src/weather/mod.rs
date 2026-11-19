@@ -109,6 +109,16 @@ impl<T> Cached<T> {
         }
     }
 
+    /// 直接改快取裡的資料（例如投票後換上那一筆的新票數），不影響過期時間；還沒有快取就不動
+    pub async fn modify(&self, change: impl FnOnce(&mut T))
+    where
+        T: Clone,
+    {
+        if let Some((_, value)) = self.slot.lock().await.as_mut() {
+            change(Arc::make_mut(value));
+        }
+    }
+
     /// 背景重抓：抓的時候不拿鎖，請求照樣拿得到舊資料；抓到才換上去，抓失敗就留著舊的。
     pub async fn refresh<F, Fut>(&self, fetch: F)
     where

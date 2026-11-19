@@ -14,6 +14,8 @@ services:
       MUSIC_DIR: /music
       # 地震速報經過主機上的 relay（systemd 的 wb-relay，:8080），和歐陽小俠共用 wolfx 的連線
       EEW_RELAY_URL: ${EEW_RELAY_URL:-ws://host.docker.internal:8080/relay}
+      # 幹話語錄的語錄和讚數在主機上的語錄服務（Func-say 的 FastAPI，:7666，Android APP 也在用），見 funcsay.rs
+      FUNCSAY_API_URL: ${FUNCSAY_API_URL:-http://host.docker.internal:7666}
       # 中央氣象署開放資料的授權碼，放在伺服器上的 secrets.env（不進 git）；沒設定就不抓氣象署的資料
       CWA_API_KEY: ${CWA_API_KEY:-}
       # 放進假 .env 的 AWS 金鑰（canarytokens.org 產生，有人拿去用會寄信通知），也放在 secrets.env；沒設定就不放（見 honeypot.rs）

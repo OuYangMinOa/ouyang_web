@@ -103,6 +103,24 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'funcsay',
+    name: '幹話語錄',
+    icon: '😏',
+    glyph: '話',
+    blurb: '「在非洲，每六十秒，就有一分鐘過去」這類一本正經的廢話，還有政治人物的名言，附上由來。登入就能按讚、倒讚和收藏，票數跟 Android APP 是同一份。',
+    tag: '讚 · 倒讚 · 收藏',
+    live: true,
+    nav: [
+      {
+        items: [
+          { to: '/funcsay', label: '全部語錄', icon: '▦' },
+          { to: '/funcsay/random', label: '隨機一則', icon: '🎲' },
+          { to: '/funcsay/favorites', label: '我的收藏', icon: '★' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'weather',
     name: '天氣與環境',
     icon: '🌦️',
