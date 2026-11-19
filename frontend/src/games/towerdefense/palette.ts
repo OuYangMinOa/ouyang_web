@@ -28,7 +28,9 @@ export type Theme = {
   badCss: string
   warnCss: string
   goldCss: string
+  airCss: string
   owners: Color[]
+  ownersCss: string[]
 }
 
 /** 讓瀏覽器把任何 CSS 顏色（包含 `rgb(1 2 3 / 0.5)`）換成 Three.js 看得懂的寫法 */
@@ -69,7 +71,9 @@ export function readTheme(): Theme {
     badCss: css('--danger', '#be123c'),
     warnCss: css('--accent', '#c2410c'),
     goldCss: css('--td-gold', '#b7770b'),
+    airCss: css('--td-air', '#6b7fd6'),
     owners: Array.from({ length: 8 }, (_, i) => color(`--td-p${i}`, '#888888')),
+    ownersCss: Array.from({ length: 8 }, (_, i) => css(`--td-p${i}`, '#888888')),
   }
 }
 

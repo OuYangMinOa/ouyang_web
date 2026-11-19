@@ -7,11 +7,12 @@ import { load, save } from '../shared/storage'
 import { useParty } from '../shared/useParty'
 import { Glyph, TowerArt } from './Art'
 import { TdGame, type GameEvent, type TowerInfo } from './game'
-import { BuildInfo, Players, Resources, SendPanel, Shop, TowerPanel, WaveBanner, WaveBar } from './Hud'
+import { Asks, BuildBar, DamageMeter, PingWheel, Players, Resources, SendPanel, Shop, TowerPanel, WaveBanner, WaveBar } from './Hud'
 import { IconsContext, type Icons } from './icons'
-import { loadSpec, seatName, type AimMode, type Spec, type TdAction, type TdParty, type TdView, type TowerId } from './online'
+import { loadSpec, seatName, type AimMode, type PingKind, type Spec, type TdAction, type TdParty, type TdView, type TowerId } from './online'
 import { Menu, PauseMenu, Results } from './Panels'
-import { createStats, goldOf } from './stats'
+import { createPingBudget } from './pings'
+import { createDamage, createStats, goldOf, wantSeats } from './stats'
 import './towerdefense.css'
 
 type Note = { id: number; text: string; tone: 'ok' | 'danger' | 'accent' | '' }
@@ -21,6 +22,11 @@ const canFullscreen = () => typeof document !== 'undefined' && document.fullscre
 
 function typing(target: EventTarget | null) {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
+}
+
+/** 「有人想拆」的那幾座塔有沒有變（沒變就不用重畫） */
+function sameAsks(a: TowerInfo[], b: TowerInfo[]) {
+  return a.length === b.length && a.every((t, i) => t.id === b[i].id && t.wants === b[i].wants && t.level === b[i].level)
 }
 
 /**
@@ -38,9 +44,21 @@ export default function TowerDefense() {
   /** 塔和怪物的小圖：3D 畫面做好之後拍一次，拍不了就是 null（介面退回用表情符號） */
   const [icons, setIcons] = useState<Icons | null>(null)
   const [stats] = useState(createStats)
+  const [damage] = useState(createDamage)
   const [build, setBuild] = useState<TowerId | null>(null)
-  /** 滑鼠停在商店的哪一種塔上（先看說明，還沒選） */
-  const [peek, setPeek] = useState<TowerId | null>(null)
+  /** 蓋塔時商店上面那一條要不要展開成整張卡片（數值、說明）；預設收著，不擋場地 */
+  const [details, setDetails] = useState(() => load('towerdefense:details', false))
+  /** 右邊的傷害榜開著還是收著；沒選過的話寬螢幕開著、手機收著 */
+  const [meter, setMeter] = useState(() => load<boolean | null>('towerdefense:meter', null) ?? window.innerWidth > 560)
+  /** 自己蓋的塔裡，有人提議拆掉的那幾座 */
+  const [asks, setAsks] = useState<TowerInfo[]>([])
+  /** 按了標記鈕：下一次按在場地上是標記 */
+  const [pinging, setPinging] = useState(false)
+  /** 按住 G 也是標記 */
+  const [holdG, setHoldG] = useState(false)
+  /** 正按著場地要標記：輪盤在哪、選到哪一種 */
+  const [wheel, setWheel] = useState<{ at: { x: number; y: number }; pick: PingKind; tower: boolean } | null>(null)
+  const [budget] = useState(createPingBudget)
   /** 選到的那座塔，或選到的空格（兩個不會同時有） */
   const [tower, setTower] = useState<TowerInfo | null>(null)
   const [cell, setCell] = useState<number | null>(null)
@@ -80,6 +98,7 @@ export default function TowerDefense() {
     build: null as TowerId | null,
     act: (() => {}) as (action: TdAction) => void,
     afford: (() => true) as (kind: TowerId) => boolean,
+    ping: (() => {}) as (cell: number, kind: PingKind) => void,
   })
 
   const party = useParty<TdParty>('towerdefense', {
@@ -129,6 +148,9 @@ export default function TowerDefense() {
           setAim(e.seat)
           setTarget(e.target)
           break
+        case 'ping':
+          game?.showPing(e, name(e.seat))
+          break
       }
     },
   })
@@ -146,8 +168,18 @@ export default function TowerDefense() {
     gameRef.current?.play('deny')
     return false
   }
+  /** 在這一格標記；連按太多次伺服器會擋，這裡先擋（不用等它回來才知道） */
+  function sendPing(cell: number, kind: PingKind) {
+    setPinging(false)
+    if (!budget.take(performance.now())) {
+      say('標記得太快了，等一下再按', 'danger')
+      gameRef.current?.play('deny')
+      return
+    }
+    party.act({ type: 'ping', cell, kind })
+  }
   useEffect(() => {
-    latest.current = { name: (seat) => seatName(party, seat), me, next: view?.next ?? [], build, act: party.act, afford }
+    latest.current = { name: (seat) => seatName(party, seat), me, next: view?.next ?? [], build, act: party.act, afford, ping: sendPing }
   })
 
   const battle = (room?.phase === 'playing' || room?.phase === 'results') && view !== null
@@ -176,6 +208,7 @@ export default function TowerDefense() {
         switch (e.type) {
           case 'stats':
             stats.set(e)
+            damage.set(e.damage)
             break
           case 'pick':
             setTower(game.picked())
@@ -193,10 +226,36 @@ export default function TowerDefense() {
           case 'deny':
             say(e.reason, 'danger')
             break
-          case 'towers':
-            // 選到的那座可能升級了、被拆了
+          case 'towers': {
+            // 選到的那座可能升級了、被拆了；有人想拆的那幾座也可能變了
             setTower(game.picked())
+            const wanted = game.wanted()
+            setAsks((prev) => (sameAsks(prev, wanted) ? prev : wanted))
             break
+          }
+          case 'wheel':
+            setWheel(e.at ? { at: e.at, pick: e.pick, tower: e.tower } : null)
+            break
+          case 'ping':
+            latest.current.ping(e.cell, e.kind)
+            break
+          case 'want': {
+            // 有人提議拆塔、收回，或蓋的人說留著：跟有關係的人說一聲
+            const { name, me } = latest.current
+            const what = spec.towers[e.kind]?.name ?? '塔'
+            const bit = 1 << e.by
+            if (e.after & bit) {
+              if (e.owner === me) {
+                say(`${name(e.by)} 想拆掉你的${what}`, 'danger')
+                game.play('ask')
+              } else if (e.by === me) say(`提議送出了，${name(e.owner)} 會看到`, 'ok')
+              log(`${name(e.by)} 提議拆掉${e.owner === me ? '你' : ` ${name(e.owner)} `}的${what}`, e.owner === me ? 'danger' : '')
+            } else if (!(e.before & bit) && e.before !== 0 && e.after === 0) {
+              if (me !== null && e.before & (1 << me)) say(`${name(e.by)} 決定留著${what}`)
+              log(`${name(e.by)} 決定留著${what}`)
+            }
+            break
+          }
           case 'leak':
             setLeak((n) => n + 1)
             break
@@ -220,7 +279,7 @@ export default function TowerDefense() {
         setReady(false)
       }
     },
-    [spec, stats, say],
+    [spec, stats, damage, say, log],
   )
 
   // 塔和怪物的小圖：等第一個畫面出來之後再拍（要另外開一個小的 WebGL 畫面，會卡幾十毫秒）
@@ -245,10 +304,12 @@ export default function TowerDefense() {
   if (currentGame !== gameNo) {
     setGameNo(currentGame)
     setBuild(null)
-    setPeek(null)
     setTower(null)
     setCell(null)
     setGain(null)
+    setAsks([])
+    setWheel(null)
+    setPinging(false)
     setFeed([])
     setLeak(0)
     setMenu(false)
@@ -309,6 +370,14 @@ export default function TowerDefense() {
     if (ready) gameRef.current?.setBuild(home ? build : null)
   }, [ready, build, home])
 
+  // 標記：多人才有（一個人沒有人看得到）；按了標記鈕或按住 G，下一次按在場地上就是標記
+  const canPing = active && view.players.length > 1
+  useEffect(() => {
+    const game = ready ? gameRef.current : null
+    game?.setPings(canPing)
+    game?.setPinging(canPing && (pinging || holdG))
+  }, [ready, canPing, pinging, holdG])
+
   // 場地要放在上面的資源列和下面的商店中間：量它們實際多高（窄螢幕會換成兩行）
   const topBar = useRef<HTMLDivElement>(null)
   const shopRow = useRef<HTMLDivElement>(null)
@@ -318,6 +387,8 @@ export default function TowerDefense() {
       const top = topBar.current?.getBoundingClientRect().bottom ?? 0
       const shop = shopRow.current?.getBoundingClientRect().top
       gameRef.current?.setInsets(top + 10, shop === undefined ? 16 : window.innerHeight - shop + 10)
+      // 右邊那一疊（傷害榜…）接在這一列的下面：窄螢幕上波次那一條會換成兩三行，高度不一定
+      topBar.current?.parentElement?.style.setProperty('--t-bar', `${Math.round(top)}px`)
     }
     const observer = new ResizeObserver(measure)
     if (topBar.current) observer.observe(topBar.current)
@@ -402,6 +473,26 @@ export default function TowerDefense() {
     gameRef.current?.select(null, null)
   }
 
+  function toggleDetails() {
+    setDetails((open) => {
+      save('towerdefense:details', !open)
+      return !open
+    })
+  }
+
+  function toggleMeter() {
+    setMeter((open) => {
+      save('towerdefense:meter', !open)
+      return !open
+    })
+  }
+
+  function togglePinging() {
+    gameRef.current?.play('click')
+    if (!pinging) say(touch ? '按住場地，往旁邊拖選種類' : '按住場地往旁邊拖選種類；平常按住 Alt 或 G 再按也可以')
+    setPinging((on) => !on)
+  }
+
   /** 按了下面的塔：選了空格就直接蓋在那一格，不然進入（或離開）蓋塔模式 */
   function pickKind(kind: TowerId) {
     if (!home) return
@@ -454,7 +545,13 @@ export default function TowerDefense() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (typing(e.target) || e.ctrlKey || e.metaKey || e.altKey) return
+      if (typing(e.target)) return
+      if (e.key === 'Alt') {
+        // 按住 Alt 再按場地是標記：不要讓瀏覽器以為要開選單列，放開時把焦點搶走
+        if (battle) e.preventDefault()
+        return
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return
       const g = gameRef.current
       if (!battle || !g || !spec) {
         if (e.code === 'KeyM') toggleSound()
@@ -499,7 +596,8 @@ export default function TowerDefense() {
       switch (e.code) {
         case 'Escape':
           e.preventDefault()
-          if (build || tower !== null || cell !== null) cancel()
+          if (pinging) setPinging(false)
+          else if (build || tower !== null || cell !== null) cancel()
           else if (board) setBoard(false)
           else if (sending) setSending(false)
           else if (!ended) setMenu((m) => !m)
@@ -525,21 +623,35 @@ export default function TowerDefense() {
         case 'KeyF':
           toggleFullscreen()
           break
+        case 'KeyG':
+          if (canPing) setHoldG(true)
+          break
       }
     }
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Alt' && battle) e.preventDefault()
+      if (e.code === 'KeyG') setHoldG(false)
+    }
+    const blur = () => setHoldG(false)
     window.addEventListener('keydown', down)
-    return () => window.removeEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', blur)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', blur)
+    }
   })
 
   const exitLabel = lobby.code ? '回到遊戲室' : '回到小遊戲'
   const present = view ? view.players.map((p, s) => ({ p, s })).filter(({ p, s }) => !view.bots.includes(s) && p.online && !p.out) : []
   const lookOwner = view && versus ? view.players.findIndex((p) => p.field === look) : -1
   const buildSpec = spec?.towers.find((t) => t.id === build) ?? null
-  const peekSpec = spec?.towers.find((t) => t.id === peek) ?? null
+  const multi = view !== null && view.players.length > 1
 
   return (
     <IconsContext value={icons}>
-      <div className={`td-root${touch ? ' touch' : ''}`} onPointerDown={() => gameRef.current?.unlockAudio()}>
+      <div className={`td-root${touch ? ' touch' : ''}${canPing && (pinging || holdG) ? ' pinging' : ''}`} onPointerDown={() => gameRef.current?.unlockAudio()}>
         {spec && <div className="td-view" ref={mountGame} />}
 
         {battle && spec && (
@@ -614,15 +726,37 @@ export default function TowerDefense() {
             {leak > 0 && <div className="td-leak" key={leak} aria-hidden="true" />}
             {banner && <WaveBanner key={banner.key} wave={banner.wave} groups={banner.groups} spec={spec} />}
 
-            {feed.length > 0 && (
-              <ol className="td-feed" aria-live="polite">
-                {feed.map((f) => (
-                  <li key={f.id} className={`td-chip ${f.tone}`}>
-                    {f.text}
-                  </li>
-                ))}
-              </ol>
-            )}
+            {/* 右邊那一疊：標記鈕和傷害榜（多人才有）、有人想拆我的塔、剛發生的事 */}
+            <div className="td-right">
+              {multi && !ended && (
+                <div className="td-right-row">
+                  {canPing && (
+                    <button
+                      type="button"
+                      className={`td-icon${pinging ? ' on' : ''}`}
+                      onClick={togglePinging}
+                      aria-pressed={pinging}
+                      aria-label="標記給隊友看"
+                      title="標記給隊友看：按住場地往旁邊拖選種類（按住 Alt 或 G 再按場地也可以）"
+                    >
+                      <Glyph name="ping" />
+                    </button>
+                  )}
+                  <DamageMeter party={party} view={view} damage={damage} open={meter} onToggle={toggleMeter} />
+                </div>
+              )}
+              {home && <Asks asks={asks} spec={spec} party={party} onShow={(id) => gameRef.current?.focusTower(id)} />}
+              {feed.length > 0 && (
+                <ol className="td-feed" aria-live="polite">
+                  {feed.map((f) => (
+                    <li key={f.id} className={`td-chip ${f.tone}`}>
+                      {f.text}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+            {wheel && me !== null && <PingWheel at={wheel.at} pick={wheel.pick} tower={wheel.tower} seat={me} />}
             {toast && (
               <div className={`td-toast td-chip ${toast.tone}`} key={toast.id} role="status">
                 {toast.text}
@@ -686,14 +820,16 @@ export default function TowerDefense() {
                     ownerName={tower.owner === me ? '你蓋的' : `${seatName(party, tower.owner)} 蓋的`}
                     canManage={canManage}
                     canUpgrade={home}
+                    wanters={wantSeats(tower.wants).map((seat) => (seat === me ? '你' : seatName(party, seat)))}
                     onUpgrade={() => party.act({ type: 'upgrade', id: tower.id })}
                     onSell={() => party.act({ type: 'sell', id: tower.id })}
+                    onWant={(want) => party.act({ type: 'want', id: tower.id, want })}
                     onMode={(mode: AimMode) => party.act({ type: 'mode', id: tower.id, mode })}
                     onClose={cancel}
                     onPeekUpgrade={(on) => gameRef.current?.setPeekUpgrade(on)}
                   />
                 ) : home && (build || cell !== null) ? (
-                  <BuildInfo
+                  <BuildBar
                     tower={buildSpec}
                     gain={gain}
                     view={view}
@@ -706,10 +842,10 @@ export default function TowerDefense() {
                           ? '點格子看範圍，再點一次同一格就蓋'
                           : '點格子就蓋；右鍵或 Esc 取消'
                     }
+                    open={details}
+                    onToggle={toggleDetails}
                     onCancel={cancel}
                   />
-                ) : home && peekSpec ? (
-                  <BuildInfo tower={peekSpec} gain={null} view={view} stats={stats} seat={me} hint="按一下選這種塔，再點格子蓋" />
                 ) : null}
                 {sending && active && me !== null && versus && (
                   <SendPanel
@@ -735,7 +871,7 @@ export default function TowerDefense() {
                         派兵
                       </button>
                     )}
-                    <Shop spec={spec} view={view} stats={stats} seat={me} kind={home ? build : null} onPick={pickKind} onPeek={setPeek} disabled={!home} />
+                    <Shop spec={spec} view={view} stats={stats} seat={me} kind={home ? build : null} onPick={pickKind} disabled={!home} />
                   </div>
                 )}
               </div>

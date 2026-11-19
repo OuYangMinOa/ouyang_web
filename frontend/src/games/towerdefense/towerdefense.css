@@ -437,20 +437,160 @@ button.td-ready small {
   animation: td-leak 0.6s ease-out;
 }
 
-.td-feed {
+/* 右邊那一疊：標記鈕和傷害榜（多人才有）、有人想拆我的塔、剛發生的事。
+   接在上面那一列的下面：那一列多高是量出來的（--t-bar，index.tsx），窄螢幕上波次那一條會換成兩三行 */
+.td-right {
   position: absolute;
-  top: calc(var(--t-top) + 56px);
+  top: calc(var(--t-bar, calc(var(--t-top) + 48px)) + 8px);
   right: var(--t-right);
   z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: min(360px, calc(100% - var(--t-left) - var(--t-right)));
+  pointer-events: none;
+}
+.td-right > * {
+  pointer-events: auto;
+}
+.td-right-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+}
+/* 傷害榜：每個人一條，底下那一段的長度是跟打最多的人比 */
+.td-meter {
+  width: 190px;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+}
+.td-meter.closed {
+  width: auto;
+}
+button.td-meter-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.td-meter-head b {
+  font-variant-numeric: tabular-nums;
+}
+.td-meter-fold {
+  display: grid;
+  margin-left: auto;
+  color: var(--text);
+  transition: transform 0.15s;
+}
+.td-meter-fold.open {
+  transform: rotate(180deg);
+}
+.td-meter ol {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0 6px 6px;
+  list-style: none;
+}
+.td-meter li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0 7px 0 9px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--t-well);
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.td-meter li::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  box-sizing: border-box;
+  width: calc(var(--share) * 100%);
+  border-left: 3px solid var(--seat);
+  background: color-mix(in srgb, var(--seat) 34%, transparent);
+  transition: width 0.25s ease-out;
+}
+.td-meter li > span {
+  position: relative;
+}
+.td-meter-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.td-meter-num {
+  font-weight: 700;
+}
+.td-meter li.me .td-meter-name {
+  font-weight: 700;
+}
+.td-meter li.out {
+  opacity: 0.55;
+}
+/* 有人想拆我的塔：一座一行，按下去選到那座塔 */
+.td-asks {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+  list-style: none;
+}
+button.td-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 4px 12px 4px 6px;
+  border: 1px solid var(--danger);
+  border-radius: 12px;
+  background: var(--t-glass);
+  color: var(--text-h);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  animation: td-in 0.2s ease-out;
+}
+.td-ask b {
+  color: var(--danger);
+}
+.td-ask-more {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+.td-feed {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
   margin: 0;
   padding: 0;
+  max-width: 100%;
   list-style: none;
   pointer-events: none;
-  max-width: min(360px, calc(100% - var(--t-left) - var(--t-right)));
 }
 .td-feed li {
   padding: 4px 10px;
@@ -544,11 +684,79 @@ button.td-show-results {
   align-items: stretch;
 }
 .td-shop {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 5px;
+}
+/* 滑鼠停在一種塔上：說明浮在那一格的正上方（靠邊的往裡面推），不擋滑鼠 */
+.td-tip {
+  --tip-w: min(300px, 100%);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: clamp(0px, calc(var(--at) * 100% - var(--tip-w) / 2), calc(100% - var(--tip-w)));
+  z-index: 3;
+  box-sizing: border-box;
+  width: var(--tip-w);
+  display: grid;
+  gap: 6px;
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  pointer-events: none;
+  animation: td-tip 0.14s ease-out 0.1s both;
+}
+.td-tip p {
+  margin: 0;
+}
+.td-tip-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.td-tip-head strong {
+  margin-right: 2px;
+  font-size: 15px;
+}
+.td-tip .td-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* 正在蓋塔：商店上面的一小條，只有內容那麼寬。本身不擋滑鼠，底下的格子照樣點得到 */
+.td-dock > .td-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px 10px;
+  width: auto;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 2px 4px 2px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+.td-bar button {
+  pointer-events: auto;
+}
+.td-bar strong {
+  font-size: 15px;
+  white-space: nowrap;
+}
+.td-bar-stats,
+.td-bar-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.td-bar .td-gain {
+  white-space: nowrap;
+}
+.td-bar button.td-x {
+  border-color: transparent;
 }
 button.td-shop-item,
 button.td-send-toggle {
@@ -765,6 +973,9 @@ button.td-shop-item.poor .td-art {
   color: var(--seat, var(--text));
   font-weight: 700;
 }
+button.td-x + button.td-x {
+  margin-left: 0;
+}
 button.td-x {
   flex: none;
   display: grid;
@@ -798,10 +1009,41 @@ button.td-x {
   min-height: 44px;
   font-weight: 700;
 }
-.td-max {
-  min-height: 28px;
-  padding: 0 12px;
+/* 塔的面板：「升級」和「拆掉」各佔一半、位置不動（升到最高級那一格還在，連點升級不會點到拆掉） */
+.td-tower-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+button.td-max {
+  opacity: 1;
+  border: 1px solid var(--td-gold);
+  background: transparent;
+  color: var(--td-gold);
+  cursor: default;
+}
+.td-tower-actions button.on {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+/* 有人提議拆掉這座塔 */
+.td-wanted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
   font-size: 13px;
+}
+.td-wanted b {
+  color: var(--danger);
+}
+.td-wanted button {
+  min-height: 40px;
+  padding: 0 16px;
+  font-weight: 700;
 }
 .td-modes {
   display: flex;
@@ -873,6 +1115,63 @@ button.td-send-item small .td-cost {
 }
 button.td-send-item:hover:not(:disabled) {
   border-color: var(--danger);
+}
+
+/* 標記的輪盤：按下去的那一點是中間，往上下左右拖選別的 */
+.td-root.pinging .td-view canvas {
+  cursor: crosshair;
+}
+.td-wheel {
+  position: absolute;
+  z-index: 9;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.td-wheel-item {
+  position: absolute;
+  left: calc(var(--dx) * var(--reach));
+  top: calc(var(--dy) * var(--reach));
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border: 2px solid var(--ping);
+  border-radius: 50%;
+  background: var(--t-glass);
+  color: var(--ping);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition:
+    transform 0.08s ease-out,
+    background-color 0.08s;
+  animation: td-wheel 0.12s ease-out both;
+}
+.td-wheel-item.on {
+  background: var(--ping);
+  color: var(--surface);
+  transform: scale(1.2);
+}
+.td-wheel-item small {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--t-glass);
+  color: var(--text-h);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+/* 上面那一顆的字放在它的上面，才不會壓到中間 */
+.td-wheel-item.up small {
+  top: auto;
+  bottom: calc(100% + 3px);
 }
 
 /* 玩家列表：桌機在右邊，窄螢幕蓋在上面 */
@@ -1176,6 +1475,18 @@ button.td-map:disabled:not(.active) {
     transform: translateX(8px);
   }
 }
+@keyframes td-tip {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes td-wheel {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
 @keyframes td-toast {
   from {
     opacity: 0;
@@ -1247,6 +1558,9 @@ button.td-map:disabled:not(.active) {
 @media (prefers-reduced-motion: reduce) {
   .td-leak,
   .td-feed li,
+  .td-tip,
+  .td-wheel-item,
+  button.td-ask,
   .td-toast,
   .td-bump,
   .td-lives.hit,
@@ -1257,7 +1571,10 @@ button.td-map:disabled:not(.active) {
     animation-name: td-banner-calm;
   }
   button.td-shop-item,
-  button.td-send-toggle {
+  button.td-send-toggle,
+  .td-meter li::before,
+  .td-meter-fold,
+  .td-wheel-item {
     transition: none;
   }
   button.td-shop-item:hover:not(:disabled),
@@ -1293,9 +1610,11 @@ button.td-map:disabled:not(.active) {
     width: auto;
     transform: none;
   }
-  .td-feed,
   .td-side {
     top: calc(var(--t-top) + 108px);
+  }
+  .td-bar-stats {
+    display: none;
   }
   .td-toast {
     top: calc(var(--t-top) + 112px);
@@ -1416,6 +1735,30 @@ button.td-map:disabled:not(.active) {
   }
   .td-feed {
     display: none;
+  }
+  /* 手機：傷害榜收起來只剩一顆按鈕，標記鈕排在它下面，都靠右邊（中間留給魔王的血條） */
+  .td-right-row {
+    flex-direction: column-reverse;
+    align-items: flex-end;
+  }
+  .td-meter {
+    width: 164px;
+  }
+  .td-meter.closed .td-meter-title,
+  .td-meter.closed .td-meter-fold {
+    display: none;
+  }
+  button.td-meter-head {
+    min-height: 40px;
+  }
+  /* 蓋塔的那一條放不下：提示換到第二行 */
+  .td-dock > .td-bar {
+    flex-wrap: wrap;
+    padding-bottom: 4px;
+  }
+  .td-bar-hint {
+    order: 9;
+    flex: 1 1 100%;
   }
   .td-panel {
     padding: 14px 14px 16px;

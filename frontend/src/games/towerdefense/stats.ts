@@ -35,6 +35,49 @@ export function useStats(store: StatsStore): Stats {
   return useSyncExternalStore(store.subscribe, store.get)
 }
 
+/**
+ * 每個座位到現在一共打了多少傷害。打怪的時候每個 tick 都在變，所以不放進上面那一份
+ * （不然商店、波次那些每 0.1 秒都要跟著重畫），只有傷害榜訂閱這一份
+ */
+export function createDamage() {
+  let value: number[] = []
+  const listeners = new Set<() => void>()
+  return {
+    get: () => value,
+    set(next: number[]) {
+      if (same(value, next)) return
+      value = [...next]
+      for (const listener of listeners) listener()
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
+}
+
+export type DamageStore = ReturnType<typeof createDamage>
+
+export function useDamage(store: DamageStore): number[] {
+  return useSyncExternalStore(store.subscribe, store.get)
+}
+
+/** 很大的數字寫短一點：12345 → 1.2萬、1234567 → 123萬 */
+export function compact(n: number): string {
+  if (n < 10_000) return String(Math.round(n))
+  const [value, unit] = n < 1e8 ? [n / 1e4, '萬'] : [n / 1e8, '億']
+  return `${value < 100 ? (Math.floor(value * 10) / 10).toFixed(1) : Math.floor(value)}${unit}`
+}
+
+/** 提議拆掉這座塔的座位（`wants` 是每個座位一個位元） */
+export function wantSeats(wants: number): number[] {
+  const seats: number[] = []
+  for (let seat = 0; wants >> seat; seat++) if ((wants >> seat) & 1) seats.push(seat)
+  return seats
+}
+
 /** 座位的顏色（塔底座的色環也是這個） */
 export function seatColor(seat: number): CSSProperties {
   return { '--seat': `var(--td-p${seat % 8})` } as CSSProperties
