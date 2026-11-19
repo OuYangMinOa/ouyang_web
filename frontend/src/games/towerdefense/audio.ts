@@ -23,6 +23,9 @@ export type Sound =
   | 'win'
   | 'lose'
   | 'click'
+  | 'ping'
+  | 'alarm'
+  | 'ask'
 
 /** 同一種聲音最快多久響一次（毫秒） */
 const GAP: Partial<Record<Sound | TowerId, number>> = {
@@ -36,6 +39,9 @@ const GAP: Partial<Record<Sound | TowerId, number>> = {
   sniper: 160,
   leak: 250,
   deny: 200,
+  ping: 90,
+  alarm: 90,
+  ask: 90,
 }
 
 export class TdAudio {
@@ -160,6 +166,20 @@ export class TdAudio {
         break
       case 'lose':
         ;[392, 330, 262, 196].forEach((f, i) => s.tone('triangle', f, f, i * 0.18, 0.36, 0.26))
+        break
+      case 'ping':
+        // 隊友的標記：清脆的兩聲
+        s.tone('sine', 1175, 1175, 0, 0.09, 0.2)
+        s.tone('sine', 1568, 1568, 0.09, 0.16, 0.2)
+        break
+      case 'alarm':
+        // 危險：急一點、低一點的三聲
+        ;[0, 0.13, 0.26].forEach((at) => s.tone('square', 740, 620, at, 0.09, 0.15))
+        break
+      case 'ask':
+        // 問號（也是「有人想拆你的塔」）：往上揚的兩個音
+        s.tone('triangle', 880, 880, 0, 0.1, 0.2)
+        s.tone('triangle', 1245, 1320, 0.11, 0.2, 0.2)
         break
     }
   }

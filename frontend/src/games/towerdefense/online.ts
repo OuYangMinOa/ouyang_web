@@ -122,8 +122,11 @@ export type TdOptions = {
   bots: Difficulty
 }
 
-/** 塔：[id, 格子, 種類的編號, 等級, 誰蓋的, 瞄準方式的編號] */
-export type TowerRow = [number, number, number, number, number, number]
+/** 塔：[id, 格子, 種類的編號, 等級, 誰蓋的, 瞄準方式的編號, 誰提議拆掉（每個座位一個位元）] */
+export type TowerRow = [number, number, number, number, number, number, number]
+
+/** 標記（ping）的種類：注意這裡、危險、這裡要塔（指著塔是「升級這座」）、我來處理、問號 */
+export type PingKind = 'note' | 'danger' | 'help' | 'omw' | 'ask'
 
 export type FieldView = {
   /** 塔每變一次加一：`tower` 事件的 rev 比這個小的已經算在裡面了 */
@@ -192,6 +195,10 @@ export type TdAction =
   | { type: 'give'; seat: number; amount: number }
   | { type: 'look'; field: number }
   | { type: 'speed'; speed: number }
+  /** 提議拆掉隊友的塔（`want: false` 收回）；蓋的人送 `want: false` 是「留著」，把提議都清掉 */
+  | { type: 'want'; id: number; want: boolean }
+  /** 在正在看的那塊場地標記一格 */
+  | { type: 'ping'; cell: number; kind: PingKind }
 
 export type TickEvent = {
   type: 'tick'
@@ -213,15 +220,19 @@ export type TickEvent = {
   l: number[]
   c: number[]
   k: number[]
+  /** 每個座位到現在一共打了多少傷害 */
+  dm: number[]
 }
 
 export type TowerEvent = {
   type: 'tower'
   f: number
   rev: number
-  op: 'add' | 'up' | 'sell' | 'mode'
+  op: 'add' | 'up' | 'sell' | 'mode' | 'want'
   t: TowerRow
   paths?: number[][]
+  /** `want`：誰按的（提議、收回，或蓋的人說留著） */
+  by?: number
 }
 
 export type TdEvent =
@@ -233,6 +244,7 @@ export type TdEvent =
   | { type: 'give'; from: number; to: number; amount: number }
   | { type: 'out'; seat: number; place: number }
   | { type: 'aim'; seat: number | null; target: number | null }
+  | { type: 'ping'; f: number; seat: number; cell: number; kind: PingKind }
 
 export type TdParty = { view: TdView; action: TdAction; options: TdOptions; event: TdEvent }
 export type TdRoom = Party<TdParty>

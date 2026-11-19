@@ -125,7 +125,7 @@ async fn a_solo_defender_builds_and_fights_through_the_server() {
     assert_eq!(built["op"], "add");
     assert_eq!(built["f"], 0);
     assert_eq!(built["rev"], 1);
-    assert_eq!(built["t"], json!([1, cell, 0, 1, 0, 0]));
+    assert_eq!(built["t"], json!([1, cell, 0, 1, 0, 0, 0]));
     assert_eq!(built["paths"][0].as_array().unwrap().len(), 21);
     // 蓋在入口上：被擋下來
     a.act(json!({ "type": "build", "cell": 6 * 21, "kind": "bolt" })).await;
@@ -150,7 +150,7 @@ async fn a_solo_defender_builds_and_fights_through_the_server() {
     let view = b.until(|m| m["type"] == "view" && !m["view"].is_null()).await["view"].clone();
     assert_eq!(view["you"], Value::Null);
     assert_eq!(view["wave"], 1);
-    assert_eq!(view["fields"][0]["towers"], json!([[1, cell, 0, 1, 0, 0]]));
+    assert_eq!(view["fields"][0]["towers"], json!([[1, cell, 0, 1, 0, 0, 0]]));
     assert_eq!(view["fields"][0]["rev"], 1);
     assert_eq!(b.event("tick").await["f"], 0);
     // 觀戰的人不能蓋塔

@@ -13,6 +13,9 @@
 //!   只送給正在看那塊場地的人（對抗模式可以切去看別人的，`Action::Look`）；觀戰的人每一塊都收得到。
 //! - 蓋塔、升級、拆掉都不重送整份 view，改送 `tower` 事件；view 裡有每塊場地的 `rev`（塔變一次加一），
 //!   用戶端靠它把 view 裡的塔和之後的事件接起來（重連、中途進來觀戰的人從 view 拿回所有的塔）。
+//!   隊友不能拆別人的塔，只能提議（`Action::Want`）：塔上記著誰提議了（`Tower::wants`），一樣走 `tower` 事件（`op: "want"`），
+//!   蓋的人看到之後自己決定拆掉還是留著。
+//! - 標記（`Action::Ping`，像 LoL 的 ping）只是把「誰在哪一格標了什麼」轉給看著同一塊場地的人，伺服器不留；連按太多次會被擋。
 //! - view 只在大事發生時重送：新的一波、打完一波、有人出局、結束、改速度、有人斷線或回來。
 //! - 沒有真人連著的時候整局停住，等有人回來再繼續（不然大家斷線重連回來已經輸了）。
 //!
@@ -54,6 +57,9 @@ const COOP_HP: f32 = 0.8;
 const SEND_GAP: f64 = 0.45;
 /// 遊戲速度最快幾倍
 const MAX_SPEED: u8 = 3;
+/// 標記（ping）一口氣最多幾個，用掉之後每隔幾秒（真實時間）補一個
+const PING_BURST: f32 = 4.0;
+const PING_EVERY: f32 = 1.5;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -116,6 +122,17 @@ impl Default for Options {
     }
 }
 
+/// 標記的種類：注意這裡、危險、這裡要塔（指著塔就是「升級這座」）、我來處理、問號
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PingKind {
+    Note,
+    Danger,
+    Help,
+    Omw,
+    Ask,
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Action {
@@ -160,6 +177,17 @@ pub enum Action {
     Speed {
         speed: u8,
     },
+    /// 提議拆掉隊友的塔（只有蓋的人能拆）；`want` 是 false 就收回。
+    /// 蓋的人自己送 `want: false` 是「留著」：把大家的提議都清掉
+    Want {
+        id: u32,
+        want: bool,
+    },
+    /// 在正在看的那塊場地的第 `cell` 格標記一下，看著同一塊場地的人都看得到
+    Ping {
+        cell: usize,
+        kind: PingKind,
+    },
 }
 
 struct Player {
@@ -180,6 +208,9 @@ struct Player {
     damage: f64,
     built: u32,
     sent: u32,
+    /// 還能標記幾次（`PING_BURST` 個一桶，慢慢補回來），和上一次算的時間
+    pings: f32,
+    pinged_at: Instant,
 }
 
 pub struct TowerDefense {
@@ -216,9 +247,9 @@ pub struct TowerDefense {
     bots_maze: bool,
 }
 
-/// 塔在 view 和 `tower` 事件裡的樣子：[id, 格子, 種類, 等級, 誰的, 瞄準方式]
+/// 塔在 view 和 `tower` 事件裡的樣子：[id, 格子, 種類, 等級, 誰的, 瞄準方式, 誰提議拆掉（每個座位一個位元）]
 fn tower_row(t: &crate::towerdefense_field::Tower) -> Value {
-    json!([t.id, t.cell, t.kind as u8, t.level, t.owner, t.mode as u8])
+    json!([t.id, t.cell, t.kind as u8, t.level, t.owner, t.mode as u8, t.wants])
 }
 
 fn paths(field: &Field) -> Vec<&Vec<usize>> {
@@ -327,6 +358,56 @@ impl TowerDefense {
         let refund = if self.wave == 0 { tower.spent } else { (f64::from(tower.spent) * REFUND).round() as u32 };
         self.players[owner].gold += refund;
         self.emit_tower(fi, "sell", tower_row(&tower), true, ctx);
+        Ok(())
+    }
+
+    /// 提議拆掉隊友的塔、收回提議，或（可以自己拆的人）說「留著」把提議都清掉
+    fn want(&mut self, seat: usize, id: u32, want: bool, ctx: &mut Ctx) -> Result<(), String> {
+        let fi = self.players[seat].field;
+        let Some((owner, before)) = self.fields[fi].tower(id).map(|t| (t.owner, t.wants)) else {
+            return Err("找不到這座塔".into());
+        };
+        let mine = 1u8 << seat;
+        let after = if self.may_manage(seat, owner) {
+            if want {
+                return Err("這座塔你可以直接拆".into());
+            }
+            0
+        } else if want {
+            before | mine
+        } else {
+            before & !mine
+        };
+        if after == before {
+            return Ok(());
+        }
+        self.fields[fi].set_wants(id, after);
+        let f = &self.fields[fi];
+        let row = tower_row(f.tower(id).expect("checked above"));
+        // `by` 是誰按的：畫面上要說「誰想拆你的塔」「蓋的人決定留著」
+        ctx.emit(To::All, json!({ "type": "tower", "f": fi, "rev": f.rev, "op": "want", "t": row, "by": seat }));
+        Ok(())
+    }
+
+    fn ping(&mut self, seat: usize, cell: usize, kind: PingKind, ctx: &mut Ctx) -> Result<(), String> {
+        if cell >= self.map.w * self.map.h {
+            return Err("沒有這一格".into());
+        }
+        // 連按太多次就先擋一下（和 LoL 一樣，不然整個畫面都是問號）
+        let p = &mut self.players[seat];
+        let gained = ctx.now.saturating_duration_since(p.pinged_at).as_secs_f32() / PING_EVERY;
+        p.pings = (p.pings + gained).min(PING_BURST);
+        p.pinged_at = ctx.now;
+        if p.pings < 1.0 {
+            return Err("標記得太快了，等一下再按".into());
+        }
+        p.pings -= 1.0;
+        let fi = p.look;
+        let viewers: Vec<usize> = (0..self.players.len()).filter(|&s| self.players[s].look == fi).collect();
+        ctx.emit(
+            To::SeatsAndSpectators(viewers),
+            json!({ "type": "ping", "f": fi, "seat": seat, "cell": cell, "kind": kind }),
+        );
         Ok(())
     }
 
@@ -565,6 +646,7 @@ impl TowerDefense {
         let lives: Vec<i32> = self.fields.iter().map(|f| f.lives.max(0)).collect();
         let counts: Vec<usize> = self.fields.iter().map(|f| f.monsters.len()).collect();
         let kills: Vec<u32> = self.players.iter().map(|p| p.kills).collect();
+        let damage: Vec<u64> = self.players.iter().map(|p| p.damage.round() as u64).collect();
         for fi in 0..self.fields.len() {
             let viewers: Vec<usize> = (0..self.players.len()).filter(|&s| self.players[s].look == fi).collect();
             let field = &mut self.fields[fi];
@@ -577,6 +659,7 @@ impl TowerDefense {
                 "l": lives,
                 "c": counts,
                 "k": kills,
+                "dm": damage,
             });
             if !field.shots.is_empty() {
                 event["s"] = json!(std::mem::take(&mut field.shots));
@@ -653,6 +736,8 @@ impl PartyGame for TowerDefense {
                     damage: 0.0,
                     built: 0,
                     sent: 0,
+                    pings: PING_BURST,
+                    pinged_at: ctx.now,
                 }
             })
             .collect();
@@ -748,6 +833,8 @@ impl PartyGame for TowerDefense {
                 ctx.changed();
                 Ok(())
             }
+            Action::Want { id, want } => self.want(seat, id, want, ctx),
+            Action::Ping { cell, kind } => self.ping(seat, cell, kind, ctx),
         }
     }
 
@@ -961,7 +1048,7 @@ mod tests {
         assert_eq!(added.len(), 1);
         assert_eq!(added[0]["op"], "add");
         assert_eq!(added[0]["rev"], 1);
-        assert_eq!(added[0]["t"], json!([1, c, 0, 1, 0, 0]));
+        assert_eq!(added[0]["t"], json!([1, c, 0, 1, 0, 0, 0]));
         assert!(added[0]["paths"][0].as_array().unwrap().len() >= 21);
         // 同一格不能再蓋、沒錢不能蓋
         assert_eq!(t.act(1, Action::Build { cell: c, kind: TowerKind::Bolt }).unwrap_err(), "這一格已經有塔了");
@@ -969,7 +1056,7 @@ mod tests {
         assert!(t.act(1, Action::Build { cell: c + 1, kind: TowerKind::Bolt }).unwrap_err().contains("錢不夠"));
         // view 裡有這座塔
         let view = t.view(Some(1));
-        assert_eq!(view["fields"][0]["towers"], json!([[1, c, 0, 1, 0, 0]]));
+        assert_eq!(view["fields"][0]["towers"], json!([[1, c, 0, 1, 0, 0, 0]]));
         assert_eq!(view["fields"][0]["rev"], 1);
         assert_eq!(view["you"], 1);
     }
@@ -996,6 +1083,73 @@ mod tests {
         t.act(0, Action::Build { cell: c, kind: TowerKind::Bolt }).unwrap();
         t.g.online[0] = false;
         assert!(t.act(1, Action::Sell { id: 2 }).is_ok());
+    }
+
+    #[test]
+    fn teammates_can_propose_tearing_down_a_tower_and_the_owner_decides() {
+        let mut t = Table::new(&options(GameMode::Coop), 3, 1);
+        let c = cell(&t, 5, 5);
+        t.act(0, Action::Build { cell: c, kind: TowerKind::Bolt }).unwrap();
+        // 隊友提議：塔上多一個記號（座位的位元），大家都收得到是誰按的
+        let out = t.act_out(1, Action::Want { id: 1, want: true });
+        let e = events(&out, "tower");
+        assert_eq!(e[0]["op"], "want");
+        assert_eq!(e[0]["by"], 1);
+        assert_eq!(e[0]["rev"], 2);
+        assert_eq!(e[0]["t"], json!([1, c, 0, 1, 0, 0, 0b010]));
+        assert!(e[0]["paths"].is_null());
+        // 再按一次一樣的不重送；另一個人也提議
+        assert!(events(&t.act_out(1, Action::Want { id: 1, want: true }), "tower").is_empty());
+        t.act(2, Action::Want { id: 1, want: true }).unwrap();
+        assert_eq!(t.g.fields[0].tower(1).unwrap().wants, 0b110);
+        // 重連的人從 view 拿回來
+        assert_eq!(t.view(Some(0))["fields"][0]["towers"][0][6], 0b110);
+        // 收回自己的
+        t.act(1, Action::Want { id: 1, want: false }).unwrap();
+        assert_eq!(t.g.fields[0].tower(1).unwrap().wants, 0b100);
+        // 蓋的人不用提議（直接拆就好）；說「留著」就把提議都清掉
+        assert_eq!(t.act(0, Action::Want { id: 1, want: true }).unwrap_err(), "這座塔你可以直接拆");
+        let out = t.act_out(0, Action::Want { id: 1, want: false });
+        assert_eq!(events(&out, "tower")[0]["t"][6], 0);
+        assert_eq!(events(&out, "tower")[0]["by"], 0);
+        // 提議不會真的拆掉，升級也不會把提議洗掉
+        t.act(2, Action::Want { id: 1, want: true }).unwrap();
+        t.act(1, Action::Upgrade { id: 1 }).unwrap();
+        assert_eq!(t.g.fields[0].tower(1).unwrap().wants, 0b100);
+        assert_eq!(t.g.fields[0].towers.len(), 1);
+        // 電腦的塔誰都能拆，不用提議
+        t.act(3, Action::Build { cell: c + 1, kind: TowerKind::Bolt }).unwrap();
+        assert_eq!(t.act(1, Action::Want { id: 2, want: true }).unwrap_err(), "這座塔你可以直接拆");
+        assert!(t.act(1, Action::Want { id: 99, want: true }).is_err());
+    }
+
+    #[test]
+    fn pings_reach_whoever_is_watching_that_field_and_are_rate_limited() {
+        let mut t = Table::new(&options(GameMode::Versus), 3, 0);
+        let c = cell(&t, 5, 5);
+        // 標記的是自己正在看的那一塊；只有看著同一塊的人收得到
+        let out = t.act_out(0, Action::Ping { cell: c, kind: PingKind::Ask });
+        let pings: Vec<_> = out.events().iter().filter(|(_, e)| e["type"] == "ping").collect();
+        assert_eq!(pings.len(), 1);
+        assert_eq!(format!("{:?}", pings[0].0), "SeatsAndSpectators([0])");
+        assert_eq!(pings[0].1, json!({ "type": "ping", "f": 0, "seat": 0, "cell": c, "kind": "ask" }));
+        t.act(1, Action::Look { field: 0 }).unwrap();
+        let out = t.act_out(1, Action::Ping { cell: c, kind: PingKind::Danger });
+        let (to, e) = out.events().iter().find(|(_, e)| e["type"] == "ping").unwrap();
+        assert_eq!(format!("{to:?}"), "SeatsAndSpectators([0, 1])");
+        assert_eq!((e["f"].as_u64(), e["seat"].as_u64(), e["kind"].as_str()), (Some(0), Some(1), Some("danger")));
+        assert!(t.act(0, Action::Ping { cell: 99_999, kind: PingKind::Note }).is_err());
+        // 連按：一口氣最多 `PING_BURST` 個，過一陣子才補回來
+        for _ in 0..3 {
+            t.act(0, Action::Ping { cell: c, kind: PingKind::Note }).unwrap();
+        }
+        assert_eq!(t.act(0, Action::Ping { cell: c, kind: PingKind::Note }).unwrap_err(), "標記得太快了，等一下再按");
+        t.now += Duration::from_secs(2);
+        assert!(t.act(0, Action::Ping { cell: c, kind: PingKind::Omw }).is_ok());
+        assert!(t.act(0, Action::Ping { cell: c, kind: PingKind::Help }).is_err());
+        // 種類照小寫的名字收
+        let action: Action = serde_json::from_value(json!({ "type": "ping", "cell": 3, "kind": "help" })).unwrap();
+        assert!(matches!(action, Action::Ping { cell: 3, kind: PingKind::Help }));
     }
 
     #[test]
@@ -1047,15 +1201,21 @@ mod tests {
         assert_eq!(ticks[0]["l"], json!([20]));
         assert_eq!(ticks[0]["c"], json!([1]));
         assert_eq!(ticks[0]["k"], json!([0]));
+        assert_eq!(ticks[0]["dm"], json!([0]));
         // 這一波還有 9 隻沒出來
         assert_eq!(ticks[0]["r"], 9);
         // 打倒第一隻：賞金進帳，開火跟著 tick 送出去，被打倒的怪和賞金也在裡面（畫面跳出「+5」用）
         let mut shots = 0;
         let mut paid = 0;
+        let mut dealt = 0;
         for _ in 0..80 {
             let out = t.tick();
             for e in events(&out, "tick") {
                 shots += usize::from(e["s"].is_array());
+                // 每個座位到現在一共打了多少傷害（畫面右邊的傷害榜），只會往上加
+                let total = e["dm"][0].as_u64().unwrap();
+                assert!(total >= dealt);
+                dealt = total;
                 for d in e["d"].as_array().into_iter().flatten() {
                     assert!(d[0].as_u64().unwrap() >= 1);
                     paid += d[1].as_u64().unwrap();
@@ -1067,6 +1227,7 @@ mod tests {
         assert!(t.g.players[0].gold > START_GOLD - 50);
         assert!(t.g.players[0].kills >= 1);
         assert!(t.g.players[0].damage > 0.0);
+        assert_eq!(dealt, t.g.players[0].damage.round() as u64);
     }
 
     #[test]

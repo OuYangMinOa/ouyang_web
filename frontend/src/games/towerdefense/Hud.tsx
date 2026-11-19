@@ -3,10 +3,26 @@ import { Countdown } from '../shared/Party'
 import { Glyph, MonsterArt, TowerArt } from './Art'
 import type { TowerInfo } from './game'
 import { TOWER_LOOK } from './models'
-import { AIM_MODES, seatName, type AimMode, type Spec, type TdRoom, type TdView, type TowerId, type TowerSpec } from './online'
-import { goldOf, reachText, seatColor, spentOn, statCells, traitsOf, useStats, type StatCell, type StatsStore } from './stats'
+import { AIM_MODES, seatName, type AimMode, type PingKind, type Spec, type TdRoom, type TdView, type TowerId, type TowerSpec } from './online'
+import { PING, pingLabel, PINGS, WHEEL_REACH } from './pings'
+import {
+  compact,
+  goldOf,
+  levelText,
+  reachText,
+  seatColor,
+  spentOn,
+  statCells,
+  traitsOf,
+  useDamage,
+  useStats,
+  wantSeats,
+  type DamageStore,
+  type StatCell,
+  type StatsStore,
+} from './stats'
 
-/** 對戰中浮在 3D 畫面上的介面：資源、波次、商店、塔的面板、玩家列表、派兵（連線和操作在 index.tsx） */
+/** 對戰中浮在 3D 畫面上的介面：資源、波次、商店、塔的面板、玩家列表、派兵、傷害榜、標記（連線和操作在 index.tsx） */
 
 /** 數字變多的時候跳一下（賞金進帳） */
 function Bump({ value }: { value: number }) {
@@ -256,7 +272,7 @@ export function WaveBanner({ wave, groups, spec }: { wave: number; groups: [numb
   )
 }
 
-/** 最下面一排：七種塔。選了空格的時候按一下直接蓋在那一格；滑鼠停在上面先看說明 */
+/** 最下面一排：七種塔。選了空格的時候按一下直接蓋在那一格；滑鼠停在上面，那一種的說明浮在它的正上方 */
 export function Shop({
   spec,
   view,
@@ -264,7 +280,6 @@ export function Shop({
   seat,
   kind,
   onPick,
-  onPeek,
   disabled,
 }: {
   spec: Spec
@@ -273,12 +288,19 @@ export function Shop({
   seat: number | null
   kind: TowerId | null
   onPick: (kind: TowerId) => void
-  onPeek: (kind: TowerId | null) => void
   disabled: boolean
 }) {
   const gold = goldOf(view, useStats(stats), seat)
+  /** 滑鼠停在第幾種塔上（或用鍵盤移到上面） */
+  const [peek, setPeek] = useState<number | null>(null)
+  // 按鈕變成不能按的時候收不到「滑鼠移開」，在這裡清掉，不然之後說明會自己冒出來
+  if (disabled && peek !== null) setPeek(null)
+  const tip = peek !== null && !disabled ? spec.towers[peek] : undefined
   return (
     <div className="td-shop" role="toolbar" aria-label="蓋塔">
+      {tip && peek !== null && (
+        <ShopTip tower={tip} short={seat === null ? 0 : tip.levels[0].cost - gold} at={(peek + 0.5) / spec.towers.length} />
+      )}
       {spec.towers.map((t, i) => {
         const cost = t.levels[0].cost
         const look = TOWER_LOOK[t.id]
@@ -292,10 +314,10 @@ export function Shop({
             aria-label={`${t.name}，${cost} 元`}
             disabled={disabled}
             onClick={() => onPick(t.id)}
-            onPointerEnter={(e) => e.pointerType === 'mouse' && onPeek(t.id)}
-            onPointerLeave={() => onPeek(null)}
-            onFocus={(e) => e.target.matches(':focus-visible') && onPeek(t.id)}
-            onBlur={() => onPeek(null)}
+            onPointerEnter={(e) => e.pointerType === 'mouse' && setPeek(i)}
+            onPointerLeave={() => setPeek(null)}
+            onFocus={(e) => e.target.matches(':focus-visible') && setPeek(i)}
+            onBlur={() => setPeek(null)}
           >
             <kbd className="td-key" aria-hidden="true">
               {i + 1}
@@ -353,9 +375,8 @@ function Tags({ tower }: { tower: TowerSpec }) {
 }
 
 /** 錢不夠蓋這種塔的時候，說還差多少 */
-function Short({ tower, view, stats, seat }: { tower: TowerSpec; view: TdView; stats: StatsStore; seat: number | null }) {
-  const short = tower.levels[0].cost - goldOf(view, useStats(stats), seat)
-  if (seat === null || short <= 0) return null
+function Short({ short }: { short: number }) {
+  if (short <= 0) return null
   return (
     <span className="td-gain short">
       <Glyph name="coin" size={14} />
@@ -364,14 +385,34 @@ function Short({ tower, view, stats, seat }: { tower: TowerSpec; view: TdView; s
   )
 }
 
-/** 選了一種塔（或選了一個空格、滑鼠停在商店的塔上）時的說明 */
-export function BuildInfo({
+/** 滑鼠停在商店的一種塔上：浮在那一格正上方的小說明（不擋滑鼠，移開就不見） */
+function ShopTip({ tower, short, at }: { tower: TowerSpec; short: number; at: number }) {
+  return (
+    <div className="td-tip td-chip" role="tooltip" style={{ '--at': at } as CSSProperties}>
+      <div className="td-tip-head">
+        <strong>{tower.name}</strong>
+        <Tags tower={tower} />
+      </div>
+      <p className="td-blurb">{tower.blurb}</p>
+      <StatGrid cells={statCells(tower, tower.levels[0])} />
+      <Short short={short} />
+    </div>
+  )
+}
+
+/**
+ * 正在蓋塔（選了一種塔，或選了一個空格）：貼在商店上面的一小條，只說現在選的是什麼、路線會多幾格、怎麼取消。
+ * 這一條不擋滑鼠（底下的格子照樣點得到）；要看數值按 ⓘ 展開成整張卡片，再按一次收起來
+ */
+export function BuildBar({
   tower,
   hint,
   gain,
   view,
   stats,
   seat,
+  open,
+  onToggle,
   onCancel,
 }: {
   tower: TowerSpec | null
@@ -381,44 +422,65 @@ export function BuildInfo({
   view: TdView
   stats: StatsStore
   seat: number | null
-  /** 沒給就是只是看看（滑鼠停在商店上），不顯示取消 */
-  onCancel?: () => void
+  /** 展開成整張卡片（數值、說明） */
+  open: boolean
+  onToggle: () => void
+  onCancel: () => void
 }) {
-  return (
-    <div className="td-info td-chip td-card">
-      {tower && <TowerArt id={tower.id} size={64} className="td-card-art" />}
-      <div className="td-card-body">
-        <div className="td-info-head">
-          {tower ? (
-            <>
-              <strong>{tower.name}</strong>
-              <Tags tower={tower} />
-            </>
-          ) : (
-            <strong>選一種塔</strong>
-          )}
-          {onCancel && (
-            <button type="button" className="td-x" onClick={onCancel} aria-label="取消" title="取消（Esc）">
-              <Glyph name="close" size={18} />
+  const gold = goldOf(view, useStats(stats), seat)
+  const short = tower && seat !== null ? tower.levels[0].cost - gold : 0
+  const route = gain !== null && (
+    <span className={`td-gain${gain > 0 ? ' more' : ''}`}>
+      <Glyph name="route" size={15} />
+      {gain > 0 ? `路線多 ${gain} 格` : gain < 0 ? `路線少 ${-gain} 格` : '路線不變'}
+    </span>
+  )
+  const cancel = (
+    <button type="button" className="td-x" onClick={onCancel} aria-label="取消" title="取消（Esc）">
+      <Glyph name="close" size={18} />
+    </button>
+  )
+  if (tower && open) {
+    return (
+      <div className="td-info td-chip td-card">
+        <TowerArt id={tower.id} size={64} className="td-card-art" />
+        <div className="td-card-body">
+          <div className="td-info-head">
+            <strong>{tower.name}</strong>
+            <Tags tower={tower} />
+            <button type="button" className="td-x" onClick={onToggle} aria-expanded="true" aria-label="收起數值" title="收起來，不要擋住場地">
+              <Glyph name="down" size={18} />
             </button>
-          )}
+            {cancel}
+          </div>
+          <p className="td-blurb">{tower.blurb}</p>
         </div>
-        {tower && <p className="td-blurb">{tower.blurb}</p>}
+        {/* 數值和提示橫跨整張卡片（窄螢幕上不要被左邊的圖擠到換行） */}
+        <div className="td-card-foot">
+          <StatGrid cells={statCells(tower, tower.levels[0])} />
+          <p className="td-hint">
+            <Short short={short} />
+            {route}
+            <span className="muted">{hint}</span>
+          </p>
+        </div>
       </div>
-      {/* 數值和提示橫跨整張卡片（窄螢幕上不要被左邊的圖擠到換行） */}
-      <div className="td-card-foot">
-        {tower && <StatGrid cells={statCells(tower, tower.levels[0])} />}
-        <p className="td-hint">
-          {tower && <Short tower={tower} view={view} stats={stats} seat={seat} />}
-          {gain !== null && (
-            <span className={`td-gain${gain > 0 ? ' more' : ''}`}>
-              <Glyph name="route" size={15} />
-              {gain > 0 ? `路線多 ${gain} 格` : gain < 0 ? `路線少 ${-gain} 格` : '路線不變'}
-            </span>
-          )}
-          <span className="muted">{hint}</span>
-        </p>
-      </div>
+    )
+  }
+  return (
+    <div className="td-bar td-chip">
+      {tower && <TowerArt id={tower.id} size={30} />}
+      <strong>{tower ? tower.name : '選一種塔'}</strong>
+      {tower && <span className="td-bar-stats muted">{levelText(tower, tower.levels[0])}</span>}
+      <Short short={short} />
+      {route}
+      <span className="td-bar-hint muted">{hint}</span>
+      {tower && (
+        <button type="button" className="td-x" onClick={onToggle} aria-expanded="false" aria-label="看數值" title="看這種塔的數值和說明">
+          <Glyph name="info" size={18} />
+        </button>
+      )}
+      {cancel}
     </div>
   )
 }
@@ -433,8 +495,10 @@ export function TowerPanel({
   ownerName,
   canManage,
   canUpgrade,
+  wanters,
   onUpgrade,
   onSell,
+  onWant,
   onMode,
   onClose,
   onPeekUpgrade,
@@ -448,8 +512,12 @@ export function TowerPanel({
   /** 可以拆、改瞄準（自己的，或主人是電腦、不在線上） */
   canManage: boolean
   canUpgrade: boolean
+  /** 提議拆掉這座塔的人（名字） */
+  wanters: string[]
   onUpgrade: () => void
   onSell: () => void
+  /** 隊友的塔：提議拆掉／收回；自己的塔：`false` 是「留著」 */
+  onWant: (want: boolean) => void
   onMode: (mode: AimMode) => void
   onClose: () => void
   /** 指著「升級」：場地上把升級後的射程也畫出來 */
@@ -463,6 +531,7 @@ export function TowerPanel({
   const spent = spentOn(t, tower.level)
   const refund = view.wave === 0 ? spent : Math.round(spent * spec.refund)
   const mode = AIM_MODES[tower.mode]?.value
+  const iWant = seat !== null && ((tower.wants >> seat) & 1) === 1
   return (
     <div className="td-info td-chip td-card td-tower" style={seatColor(tower.owner)}>
       <TowerArt id={t.id} level={tower.level} size={64} className="td-card-art" />
@@ -488,7 +557,20 @@ export function TowerPanel({
         <StatGrid cells={statCells(t, level, next)} />
       </div>
       <div className="td-card-foot">
-        <div className="td-actions">
+        {wanters.length > 0 && (
+          <p className="td-wanted" role="status">
+            <span>
+              <b>{wanters.join('、')}</b> 想拆掉這座塔
+            </span>
+            {canManage && (
+              <button type="button" className="secondary" onClick={() => onWant(false)} title="不拆：把提議清掉，提議的人會看到">
+                留著
+              </button>
+            )}
+          </p>
+        )}
+        {/* 兩個按鈕各佔一半、位置固定：升到最高級時「升級」那一格還在（按不下去），連點升級才不會點到旁邊的「拆掉」 */}
+        <div className="td-actions td-tower-actions">
           {next ? (
             <button
               type="button"
@@ -509,15 +591,30 @@ export function TowerPanel({
               </span>
             </button>
           ) : (
-            <span className="td-tag gold td-max">已經最高級</span>
+            <button type="button" className="td-upgrade td-max" disabled>
+              <Glyph name="check" size={16} />
+              已經最高級
+            </button>
           )}
-          {canManage && (
+          {canManage ? (
             <button type="button" className="secondary" onClick={onSell} title="拆掉（X）">
               拆掉
               <span className="td-cost">
                 <Glyph name="coin" size={13} />+{refund}
               </span>
             </button>
+          ) : (
+            canUpgrade && (
+              <button
+                type="button"
+                className={`secondary${iWant ? ' on' : ''}`}
+                aria-pressed={iWant}
+                onClick={() => onWant(!iWant)}
+                title={iWant ? '收回提議' : '這是隊友的塔，只有蓋的人能拆；按了他會看到有人想拆'}
+              >
+                {iWant ? '收回提議' : '提議拆掉'}
+              </button>
+            )
           )}
         </div>
         {t.id !== 'beacon' && (
@@ -697,6 +794,131 @@ export function SendPanel({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/** 右邊的傷害榜（多人才有）：每個人到現在一共打了多少，打最多的排上面；按標題收成一小塊 */
+export function DamageMeter({
+  party,
+  view,
+  damage,
+  open,
+  onToggle,
+}: {
+  party: TdRoom
+  view: TdView
+  damage: DamageStore
+  open: boolean
+  onToggle: () => void
+}) {
+  const dealt = useDamage(damage)
+  const me = view.you
+  const rows = view.players
+    .map((p, seat) => ({ seat, out: p.out, value: dealt[seat] ?? p.damage }))
+    .sort((a, b) => b.value - a.value || a.seat - b.seat)
+  const most = Math.max(1, rows[0]?.value ?? 0)
+  const total = Math.max(1, rows.reduce((sum, r) => sum + r.value, 0))
+  const mine = me !== null ? (dealt[me] ?? view.players[me]?.damage ?? 0) : null
+  return (
+    <div className={`td-meter td-chip${open ? '' : ' closed'}`}>
+      <button
+        type="button"
+        className="td-meter-head"
+        aria-expanded={open}
+        onClick={onToggle}
+        title={open ? '收起傷害榜' : '傷害榜：每個人到現在一共打了多少'}
+      >
+        <Glyph name="sword" size={15} />
+        <span className="td-meter-title">傷害</span>
+        {!open && mine !== null && <b>{compact(mine)}</b>}
+        <span className={`td-meter-fold${open ? ' open' : ''}`}>
+          <Glyph name="down" size={14} />
+        </span>
+      </button>
+      {open && (
+        <ol>
+          {rows.map((r) => (
+            <li
+              key={r.seat}
+              className={`${r.seat === me ? 'me' : ''}${r.out ? ' out' : ''}`}
+              style={{ ...seatColor(r.seat), '--share': r.value / most } as CSSProperties}
+              title={`${seatName(party, r.seat)}：${Math.round(r.value)}（${Math.round((r.value / total) * 100)}%）`}
+            >
+              <span className="td-meter-name">{seatName(party, r.seat)}</span>
+              <span className="td-meter-num">{compact(r.value)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+/** 有人提議拆掉自己的塔：一座一行，按下去選到那座塔（要拆、要留在塔的面板上決定） */
+export function Asks({ asks, spec, party, onShow }: { asks: TowerInfo[]; spec: Spec; party: TdRoom; onShow: (id: number) => void }) {
+  if (!asks.length) return null
+  return (
+    <ul className="td-asks">
+      {asks.slice(0, 3).map((t) => {
+        const tower = spec.towers[t.kind]
+        if (!tower) return null
+        return (
+          <li key={t.id}>
+            <button type="button" className="td-ask td-chip" onClick={() => onShow(t.id)} title="看看這座塔，決定要拆還是留著">
+              <TowerArt id={tower.id} level={t.level} size={30} />
+              <span>
+                <b>
+                  {wantSeats(t.wants)
+                    .map((s) => seatName(party, s))
+                    .join('、')}
+                </b>{' '}
+                想拆你的{tower.name}
+              </span>
+            </button>
+          </li>
+        )
+      })}
+      {asks.length > 3 && <li className="td-chip td-ask-more">還有 {asks.length - 3} 座</li>}
+    </ul>
+  )
+}
+
+/** 標記的圖（和場地上畫的是同一條路徑） */
+export function PingGlyph({ kind, size = 20 }: { kind: PingKind; size?: number }) {
+  return (
+    <svg
+      className="td-glyph"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={PING[kind].path} />
+    </svg>
+  )
+}
+
+/** 標記的輪盤：按在場地上的那一點是中間（注意這裡），往上下左右拖選別的，放開就送出 */
+export function PingWheel({ at, pick, tower, seat }: { at: { x: number; y: number }; pick: PingKind; tower: boolean; seat: number }) {
+  return (
+    <div className="td-wheel" style={{ left: at.x, top: at.y, '--reach': `${WHEEL_REACH}px`, ...seatColor(seat) } as CSSProperties} aria-hidden="true">
+      {PINGS.map((p) => (
+        <span
+          key={p.kind}
+          className={`td-wheel-item${p.kind === pick ? ' on' : ''}${p.dir[1] < 0 ? ' up' : ''}`}
+          style={{ '--dx': p.dir[0], '--dy': p.dir[1], '--ping': p.color ? `var(${p.color})` : 'var(--seat)' } as CSSProperties}
+        >
+          <PingGlyph kind={p.kind} size={22} />
+          <small>{pingLabel(p.kind, tower)}</small>
+        </span>
+      ))}
     </div>
   )
 }
