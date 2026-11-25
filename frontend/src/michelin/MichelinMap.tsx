@@ -2,8 +2,9 @@
 // 地區由網址決定（/michelin/:region，對應側邊欄），選中的餐廳放在 ?r=<id>，連結分享出去也會打開同一家。
 // 整頁剛好一個畫面高：寬螢幕地圖和清單左右並排，窄螢幕同一塊區域切換「地圖／清單」，不用跟地圖搶捲動。
 // 店家卡片浮在地圖下緣，打開、換店時清單和地圖都不會跳。
+// 登入後可以記想吃／吃過（地圖上的點會標出來）、設訂位提醒；定位之後清單可以照距離排。
 
-import { useEffect, useEffectEvent, useMemo, useRef, useState, type Ref } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
 import { L, TAIWAN_CENTER, useLeafletMap } from '../weather/map'
 import {
@@ -12,15 +13,20 @@ import {
   GUIDE_EDITION,
   REGIONS,
   RESTAURANTS,
-  awardLabel,
+  awardClass,
   awardRank,
-  displayPhone,
-  googleMapsUrl,
-  guideUrl,
-  telHref,
+  changeOf,
+  distanceMeters,
+  formatDistance,
+  regionOf,
   type Award,
+  type LatLng,
   type Restaurant,
 } from './data'
+import { FilterPanel } from './FilterPanel'
+import { NO_FILTERS, filterCount, filterKey, passes, type Filters } from './filters'
+import { useMine } from './mine'
+import { AwardBadge, RestaurantCard } from './RestaurantCard'
 import './michelin.css'
 
 /** 縮到比這還遠（看得到大半個台灣）時，全台頁面把每個地區合成一顆泡泡，不然台北 84 家會疊成一團 */
@@ -31,12 +37,16 @@ const FOCUS_ZOOM = 15
 const BUBBLE_SHIFT: Record<string, [number, number]> = { taipei: [0, -20], 'new-taipei': [44, 18], hsinchu: [-12, 8] }
 const TIP: L.TooltipOptions = { direction: 'top', offset: [0, -10], className: 'mich-tip' }
 /** 放大到這裡以後，點旁邊直接寫店名 */
-const LABEL_ZOOM = 12
+const LABEL_ZOOM = 14
 /** 圓點的直徑，和 michelin.css 的 --dot 一樣；選中的放大 1.45 倍 */
 const DOT: Record<string, number> = { star3: 20, star2: 17, star1: 14, bib: 12 }
 const SELECTED_SCALE = 1.45
 /** 店名離圓點邊緣多遠，和 michelin.css 的 .mich-name 一樣 */
 const LABEL_GAP = 4
+/** 定位後地圖框住自己和最近的幾家 */
+const NEAR_COUNT = 5
+/** 最近的一家比這還遠，就提醒附近沒有 */
+const FAR_METERS = 30_000
 
 /** 畫面上的一塊長方形：左、上、右、下（像素） */
 type Box = [number, number, number, number]
@@ -44,9 +54,12 @@ type Box = [number, number, number, number]
 type View = 'map' | 'list'
 /** 一次點選：從地圖點的不要動地圖（頂多挪一點讓它不被卡片蓋住），從清單點的要飛過去 */
 type Pick = { id: string; from: 'map' | 'list' }
+/** 定位到的位置；accuracy 是誤差半徑（公尺） */
+type Here = LatLng & { accuracy: number }
 
-function awardClass(award: Award) {
-  return award === 'bib' ? 'bib' : `star${award}`
+/** 離這裡最近的一家（不管篩選） */
+function nearestTo(spot: LatLng) {
+  return RESTAURANTS.reduce((best, r) => (distanceMeters(spot, r) < distanceMeters(spot, best) ? r : best))
 }
 
 /** 星級越高疊得越上面 */
@@ -79,14 +92,17 @@ function matches(r: Restaurant, q: string) {
 /** 把地圖框到這些店（animate 時用飛的） */
 function fitTo(map: L.Map, rs: Restaurant[], animate: boolean) {
   if (rs.length === 0) return
-  const bounds = L.latLngBounds(rs.map((r) => [r.lat, r.lng]))
+  fitBounds(map, L.latLngBounds(rs.map((r) => [r.lat, r.lng])), animate)
+}
+
+function fitBounds(map: L.Map, bounds: L.LatLngBounds, animate: boolean) {
   const options = { padding: [36, 36] as L.PointTuple, maxZoom: FOCUS_ZOOM }
   if (animate && !reducedMotion()) map.flyToBounds(bounds, { ...options, duration: 0.8 })
   else map.fitBounds(bounds, { ...options, animate: false })
 }
 
 /** 讓這一點落在「卡片上方那塊看得到的地圖」正中間，而不是被卡片蓋住的畫面中心 */
-function centerAbove(map: L.Map, r: Restaurant, zoom: number, coveredBottom: number) {
+function centerAbove(map: L.Map, r: LatLng, zoom: number, coveredBottom: number) {
   return map.unproject(map.project([r.lat, r.lng], zoom).add([0, coveredBottom / 2]), zoom)
 }
 
@@ -101,47 +117,61 @@ function moveTo(map: L.Map, center: L.LatLng, zoom: number) {
   }
 }
 
-const RESET_ICON =
-  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>'
-
-/** 列表、卡片上的小徽章：星級用 ★，必比登用「必」 */
-function AwardBadge({ award }: { award: Award }) {
-  return (
-    <span className={`mich-badge mich-${awardClass(award)}`} title={awardLabel(award)}>
-      <span aria-hidden="true">{award === 'bib' ? '必' : '★'.repeat(award)}</span>
-      <span className="mich-sr">{awardLabel(award)}</span>
-    </span>
-  )
-}
+const SVG =
+  'viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'
+const RESET_ICON = `<svg ${SVG}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>`
+const LOCATE_ICON = `<svg ${SVG}><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>`
 
 export default function MichelinMap() {
   const { region: regionSlug } = useParams()
   const region = REGIONS.find((r) => r.slug === regionSlug)
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const mine = useMine()
   const [query, setQuery] = useState('')
   const [hidden, setHidden] = useState<Set<Award>>(() => new Set())
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [view, setView] = useState<View>('map')
   const [pick, setPick] = useState<Pick | null>(null)
+  const [here, setHere] = useState<Here | null>(null)
+  const [locating, setLocating] = useState(false)
+  /** 最近一次定位到的位置：地圖移過去之後記在 handledLocate（要換地區的話換完才移） */
+  const [located, setLocated] = useState<Here | null>(null)
+  const [byDistance, setByDistance] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
 
   const q = query.trim()
   const inRegion = useMemo(
     () => RESTAURANTS.filter((r) => !region || region.cities.includes(r.city)).sort(byAward),
     [region],
   )
-  const visible = useMemo(() => inRegion.filter((r) => !hidden.has(r.award) && matches(r, q)), [inRegion, hidden, q])
+  const visible = useMemo(
+    () => inRegion.filter((r) => !hidden.has(r.award) && matches(r, q) && passes(r, filters, mine.marks)),
+    [inRegion, hidden, q, filters, mine.marks],
+  )
+  // 清單的順序：定位後可以照距離排；地圖上的店名排版還是照星級
+  const listed = useMemo(
+    () => (byDistance && here ? [...visible].sort((a, b) => distanceMeters(here, a) - distanceMeters(here, b)) : visible),
+    [visible, byDistance, here],
+  )
   const selectedId = params.get('r')
   const selected = RESTAURANTS.find((r) => r.id === selectedId)
+  const narrowed = q !== '' || filterCount(filters) > 0
+  const settledKey = `${q}|${filterKey(filters)}`
 
   const container = useRef<HTMLDivElement>(null)
   const sideRef = useRef<HTMLElement>(null)
   const cardRef = useRef<HTMLElement>(null)
+  const filterButton = useRef<HTMLButtonElement>(null)
+  const locateButton = useRef<HTMLAnchorElement | null>(null)
   const markers = useRef(new Map<string, L.Marker>())
   /** 每個店名的寬高（量一次就記住；字型載入完會重量） */
   const labelSizes = useRef(new Map<string, [number, number]>())
   const handledPick = useRef<Pick | null>(null)
+  const handledLocate = useRef<Here | null>(null)
   const viewReady = useRef(false)
-  const fittedQuery = useRef(q)
+  const fittedKey = useRef(settledKey)
   const map = useLeafletMap(container, TAIWAN_CENTER, 7, { wheelZoom: true })
 
   function select(id: string | null) {
@@ -162,9 +192,9 @@ export default function MichelinMap() {
     setPick({ id, from })
   }
 
-  /** 現在框地圖要框哪些店：有在搜尋就框搜尋結果，沒有就框整個地區 */
+  /** 現在框地圖要框哪些店：有在搜尋或篩選就框結果，沒有就框整個地區 */
   function fitTargets() {
-    return q && visible.length > 0 ? visible : inRegion
+    return narrowed && visible.length > 0 ? visible : inRegion
   }
 
   /** 卡片蓋住地圖下緣多高 */
@@ -185,6 +215,45 @@ export default function MichelinMap() {
     }
   }
 
+  const closeFilters = useCallback(() => setFiltersOpen(false), [])
+
+  // 幾秒後自己消失的提示（定位失敗、附近沒有店）
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 6000)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  /** 定位：成功後清單改成照距離排，最近的一家不在這個地區就換過去，再把地圖框到自己和附近的店 */
+  function locate() {
+    if (!('geolocation' in navigator)) {
+      setToast('這個瀏覽器沒辦法定位')
+      return
+    }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }
+        setLocating(false)
+        setHere(next)
+        setLocated(next)
+        setByDistance(true)
+        const nearest = nearestTo(next)
+        const far = distanceMeters(next, nearest)
+        if (far > FAR_METERS) setToast(`附近 30 公里內沒有米其林，最近的是${nearest.name}（${formatDistance(far)}）`)
+      },
+      (err) => {
+        setLocating(false)
+        setToast(
+          err.code === err.PERMISSION_DENIED
+            ? '定位被封鎖了：請從網址列左邊的圖示允許「位置」'
+            : '抓不到現在的位置，請再試一次',
+        )
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+    )
+  }
+
   // ---- 地圖上的事件（Leaflet 的監聽器只綁一次，用 effect event 拿到最新的狀態） ----
 
   const onMarkerClick = useEffectEvent((id: string) => choose(id, 'map'))
@@ -193,6 +262,7 @@ export default function MichelinMap() {
   })
   const onBubbleClick = useEffectEvent((slug: string) => navigate(`/michelin/${slug}`))
   const onReset = useEffectEvent(() => map && fitTo(map, fitTargets(), true))
+  const onLocateClick = useEffectEvent(() => locate())
 
   // 每家店一個標記，只建一次；篩選、選取只改 class，不重建，滑鼠底下的點才不會閃
   useEffect(() => {
@@ -228,40 +298,54 @@ export default function MichelinMap() {
     }
   }, [map])
 
-  // 「顯示全部」按鈕，放在縮放按鈕下面
+  // 縮放按鈕下面：「顯示全部」和「我附近」。按鈕都放右上角：店家卡片在左下角，展開提醒表單變高時才不會蓋住
   useEffect(() => {
     if (!map) return
-    const control = new L.Control({ position: 'topleft' })
+    map.zoomControl?.setPosition('topright')
+    const control = new L.Control({ position: 'topright' })
     control.onAdd = () => {
       const bar = L.DomUtil.create('div', 'leaflet-bar mich-reset')
-      const button = L.DomUtil.create('a', '', bar)
-      button.href = '#'
-      button.setAttribute('role', 'button')
-      button.title = '顯示全部'
-      button.setAttribute('aria-label', '顯示全部')
-      button.innerHTML = RESET_ICON
+      const add = (title: string, label: string, icon: string, onClick: () => void) => {
+        const button = L.DomUtil.create('a', '', bar)
+        button.href = '#'
+        button.setAttribute('role', 'button')
+        button.title = title
+        button.setAttribute('aria-label', label)
+        button.innerHTML = icon
+        L.DomEvent.on(button, 'click', (e) => {
+          L.DomEvent.preventDefault(e)
+          onClick()
+        })
+        return button
+      }
+      add('顯示全部', '顯示全部', RESET_ICON, () => onReset())
+      locateButton.current = add('我附近', '定位，顯示我附近的餐廳', LOCATE_ICON, () => onLocateClick())
       L.DomEvent.disableClickPropagation(bar)
-      L.DomEvent.on(button, 'click', (e) => {
-        L.DomEvent.preventDefault(e)
-        onReset()
-      })
       return bar
     }
     control.addTo(map)
     return () => {
       control.remove()
+      locateButton.current = null
     }
   }, [map])
 
-  // 篩掉的藏起來、選中的放大
+  useEffect(() => {
+    locateButton.current?.classList.toggle('is-busy', locating)
+  }, [map, locating])
+
+  // 篩掉的藏起來、選中的放大、想吃／吃過標出來
   useEffect(() => {
     const shown = new Set(visible.map((r) => r.id))
     for (const [id, marker] of markers.current) {
       const el = marker.getElement()
+      const status = mine.marks.get(id)?.status
       el?.classList.toggle('is-hidden', !shown.has(id) && id !== selected?.id)
       el?.classList.toggle('is-selected', id === selected?.id)
+      el?.classList.toggle('is-want', status === 'want')
+      el?.classList.toggle('is-been', status === 'been')
     }
-  }, [map, visible, selected])
+  }, [map, visible, selected, mine.marks])
 
   // 選中的那家疊到最上面
   useEffect(() => {
@@ -386,6 +470,22 @@ export default function MichelinMap() {
     }
   }, [map, region, visible])
 
+  // 自己的位置：一個點加上誤差範圍
+  useEffect(() => {
+    if (!map || !here) return
+    const group = L.layerGroup().addTo(map)
+    L.circle([here.lat, here.lng], { radius: here.accuracy, className: 'mich-me-accuracy', interactive: false }).addTo(group)
+    L.marker([here.lat, here.lng], {
+      icon: L.divIcon({ className: 'mich-me', html: '<span></span>', iconSize: [18, 18] }),
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 300000,
+    }).addTo(group)
+    return () => {
+      group.remove()
+    }
+  }, [map, here])
+
   // 打開頁面：直接框好（網址帶著某家就直接停在那家）；之後換地區用飛的
   const onRegion = useEffectEvent(() => {
     if (!map) return
@@ -402,16 +502,37 @@ export default function MichelinMap() {
     if (map) onRegion()
   }, [map, regionSlug])
 
-  // 搜尋：停手一下再把地圖框到搜尋結果；清空就框回整個地區
-  const onQuerySettled = useEffectEvent(() => {
-    fittedQuery.current = q
+  // 剛定位到：最近的一家不在這個地區就先換過去（換完這裡會再跑一次），再框住自己和最近的幾家
+  const onLocated = useEffectEvent((spot: Here) => {
+    if (!map) return
+    const nearest = nearestTo(spot)
+    if (region && !region.cities.includes(nearest.city)) {
+      const target = regionOf(nearest)
+      if (target) {
+        navigate(`/michelin/${target.slug}`)
+        return
+      }
+    }
+    handledLocate.current = spot
+    const near = [...visible].sort((a, b) => distanceMeters(spot, a) - distanceMeters(spot, b)).slice(0, NEAR_COUNT)
+    const bounds = L.latLngBounds([[spot.lat, spot.lng], ...near.map((r): L.LatLngTuple => [r.lat, r.lng])])
+    fitBounds(map, bounds, true)
+    sideRef.current?.scrollTo({ top: 0 })
+  })
+  useEffect(() => {
+    if (located && located !== handledLocate.current) onLocated(located)
+  }, [map, located, regionSlug])
+
+  // 搜尋、篩選：停手一下再把地圖框到結果；清空就框回整個地區
+  const onSettled = useEffectEvent(() => {
+    fittedKey.current = settledKey
     if (map) fitTo(map, fitTargets(), true)
   })
   useEffect(() => {
-    if (!map || q === fittedQuery.current) return
-    const timer = setTimeout(onQuerySettled, 450)
+    if (!map || settledKey === fittedKey.current) return
+    const timer = setTimeout(onSettled, 450)
     return () => clearTimeout(timer)
-  }, [map, q])
+  }, [map, settledKey])
 
   // 點了一家：等網址裡的選取也更新、卡片畫出來（才量得到高度）再移動地圖
   const onPick = useEffectEvent((p: Pick) => {
@@ -435,7 +556,25 @@ export default function MichelinMap() {
     onPick(pick)
   }, [map, pick, selected])
 
-  // Esc 關掉卡片
+  // 點了訂位提醒的通知、這頁剛好開著：service worker 叫這頁換過去（public/push-sw.js）
+  const onNotificationOpen = useEffectEvent((url: string) => {
+    const target = new URL(url, window.location.origin)
+    if (!target.pathname.startsWith('/michelin')) return
+    navigate(target.pathname + target.search)
+    const id = target.searchParams.get('r')
+    if (id) setPick({ id, from: 'list' })
+  })
+  useEffect(() => {
+    const worker = navigator.serviceWorker
+    if (!worker) return
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'open' && typeof e.data.url === 'string') onNotificationOpen(e.data.url)
+    }
+    worker.addEventListener('message', onMessage)
+    return () => worker.removeEventListener('message', onMessage)
+  }, [])
+
+  // Esc 關掉卡片（篩選面板開著時先收面板，面板自己會攔下來）
   const onEscape = useEffectEvent(() => select(null))
   useEffect(() => {
     if (!selected) return
@@ -468,6 +607,7 @@ export default function MichelinMap() {
   function clearFilters() {
     setQuery('')
     setHidden(new Set())
+    setFilters(NO_FILTERS)
   }
 
   function pickFromList(id: string) {
@@ -478,6 +618,7 @@ export default function MichelinMap() {
   const counts = new Map<Award, number>()
   for (const r of inRegion) counts.set(r.award, (counts.get(r.award) ?? 0) + 1)
   const oneCity = region?.cities.length === 1
+  const active = filterCount(filters)
 
   return (
     <div className="michelin-page">
@@ -501,13 +642,25 @@ export default function MichelinMap() {
       </div>
 
       <div className="michelin-toolbar">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜尋店名、料理或地址"
-          aria-label="搜尋店名、料理或地址"
-        />
+        <div className="michelin-search">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜尋店名、料理或地址"
+            aria-label="搜尋店名、料理或地址"
+          />
+          <button
+            ref={filterButton}
+            type="button"
+            className={`secondary michelin-filter-button${active > 0 ? ' is-active' : ''}`}
+            aria-expanded={filtersOpen}
+            aria-controls="michelin-filters"
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            篩選{active > 0 && <span className="mich-filter-count">{active}</span>}
+          </button>
+        </div>
         <div className="michelin-awards" role="group" aria-label="顯示哪些獎項">
           {AWARDS.map((a) => {
             const count = counts.get(a.value) ?? 0
@@ -537,18 +690,58 @@ export default function MichelinMap() {
             )
           })}
         </div>
+        {filtersOpen && (
+          <FilterPanel
+            id="michelin-filters"
+            filters={filters}
+            onChange={setFilters}
+            inRegion={inRegion}
+            mine={mine}
+            onClose={closeFilters}
+            toggle={filterButton}
+          />
+        )}
       </div>
 
       <div className="michelin-body" data-view={view}>
         <div className="michelin-main">
           <div ref={container} className="michelin-map" role="region" aria-label="米其林餐廳地圖" />
-          {selected && <RestaurantCard ref={cardRef} r={selected} onClose={() => select(null)} />}
+          {toast && (
+            <p className="michelin-toast" role="status">
+              {toast}
+            </p>
+          )}
+          {selected && (
+            <RestaurantCard
+              ref={cardRef}
+              r={selected}
+              distance={here ? distanceMeters(here, selected) : null}
+              mine={mine}
+              onClose={() => select(null)}
+            />
+          )}
         </div>
 
         <section ref={sideRef} className="michelin-side" aria-label="餐廳清單">
-          <p className="michelin-shown">
-            {visible.length === inRegion.length ? `共 ${visible.length} 家` : `顯示 ${visible.length} / ${inRegion.length} 家`}
-          </p>
+          <div className="michelin-shown">
+            <span>
+              {visible.length === inRegion.length ? `共 ${visible.length} 家` : `顯示 ${visible.length} / ${inRegion.length} 家`}
+            </span>
+            {here ? (
+              <span className="mich-sort" role="group" aria-label="排序">
+                <button type="button" aria-pressed={!byDistance} onClick={() => setByDistance(false)}>
+                  星級
+                </button>
+                <button type="button" aria-pressed={byDistance} onClick={() => setByDistance(true)}>
+                  距離
+                </button>
+              </span>
+            ) : (
+              <button type="button" className="link mich-near" onClick={locate} disabled={locating}>
+                <span aria-hidden="true">📍</span> {locating ? '定位中…' : '離我最近'}
+              </button>
+            )}
+          </div>
           {visible.length === 0 ? (
             <div className="michelin-empty">
               <p className="muted">沒有符合的餐廳。</p>
@@ -558,28 +751,47 @@ export default function MichelinMap() {
             </div>
           ) : (
             <ol className="michelin-list">
-              {visible.map((r) => (
-                <li key={r.id} data-id={r.id}>
-                  <button
-                    type="button"
-                    className={r.id === selected?.id ? 'is-selected' : undefined}
-                    aria-current={r.id === selected?.id ? 'true' : undefined}
-                    onClick={() => pickFromList(r.id)}
-                    onPointerEnter={(e) => e.pointerType === 'mouse' && highlight(r, true)}
-                    onPointerLeave={(e) => e.pointerType === 'mouse' && highlight(r, false)}
-                    onFocus={() => highlight(r, true)}
-                    onBlur={() => highlight(r, false)}
-                  >
-                    <AwardBadge award={r.award} />
-                    <span className="mich-item-body">
-                      <strong>{r.name}</strong>
-                      <span className="muted">
-                        {oneCity ? r.district : `${r.city}${r.district}`}・{r.cuisine}
+              {listed.map((r) => {
+                const status = mine.marks.get(r.id)?.status
+                const change = changeOf(r)
+                return (
+                  <li key={r.id} data-id={r.id}>
+                    <button
+                      type="button"
+                      className={r.id === selected?.id ? 'is-selected' : undefined}
+                      aria-current={r.id === selected?.id ? 'true' : undefined}
+                      onClick={() => pickFromList(r.id)}
+                      onPointerEnter={(e) => e.pointerType === 'mouse' && highlight(r, true)}
+                      onPointerLeave={(e) => e.pointerType === 'mouse' && highlight(r, false)}
+                      onFocus={() => highlight(r, true)}
+                      onBlur={() => highlight(r, false)}
+                    >
+                      <AwardBadge award={r.award} />
+                      <span className="mich-item-body">
+                        <strong>
+                          {r.name}
+                          {change && (
+                            <span className={`mich-change-tag is-${change.kind}`} title={change.label}>
+                              <span aria-hidden="true">{change.kind === 'new' ? '新' : change.kind === 'up' ? '升' : '降'}</span>
+                              <span className="mich-sr">{change.label}</span>
+                            </span>
+                          )}
+                          {status && (
+                            <span className={`mich-mine is-${status}`} title={status === 'been' ? '吃過' : '想吃'}>
+                              <span aria-hidden="true">{status === 'been' ? '✓' : '♥'}</span>
+                              <span className="mich-sr">{status === 'been' ? '吃過' : '想吃'}</span>
+                            </span>
+                          )}
+                        </strong>
+                        <span className="muted">
+                          {oneCity ? r.district : `${r.city}${r.district}`}・{r.cuisine}
+                          {here && `・${formatDistance(distanceMeters(here, r))}`}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
+                    </button>
+                  </li>
+                )
+              })}
             </ol>
           )}
           <p className="michelin-fineprint muted">
@@ -592,46 +804,5 @@ export default function MichelinMap() {
         </section>
       </div>
     </div>
-  )
-}
-
-function RestaurantCard({ r, onClose, ref }: { r: Restaurant; onClose: () => void; ref: Ref<HTMLElement> }) {
-  return (
-    <article ref={ref} className="michelin-card" aria-labelledby="michelin-card-name">
-      <div className="michelin-card-head">
-        <AwardBadge award={r.award} />
-        <h2 id="michelin-card-name">{r.name}</h2>
-        <button type="button" className="secondary michelin-close" onClick={onClose} aria-label="關閉" title="關閉（Esc）">
-          ✕
-        </button>
-      </div>
-      <p className="michelin-card-meta">
-        <span>{awardLabel(r.award)}</span>
-        {r.green && <span className="mich-green">綠星</span>}
-        <span>{r.cuisine}</span>
-        <span title="價位">{'$'.repeat(r.price)}</span>
-        <a className="mich-guide-link" href={guideUrl(r)} target="_blank" rel="noreferrer">
-          米其林介紹 ↗
-        </a>
-      </p>
-      <p className="michelin-card-address">
-        {r.address}
-        {r.approx && <span className="muted">（地圖上是約略位置）</span>}
-      </p>
-      {/* 兩顆按鈕，手機上也排得下一列 */}
-      <div className="michelin-actions">
-        {r.phone ? (
-          <a className="mich-action" href={telHref(r.phone)} aria-label={`打電話 ${displayPhone(r.phone)}`}>
-            <span aria-hidden="true">☎</span>
-            {displayPhone(r.phone)}
-          </a>
-        ) : (
-          <span className="mich-action is-empty">沒有公開電話</span>
-        )}
-        <a className="mich-action primary" href={googleMapsUrl(r)} target="_blank" rel="noreferrer">
-          Google 地圖
-        </a>
-      </div>
-    </article>
   )
 }

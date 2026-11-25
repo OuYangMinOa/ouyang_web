@@ -78,6 +78,8 @@ async fn fake_chat(State(fake): State<Arc<FakeModel>>, Json(body): Json<Value>) 
         Reply::Call("demo__echo", r#"{"text": "哈囉"}"#.into())
     } else if has_tools && text.contains("搜尋") {
         Reply::Call("web_search", r#"{"query": "颱風", "time_range": "day"}"#.into())
+    } else if has_tools && text.contains("米其林") {
+        Reply::Call("michelin_search", r#"{"area": "臺北", "awards": ["3"], "mine": "not_been"}"#.into())
     } else if has_tools && text.contains("讀網頁") {
         Reply::Call("web_fetch", json!({ "url": *fake.page_url.lock().unwrap() }).to_string())
     } else {
@@ -612,6 +614,27 @@ async fn site_features_can_be_searched() {
 
 fn tool_names(tools: &Value) -> Vec<String> {
     tools["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_owned()).collect()
+}
+
+#[tokio::test]
+async fn michelin_restaurants_can_be_searched() {
+    let s = setup().await;
+    // 頤宮記成吃過：查「還沒吃過的」就不會出現
+    let body = json!({ "status": "been", "visited_on": "2025-03-02" });
+    let reply = s.app.call("PUT", "/api/michelin/marks/le-palais", Some(&s.alice), Some(body)).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT);
+    let chat = new_chat(&s.app, &s.alice).await;
+    let (_, events) = say(&s.app, &s.alice, chat, "台北還沒吃過的米其林三星").await;
+    let call = find(&events, "tool_call");
+    assert_eq!((call["name"].clone(), call["approval"].clone()), (json!("michelin_search"), json!(false)));
+    let result: Value = serde_json::from_str(find(&events, "tool_result")["content"].as_str().unwrap()).unwrap();
+    let names: Vec<&str> =
+        result["restaurants"].as_array().unwrap().iter().map(|r| r["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"態芮") && !names.contains(&"頤宮"), "{names:?}");
+    let first = &result["restaurants"][0];
+    assert_eq!(first["award"], "米其林三星");
+    assert!(first["link"].as_str().unwrap().starts_with("/michelin?r="), "{first}");
+    assert!(result["edition"].as_str().unwrap().contains("年版"));
 }
 
 #[tokio::test]

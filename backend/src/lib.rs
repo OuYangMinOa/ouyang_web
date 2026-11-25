@@ -16,6 +16,7 @@ pub mod chat;
 pub mod chat_rooms;
 pub mod chinesecheckers;
 pub mod contact;
+pub mod dinner;
 pub mod draw;
 pub mod draw_words;
 pub mod feedback;
@@ -31,6 +32,7 @@ pub mod lobby;
 pub mod lunar;
 pub mod mcp;
 pub mod mecha;
+pub mod michelin;
 pub mod minesrace;
 pub mod monitor;
 pub mod music;
@@ -120,6 +122,8 @@ pub struct AppState {
     pub werewolf: Arc<party::Parties<werewolf::Werewolf>>,
     pub chinesecheckers: Arc<party::Parties<chinesecheckers::ChineseCheckers>>,
     pub towerdefense: Arc<party::Parties<towerdefense::TowerDefense>>,
+    /// 吃哪家：一群人投票決定吃哪一家米其林（見 dinner.rs）
+    pub dinner: Arc<party::Parties<dinner::Dinner>>,
     /// 遊戲室：同一群人換著玩不同遊戲（只在記憶體裡，見 lobby.rs）
     pub lobbies: Arc<lobby::Lobbies>,
     /// 俄羅斯方塊單人模式進行中的局（上傳排行榜前檢查中間態用）
@@ -191,6 +195,7 @@ impl AppState {
             werewolf: Arc::default(),
             chinesecheckers: Arc::default(),
             towerdefense: Arc::default(),
+            dinner: Arc::default(),
             lobbies: Arc::default(),
             tetris_runs: Arc::default(),
             puyo_runs: Arc::default(),
@@ -342,6 +347,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/games/towerdefense/spec", get(towerdefense_spec::spec))
         .route("/games/towerdefense/party", post(party::create::<towerdefense::TowerDefense>))
         .route("/games/towerdefense/party/{code}/ws", get(party::connect::<towerdefense::TowerDefense>))
+        .route("/games/dinner/party", post(party::create::<dinner::Dinner>))
+        .route("/games/dinner/party/{code}/ws", get(party::connect::<dinner::Dinner>))
         .route("/games/lobby", post(lobby::create))
         .route("/games/lobby/{code}/ws", get(lobby::connect))
         .route("/music", get(music::list_tracks))
@@ -375,6 +382,10 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/chat/rooms/{id}", patch(chat_rooms::rename).delete(chat_rooms::delete))
         .route("/chat/rooms/{id}/code", post(chat_rooms::new_code))
         .route("/chat/rooms/{id}/members/{user}", delete(chat_rooms::remove_member))
+        .route("/michelin/marks", get(michelin::list_marks))
+        .route("/michelin/marks/{restaurant}", put(michelin::set_mark).delete(michelin::delete_mark))
+        .route("/michelin/reminders", get(michelin::list_reminders).post(michelin::create_reminder))
+        .route("/michelin/reminders/{id}", delete(michelin::delete_reminder))
         .route("/push/key", get(webpush::public_key))
         .route("/push/subscriptions", post(webpush::subscribe).delete(webpush::unsubscribe))
         .route("/push/test", post(webpush::test))
