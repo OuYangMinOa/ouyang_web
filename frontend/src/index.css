@@ -80,6 +80,9 @@
   --aqi-3: #be123c;
   --aqi-4: #7c3aed;
   --aqi-5: #7f1d1d;
+  /* 米其林地圖：星級、必比登 */
+  --mich-star: #b91c1c;
+  --mich-bib: #0f766e;
   /* 對話框後面的遮罩 */
   --scrim: rgb(28 26 23 / 0.4);
   /* 抽籤：轉盤格子、彈珠和名牌的十種顏色，lot-ink 是畫在上面的字 */
@@ -306,6 +309,8 @@
     --aqi-3: #ff6b81;
     --aqi-4: #c084fc;
     --aqi-5: #f87171;
+    --mich-star: #ff6b6b;
+    --mich-bib: #2dd4bf;
     --scrim: rgb(0 0 0 / 0.6);
     --lot-1: #ff7a3d;
     --lot-2: #60a5fa;
@@ -504,6 +509,8 @@
   --aqi-3: #ff6b81;
   --aqi-4: #c084fc;
   --aqi-5: #f87171;
+  --mich-star: #ff6b6b;
+  --mich-bib: #2dd4bf;
   --scrim: rgb(0 0 0 / 0.6);
   --lot-1: #ff7a3d;
   --lot-2: #60a5fa;

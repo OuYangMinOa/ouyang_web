@@ -1430,6 +1430,20 @@ chmod 600 ~/ouyang_web/prod/secrets.env
 的名稱表（氣象署〈颱風中文譯名及國際命名對照表〉）補上中文；同一張表也是 `/weather/typhoon/names` 頁面的資料，名字有除名替換時要手動更新。
 本機開發直接 `CWA_API_KEY=... cargo run`。
 
+## 米其林地圖
+
+`/michelin` 全台、`/michelin/<地區>`（`taipei`、`new-taipei`、`hsinchu`、`taichung`、`tainan`、`kaohsiung`，新竹市和新竹縣合在一起）。
+選中的餐廳記在網址 `?r=<id>`，連結分享出去會打開同一家。純前端，沒有後端 API。
+
+- **資料**：`frontend/src/michelin/restaurants.json`，台灣米其林指南的星級（61 家）和必比登（146 家），沒收「入選」。
+  欄位是名稱、獎項、地址、電話、座標、料理類型、價位和米其林頁面路徑，都是從[米其林指南官網](https://guide.michelin.com/tw/zh_TW)各餐廳頁面整理的。
+  官網沒有公開 API，所以是靜態資料，不在執行時去抓。每年 7～8 月公布新版後要重新整理，並更新 `michelin/regions.ts` 的版本和整理日期。
+- 官網有 6 家沒給座標（`approx: true`），地圖上是依地址估的約略位置，卡片上會註明；「Google 地圖導航」用店名加地址搜尋，不受影響。
+  16 家官網沒有公開電話。
+- `michelin/regions.ts` 只放地區和版本，給 `apps/registry.ts` 用；`data.ts` 帶著整份 JSON，只在進到這頁時才下載。
+- 地圖沿用 `weather/map.ts`（底圖跟著亮色／深色切換），點的顏色是 `--mich-star`、`--mich-bib`。
+- 即時空位：台灣星級餐廳多半用 inline 訂位，但 inline 沒有公開 API，也擋程式存取，所以這裡沒有空位資訊，要談合作才拿得到。
+
 ## LoL 世界賽
 
 `/lol` 賽況（正在打的比賽：直播＋即時數據，沒有比賽時是下一場倒數）、`/lol/schedule` 賽程、`/lol/standings` 戰績（瑞士輪、淘汰賽對戰表、入圍賽）、`/lol/match/{id}` 單場的每一局。
