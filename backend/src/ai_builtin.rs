@@ -1,8 +1,10 @@
-//! AI 助手的內建工具：直接用站上現有的功能（日曆、天氣、地震、發票、短網址…），一律以目前登入的使用者身分執行，
+//! AI 助手的內建工具：直接用站上現有的功能（日曆、天氣、地震、發票、米其林地圖、短網址…），一律以目前登入的使用者身分執行，
 //! 跟使用者自己在網頁上操作一樣（例如只看得到、改得到自己的事項）。另外還有網路搜尋和讀網頁（ai_web.rs）。
 //!
 //! 每個工具有給模型看的名稱、說明和參數（JSON schema），以及預設要不要使用者確認：會改資料的預設要確認。
 //! 管理員可以在「AI 工具」頁關掉任何一個，或改成不用確認。
+
+use std::collections::HashMap;
 
 use axum::{
     Json,
@@ -15,7 +17,7 @@ use serde_json::{Value, json};
 use crate::{
     AppState,
     auth::CurrentUser,
-    calendar, invoice, lunar, short_links,
+    calendar, invoice, lunar, michelin, short_links,
     weather::{forecast, quake, typhoon},
 };
 
@@ -30,6 +32,7 @@ pub enum Builtin {
     Typhoon,
     Earthquakes,
     Invoice,
+    Michelin,
     LinksList,
     LinkCreate,
     SiteSearch,
@@ -224,6 +227,28 @@ pub const SPECS: &[Spec] = &[
         },
     },
     Spec {
+        kind: Builtin::Michelin,
+        name: "michelin_search",
+        title: "查米其林餐廳",
+        description: "查台灣米其林指南的星級和必比登餐廳（本站米其林地圖的資料），回傳店名、獎項、料理、價位、地址、電話和本站地圖連結。                      使用者想找餐廳、問某一區有什麼米其林、問某家店的電話地址時用。text 是店名或料理的關鍵字（例如「壽司」「牛肉麵」），                      area 是縣市或區（例如「台南」「大安區」）。mine 查使用者自己記的想吃、吃過。                      資料是靜態整理的，營業時間、能不能訂位要請使用者以店家公告為準；連結是站內網址，回答時照原樣附上。",
+        writes: false,
+        parameters: || {
+            json!({ "type": "object", "properties": {
+                "text": { "type": "string", "description": "店名、料理或地址的關鍵字，空白分開好幾個（每個都要符合）" },
+                "area": { "type": "string", "description": "縣市或區，例如「台北」「新竹」「台南市中西區」" },
+                "awards": {
+                    "type": "array", "items": { "type": "string", "enum": ["3", "2", "1", "bib"] },
+                    "description": "只要這些獎項：3、2、1 是星等，bib 是必比登；不給是全部"
+                },
+                "max_price": { "type": "integer", "minimum": 1, "maximum": 4, "description": "價位上限，1 到 4 對應 $ 到 $$$$" },
+                "mine": { "type": "string", "enum": ["want", "been", "not_been"], "description": "只要使用者記成想吃的、吃過的，或還沒吃過的" },
+                "changed_this_year": { "type": "boolean", "description": "只要今年（這一版）新入選或升星的；使用者問「今年新上榜」「新摘星」時用" },
+                "green": { "type": "boolean", "description": "只要綠星（永續美食）餐廳" },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 30, "description": "幾筆，預設 10" }
+            } })
+        },
+    },
+    Spec {
         kind: Builtin::LinksList,
         name: "short_links_list",
         title: "我的短網址",
@@ -277,6 +302,7 @@ pub async fn run(state: &AppState, user: &CurrentUser, kind: Builtin, args: &Val
         Builtin::Typhoon => typhoons(state).await,
         Builtin::Earthquakes => earthquakes(state, args).await,
         Builtin::Invoice => invoice_check(state, args).await,
+        Builtin::Michelin => michelin_search(state, user, args).await,
         Builtin::LinksList => links_list(state, user).await,
         Builtin::LinkCreate => link_create(state, user, args).await,
         Builtin::SiteSearch => site_search(state, user, args).await,
@@ -698,6 +724,78 @@ fn prize(number: &str, period: &invoice::Period) -> Option<(&'static str, u32)> 
     };
     from_first
         .or_else(|| period.extra.iter().any(|extra| number.ends_with(extra.as_str())).then_some(("增開六獎", 200)))
+}
+
+async fn michelin_search(state: &AppState, user: &CurrentUser, args: &Value) -> ToolResult {
+    let mut awards = Vec::new();
+    for value in args["awards"].as_array().into_iter().flatten() {
+        let text = value.as_str().map(str::to_owned).unwrap_or_else(|| value.to_string());
+        awards.push(michelin::Award::parse(&text).ok_or_else(|| format!("看不懂的獎項 {text}，要是 3、2、1 或 bib"))?);
+    }
+    let search = michelin::Search {
+        text: arg_str(args, "text").unwrap_or_default().to_owned(),
+        area: arg_str(args, "area").unwrap_or_default().to_owned(),
+        awards,
+        max_price: args["max_price"].as_u64().and_then(|p| u8::try_from(p).ok()),
+        green_only: args["green"].as_bool().unwrap_or(false),
+        changed_only: args["changed_this_year"].as_bool().unwrap_or(false),
+    };
+    let marks: HashMap<String, michelin::Mark> = michelin::marks_of(state, user.id)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|m| (m.restaurant.clone(), m))
+        .collect();
+    let mine = arg_str(args, "mine");
+    let found: Vec<_> = search
+        .run()
+        .into_iter()
+        .filter(|r| match mine {
+            Some("want") => marks.get(&r.id).is_some_and(|m| m.status == "want"),
+            Some("been") => marks.get(&r.id).is_some_and(|m| m.status == "been"),
+            Some("not_been") => marks.get(&r.id).is_none_or(|m| m.status != "been"),
+            _ => true,
+        })
+        .collect();
+    if found.is_empty() {
+        return Ok("米其林地圖裡沒有符合的餐廳；可以放寬條件（例如拿掉價位、換個關鍵字）再查一次".into());
+    }
+    let limit = args["limit"].as_u64().map_or(10, |n| n.clamp(1, 30)) as usize;
+    let list: Vec<Value> = found
+        .iter()
+        .take(limit)
+        .map(|r| {
+            let mut item = json!({
+                "name": r.name,
+                "award": r.award.label(),
+                "cuisine": r.cuisine,
+                "price": "$".repeat(usize::from(r.price)),
+                "area": format!("{}{}", r.city, r.district),
+                "address": r.address,
+                "phone": r.display_phone(),
+                "link": r.link(),
+            });
+            if r.green {
+                item["green_star"] = json!(true);
+            }
+            if let Some(change) = r.change() {
+                item["change"] = json!(change);
+            }
+            if let Some(mark) = marks.get(&r.id) {
+                item["mine"] = json!(if mark.status == "been" { "吃過" } else { "想吃" });
+                if let Some(date) = &mark.visited_on {
+                    item["visited_on"] = json!(date);
+                }
+            }
+            item
+        })
+        .collect();
+    Ok(to_text(&json!({
+        "edition": format!("台灣米其林指南 {} 年版", michelin::GUIDE_EDITION),
+        "total": found.len(),
+        "shown": list.len(),
+        "restaurants": list,
+    })))
 }
 
 async fn invoice_check(state: &AppState, args: &Value) -> ToolResult {

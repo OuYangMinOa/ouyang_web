@@ -137,6 +137,16 @@ export const GAMES: GameInfo[] = [
     music: () => import('./liarsdice/song'),
   },
   {
+    id: 'dinner',
+    name: '吃哪家',
+    icon: '🗳️',
+    blurb: '一群人決定不了吃哪家？每個人從米其林地圖的星級和必比登裡提名幾家，大家勾「可以接受」的，票最多的勝出，同票就轉盤抽籤。2～10 人。',
+    tags: ['多人', '線上'],
+    category: '派對',
+    component: lazyPage(() => import('./dinner')),
+    lobby: { kind: 'party', players: '2～10 人' },
+  },
+  {
     id: 'telephone',
     name: '傳話畫畫',
     icon: '📞',
