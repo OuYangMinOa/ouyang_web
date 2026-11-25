@@ -31,18 +31,30 @@ export function useResolvedTheme() {
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas'
 const ATTRIBUTION = 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'
 
+type MapOptions = {
+  /** 滑鼠滾輪直接縮放（整頁就是地圖、頁面本身不太需要捲的才打開） */
+  wheelZoom?: boolean
+}
+
 /** 在 container 裡建立地圖，回傳 map（建立好之前是 null） */
-export function useLeafletMap(container: RefObject<HTMLDivElement | null>, center: L.LatLngExpression, zoom: number) {
+export function useLeafletMap(
+  container: RefObject<HTMLDivElement | null>,
+  center: L.LatLngExpression,
+  zoom: number,
+  { wheelZoom = false }: MapOptions = {},
+) {
   const [map, setMap] = useState<L.Map | null>(null)
   const theme = useResolvedTheme()
 
   useEffect(() => {
     const el = container.current
     if (!el) return
-    // 手機上用單指捲動頁面，不要一碰就拖到地圖；兩指才縮放與拖曳
-    const instance = L.map(el, { center, zoom, worldCopyJump: false, scrollWheelZoom: false, zoomSnap: 0.5 })
-    instance.on('focus', () => instance.scrollWheelZoom.enable())
-    instance.on('blur', () => instance.scrollWheelZoom.disable())
+    const instance = L.map(el, { center, zoom, worldCopyJump: false, scrollWheelZoom: wheelZoom, zoomSnap: 0.5 })
+    if (!wheelZoom) {
+      // 捲頁面時不要被地圖攔住：先點一下地圖才能用滾輪縮放
+      instance.on('focus', () => instance.scrollWheelZoom.enable())
+      instance.on('blur', () => instance.scrollWheelZoom.disable())
+    }
     setMap(instance)
     // 外框大小改變（例如側邊欄收合）時重新計算
     const resize = new ResizeObserver(() => instance.invalidateSize())
@@ -52,7 +64,7 @@ export function useLeafletMap(container: RefObject<HTMLDivElement | null>, cente
       instance.remove()
       setMap(null)
     }
-    // 中心與縮放只在建立時用
+    // 中心、縮放和選項只在建立時用
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [container])
 

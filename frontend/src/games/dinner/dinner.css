@@ -1,0 +1,256 @@
+/* ---- 吃哪家 ---- */
+
+.dn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.dn-board {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.dn-board h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+.dn-board h3 .muted {
+  font-size: 14px;
+  font-weight: 400;
+}
+.dn-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 候選、搜尋結果、開票結果：一家一列 */
+.dn-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.dn-line {
+  color: var(--text-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+.dn-line + .dn-line {
+  border-top: 1px solid var(--border);
+}
+.dn-line .mich-badge {
+  width: 40px;
+}
+.dn-line-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dn-line-body strong {
+  overflow-wrap: anywhere;
+}
+.dn-line-body .muted {
+  font-size: 13px;
+}
+.dn-line > button {
+  flex-shrink: 0;
+}
+
+.dn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 誰好了 */
+.dn-seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dn-seats li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-h);
+  font-size: 14px;
+}
+.dn-seats li.is-done {
+  border-color: var(--ok);
+}
+.dn-seats li.is-offline {
+  opacity: 0.55;
+}
+.dn-seat-state {
+  color: var(--text);
+  font-size: 12px;
+}
+.dn-seats li.is-done .dn-seat-state {
+  color: var(--ok);
+}
+
+/* 挑店 */
+.dn-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dn-picker .dn-list {
+  max-height: 420px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.dn-picker .segmented {
+  flex-wrap: wrap;
+}
+.dn-wants {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+button.dn-want {
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+/* 投票的勾選 */
+.dn-pick {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dn-pick input {
+  width: 20px;
+  height: 20px;
+}
+
+/* 開票 */
+.dn-votes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 45%;
+  text-align: right;
+}
+.dn-votes .muted {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.dn-votes.is-winner strong {
+  color: var(--accent);
+}
+
+/* 轉盤：亮的那格跳來跳去，停在抽中的那家 */
+.dn-wheel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dn-wheel li {
+  padding: 10px 16px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-h);
+  font-weight: 700;
+}
+.dn-wheel li.is-lit {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+}
+.dn-wheel li.is-winner {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.dn-winner {
+  padding: 16px 18px;
+  border: 2px solid var(--accent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+.dn-winner h3 {
+  align-items: center;
+  margin: 2px 0 4px;
+  font-size: 24px;
+}
+.dn-winner-label {
+  margin: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+.dn-winner > .muted {
+  margin: 0;
+}
+.dn-winner-address {
+  margin: 6px 0 12px;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+a.dn-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: var(--text-h);
+  text-decoration: none;
+}
+a.dn-link:hover {
+  background: var(--bg);
+}
+a.dn-link.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dn-wheel li {
+    transition:
+      background-color 0.08s ease,
+      border-color 0.08s ease;
+  }
+  .dn-winner {
+    animation: dn-pop 0.32s ease-out;
+  }
+}
+@keyframes dn-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}

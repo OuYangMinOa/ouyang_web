@@ -56,6 +56,9 @@ const TyphoonPage = lazyPage(() => import('./weather/TyphoonPage'))
 const TyphoonNames = lazyPage(() => import('./weather/TyphoonNames'))
 const ForecastPage = lazyPage(() => import('./weather/ForecastPage'))
 const QuakePage = lazyPage(() => import('./weather/QuakePage'))
+// 米其林地圖：Leaflet 和整份餐廳資料都在這一頁才下載
+const MichelinMap = lazyPage(() => import('./michelin/MichelinMap'))
+const MyMichelin = lazyPage(() => import('./michelin/MyMichelin'))
 // 隱藏頁面：不在任何選單裡，只有知道網址的人進得來；條碼函式庫也只在這頁下載
 const DataMatrixPage = lazyPage(() => import('./datamatrix/DataMatrixPage'))
 const ThreadsSetup = lazyPage(() => import('./threads/SetupPage'))
@@ -249,6 +252,11 @@ function App() {
                   <Route path="typhoon/names" element={<Lazy page={TyphoonNames} />} />
                   <Route path="forecast" element={<Lazy page={ForecastPage} />} />
                   <Route path="quake" element={<Lazy page={QuakePage} />} />
+                </Route>
+                <Route path="/michelin" element={<AppLayout />}>
+                  <Route index element={<Lazy page={MichelinMap} />} />
+                  <Route path="me" element={<Lazy page={MyMichelin} />} />
+                  <Route path=":region" element={<Lazy page={MichelinMap} />} />
                 </Route>
                 <Route path="/lol" element={<AppLayout />}>
                   {/* 賽程和直播狀態在外層抓一次，切換頁面不用重抓 */}

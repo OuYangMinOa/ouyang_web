@@ -17,6 +17,7 @@ use backend::{
     funcsay::FuncSay,
     healthcheck,
     honeypot::Honeypot,
+    michelin,
     monitor::{self, Monitor},
     router,
     weather::{self, Weather},
@@ -95,6 +96,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     state.web = Arc::new(ai_web::Web::from_env());
     // 幹話語錄：主機上的語錄服務（FUNCSAY_API_URL），沒設定時頁面顯示連不上
     state.funcsay = Arc::new(FuncSay::from_env());
+    // 米其林地圖的訂位提醒：到了時間推播
+    michelin::spawn(state.clone());
     let draining = state.draining.clone();
     let access = state.access_log.clone();
     let app = router(state, &static_dir);

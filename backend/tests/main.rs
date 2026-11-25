@@ -28,6 +28,7 @@ mod games;
 mod honeypot;
 mod lobby;
 mod mecha;
+mod michelin;
 mod minesrace;
 mod monitor;
 mod music;
