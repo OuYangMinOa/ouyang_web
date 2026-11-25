@@ -1,0 +1,352 @@
+/* 米其林地圖：顏色都用 index.css 的變數（--mich-star、--mich-bib 在亮色、深色各一組） */
+
+.michelin-page {
+  min-width: 0;
+  --mich-map-h: min(68vh, 620px);
+}
+
+.michelin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+}
+.michelin-head h1 {
+  margin: 0;
+}
+
+/* ---- 搜尋與獎項開關 ---- */
+
+.michelin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.michelin-toolbar input[type='search'] {
+  flex: 1 1 220px;
+}
+.michelin-awards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mich-star1,
+.mich-star2,
+.mich-star3 {
+  --mich: var(--mich-star);
+}
+.mich-bib {
+  --mich: var(--mich-bib);
+}
+
+button.mich-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+}
+button.mich-toggle[aria-pressed='true'] {
+  border-color: var(--mich);
+  color: var(--text-h);
+  background: color-mix(in srgb, var(--mich) 12%, transparent);
+}
+.mich-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--mich);
+  box-sizing: border-box;
+}
+button.mich-toggle[aria-pressed='true'] .mich-swatch {
+  background: var(--mich);
+}
+.mich-count {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ---- 版面：桌機地圖在左、清單在右；窄螢幕上下排 ---- */
+
+.michelin-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.michelin-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  .michelin-body {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    align-items: start;
+  }
+  /* 和地圖一樣高：卡片在上面，清單佔剩下的高度自己捲 */
+  .michelin-side {
+    height: max(var(--mich-map-h), 320px);
+  }
+  .michelin-list {
+    flex: 1;
+    min-height: 120px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+.michelin-main {
+  min-width: 0;
+}
+
+/* ---- 地圖 ---- */
+
+.michelin-map {
+  height: var(--mich-map-h);
+  min-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  /* Leaflet 的控制項 z-index 很高，關在這個容器裡，免得蓋過頁首的下拉選單 */
+  isolation: isolate;
+}
+@media (max-width: 600px) {
+  .michelin-page {
+    --mich-map-h: 56vh;
+  }
+}
+.michelin-map.leaflet-container {
+  font: inherit;
+  background: var(--surface);
+}
+.michelin-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text);
+  font-size: 11px;
+}
+.michelin-map .leaflet-control-attribution a {
+  color: var(--text-h);
+}
+.michelin-map .leaflet-bar a {
+  background: var(--surface);
+  color: var(--text-h);
+  border-color: var(--border);
+}
+.michelin-map .leaflet-tooltip {
+  background: var(--surface);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.michelin-map .leaflet-tooltip-top::before {
+  border-top-color: var(--border);
+}
+
+/* SVG 的 fill／stroke 屬性不吃 CSS 變數，所以顏色寫在 class */
+.mich-dot {
+  fill: var(--mich);
+  fill-opacity: 0.85;
+  stroke: var(--surface);
+  stroke-width: 1.5;
+  cursor: pointer;
+}
+.mich-dot.is-selected {
+  fill-opacity: 1;
+  stroke: var(--text-h);
+  stroke-width: 3;
+}
+
+.michelin-hint {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* ---- 選中的店家 ---- */
+
+.michelin-card {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding: 16px;
+  scroll-margin-bottom: 16px;
+}
+.michelin-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.michelin-card-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+button.michelin-close {
+  flex-shrink: 0;
+  width: 40px;
+  padding: 0;
+}
+.michelin-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 8px 0 12px;
+  color: var(--text);
+  font-size: 14px;
+}
+.mich-green {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.michelin-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0 0 14px;
+}
+.michelin-facts dt {
+  color: var(--text);
+}
+.michelin-facts dd {
+  margin: 0;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.michelin-facts a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.michelin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+a.mich-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: var(--text-h);
+  text-decoration: none;
+}
+a.mich-action.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+@media (max-width: 480px) {
+  a.mich-action {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---- 徽章 ---- */
+
+.mich-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--mich);
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: var(--mich);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  white-space: nowrap;
+}
+.mich-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- 清單 ---- */
+
+.michelin-shown {
+  margin: 0;
+  font-size: 14px;
+}
+/* 星數不同時徽章一樣寬，店名才對得齊 */
+.michelin-list .mich-badge {
+  width: 40px;
+}
+.michelin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.michelin-list li + li {
+  border-top: 1px solid var(--border);
+}
+.michelin-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-h);
+  text-align: left;
+}
+.michelin-list li:first-child button {
+  border-radius: 12px 12px 0 0;
+}
+.michelin-list li:last-child button {
+  border-radius: 0 0 12px 12px;
+}
+.michelin-list button:hover {
+  background: color-mix(in srgb, var(--text-h) 5%, transparent);
+}
+.michelin-list button.is-selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.mich-item-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mich-item-body strong {
+  overflow-wrap: anywhere;
+}
+.mich-item-body .muted {
+  font-size: 13px;
+}
+
+.michelin-fineprint {
+  margin-top: 16px;
+  font-size: 13px;
+}
+.michelin-fineprint a {
+  color: inherit;
+}

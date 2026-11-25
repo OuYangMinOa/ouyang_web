@@ -1,6 +1,7 @@
 import { PERMISSIONS } from '../api'
 import type { NavGroup, NavItem } from '../components/SideNav'
 import { GAME_CATEGORIES, GAMES } from '../games/registry'
+import { GUIDE_EDITION, REGIONS } from '../michelin/regions'
 import { TOOL_CATEGORIES, TOOLS } from '../tools/registry'
 
 export type AppInfo = {
@@ -136,6 +137,24 @@ export const APPS: AppInfo[] = [
           { to: '/weather/typhoon/names', label: '颱風名稱表', icon: '📋' },
           { to: '/weather/forecast', label: '全台天氣', icon: '⛅' },
           { to: '/weather/quake', label: '地震', icon: '📈' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'michelin',
+    name: '米其林地圖',
+    icon: '🍽️',
+    glyph: '饌',
+    blurb: `${GUIDE_EDITION} 台灣米其林指南的星級和必比登餐廳，在地圖上照地區找。點一下看地址和電話，可以直接開 Google 地圖導航。`,
+    tag: '星級 · 必比登',
+    live: true,
+    wide: true,
+    nav: [
+      {
+        items: [
+          { to: '/michelin', label: '全台', icon: '🗺️' },
+          ...REGIONS.map((r) => ({ to: `/michelin/${r.slug}`, label: r.name, icon: '📍' })),
         ],
       },
     ],
