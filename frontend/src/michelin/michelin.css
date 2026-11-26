@@ -368,8 +368,10 @@ button.mich-toggle[aria-pressed='false'] .mich-count {
   border-top-color: var(--border);
 }
 
-/* 店家的點：外層 28px 是點擊範圍，裡面的圓才是看到的大小 */
-.mich-pin {
+/* 店家的點：外層 28px 是點擊範圍，裡面的圓才是看到的大小。
+   外層同時是 Leaflet 的 .leaflet-marker-icon（display: block），要比它多一層選擇器才蓋得過：
+   正式版的 CSS 分檔載入，leaflet.css 常常排在這個檔案後面，同樣的權重會輸，裡面的圓就變成 4px 寬的直條 */
+.michelin-map .mich-pin {
   display: grid;
   place-items: center;
 }
@@ -430,8 +432,9 @@ button.mich-toggle[aria-pressed='false'] .mich-count {
     0 0 2px var(--surface),
     0 0 3px var(--surface);
 }
-/* 篩掉的、拉遠時收起來的：留在原地淡掉，不重建 */
-.mich-pin.is-hidden,
+/* 篩掉的、拉遠時收起來的：留在原地淡掉，不重建。
+   要蓋過 Leaflet 的 .leaflet-marker-icon.leaflet-interactive（pointer-events: auto），不然看不到的點還點得到 */
+.michelin-map .mich-pin.is-hidden,
 .michelin-map.is-overview .mich-pin:not(.is-selected) {
   pointer-events: none;
 }
