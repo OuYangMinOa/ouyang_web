@@ -5,7 +5,7 @@ import { MONSTER_LOOK, TOWER_LOOK } from './models'
 import { seatName, type Difficulty, type GameMode, type Spec, type TdRoom, type TdView } from './online'
 import { levelText, reachText, seatColor } from './stats'
 
-/** 選單、大廳的選項、說明、結算、對戰中的選單（連線和開局在 index.tsx） */
+/** 選單、大廳的選項、說明（玩法和圖鑑）、結算、對戰中的選單（連線和開局在 index.tsx） */
 
 const MODES: { value: GameMode; label: string }[] = [
   { value: 'coop', label: '合作' },
@@ -34,11 +34,7 @@ function Options({ party, spec }: { party: TdRoom; spec: Spec }) {
   return (
     <>
       <Segmented label="模式" value={o.mode} options={MODES} onChange={(mode) => set({ mode })} disabled={locked} />
-      <p className="td-help">
-        {o.mode === 'coop'
-          ? '合作：大家守同一塊場地、共用生命，各自有各自的錢。怪物的血量跟著人數變多，打倒一隻每個人都拿到賞金。'
-          : '對抗：每個人守自己的場地，出一樣的波次。可以花錢派怪去打別人（順便提高自己每波的收入），撐到最後的人贏。至少 2 個人，可以加電腦。'}
-      </p>
+      <p className="td-help muted">{o.mode === 'coop' ? '一起守同一塊場地，共用生命。' : '各守各的，花錢派怪打別人，撐到最後的贏。'}</p>
       <Segmented
         label="地圖"
         value={o.map}
@@ -46,11 +42,7 @@ function Options({ party, spec }: { party: TdRoom; spec: Spec }) {
         onChange={(id) => set({ map: id })}
         disabled={locked}
       />
-      {map && (
-        <p className="td-help">
-          {map.blurb}（{map.w}×{map.h} 格）
-        </p>
-      )}
+      {map && <p className="td-help muted">{map.blurb}</p>}
       <Segmented label="難度" value={o.difficulty} options={LEVELS} onChange={(difficulty) => set({ difficulty })} disabled={locked} />
       {o.mode === 'coop' && (
         <Segmented label="要撐幾波" value={o.waves} options={WAVES} onChange={(waves) => set({ waves })} disabled={locked} />
@@ -58,115 +50,133 @@ function Options({ party, spec }: { party: TdRoom; spec: Spec }) {
       {room.players.some((p) => p.bot) && (
         <Segmented label="電腦強度" value={o.bots} options={LEVELS} onChange={(bots) => set({ bots })} disabled={locked} />
       )}
-      {!party.isHost && <p className="muted td-help">這些設定由房主決定。</p>}
     </>
   )
 }
 
-function HowTo({ touch }: { touch: boolean }) {
+/** 操作：按鍵（觸控是手勢）對照表 */
+const KEYS: [string, string][] = [
+  ['1～7', '選塔'],
+  ['點格子', '蓋塔'],
+  ['右鍵・Esc', '取消'],
+  ['U・X', '升級・拆掉'],
+  ['空白鍵', '準備好了'],
+  ['拖曳・滾輪', '移動・縮放'],
+  ['Q・E', '旋轉'],
+  ['Tab', '玩家列表'],
+]
+const GESTURES: [string, string][] = [
+  ['點塔再點格子', '預覽範圍'],
+  ['再點同一格', '蓋塔'],
+  ['點蓋好的塔', '升級・拆掉'],
+  ['一指拖曳', '移動'],
+  ['兩指', '縮放・旋轉'],
+]
+
+/** 玩法：幾條規則加一張操作表 */
+function HowTo({ spec, touch }: { spec: Spec; touch: boolean }) {
+  const boss = Math.max(1, ...spec.monsters.map((m) => m.lives))
+  const groundOnly = spec.towers.filter((t) => t.ground && !t.air).map((t) => t.name.replace(/塔$/, ''))
   return (
-    <div className="td-help">
-      <ul>
-        <li>怪物一波一波從紫色的入口走向出口的水晶，走到一隻扣一條命（魔王扣 5 條）。</li>
+    <>
+      <ul className="td-rules">
         <li>
-          <strong>塔會擋路</strong>：怪物要繞過去，所以塔同時也是迷宮的牆。把路排得越長，怪物挨打越久；但不能完全堵死，地上的箭頭是怪物現在會走的路。
+          怪物走到出口扣 1 命{boss > 1 && `（魔王 ${boss} 命）`}。
         </li>
-        <li>飛行的怪不走迷宮，從入口直直飛向出口；火砲和毒藤打不到牠們。</li>
-        <li>打倒怪物拿賞金，每一波開始還有補給金。塔可以升到 4 級，拆掉退七成（第一波開始前全額退，放心試排）。</li>
         <li>
-          {touch
-            ? '操作：點下面的塔、再點格子看範圍，再點一次同一格就蓋。點蓋好的塔可以升級、拆掉、改先打誰。一指拖曳移動畫面，兩指捏合縮放、扭轉旋轉。'
-            : '操作：按 1～7 或點下面的塔，再點格子就蓋（右鍵或 Esc 取消）。點蓋好的塔可以升級（U）、拆掉（X）、改先打誰。拖曳移動畫面，滾輪縮放，右鍵拖曳或 Q／E 旋轉，空白鍵「準備好了」。'}
+          <strong>塔會擋路</strong>：路排得越長越好，但不能堵死。
+        </li>
+        <li>
+          飛行怪直飛出口{groundOnly.length > 0 && `，${groundOnly.join('、')}打不到`}。
+        </li>
+        <li>
+          塔最高 {spec.maxLevel} 級；拆掉退 {Math.round(spec.refund * 10)} 成，第一波前全額退。
         </li>
       </ul>
+      <dl className="td-keys">
+        {(touch ? GESTURES : KEYS).map(([key, what]) => (
+          <div key={key}>
+            <dt>{key}</dt>
+            <dd>{what}</dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  )
+}
+
+type InfoTab = 'how' | 'towers' | 'monsters'
+const INFO_TABS: { value: InfoTab; label: string }[] = [
+  { value: 'how', label: '玩法' },
+  { value: 'towers', label: '塔' },
+  { value: 'monsters', label: '怪物' },
+]
+
+/** 說明：玩法和操作、塔和怪物的圖鑑。選單和對戰中的選單都從「說明」按鈕打開 */
+export function InfoPanel({ spec, touch, onClose }: { spec: Spec; touch: boolean; onClose: () => void }) {
+  const [tab, setTab] = useState<InfoTab>('how')
+  return (
+    <div className="td-layer td-center td-info-layer" onClick={onClose}>
+      <div className="td-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="說明">
+        <div className="td-info-head">
+          <h2>說明</h2>
+          <button type="button" className="td-x" onClick={onClose} aria-label="關閉" title="關閉（Esc）">
+            ×
+          </button>
+        </div>
+        <Segmented value={tab} options={INFO_TABS} onChange={setTab} />
+        {tab === 'how' && <HowTo spec={spec} touch={touch} />}
+        {tab === 'towers' && (
+          <ul className="td-cards">
+            {spec.towers.map((t) => (
+              <li key={t.id}>
+                <span className="td-card-icon" aria-hidden="true">
+                  {TOWER_LOOK[t.id].icon}
+                </span>
+                <div>
+                  <strong>{t.name}</strong>
+                  <span className="chip subtle">{reachText(t)}</span>
+                  <span className="td-cost">{t.levels[0].cost}</span>
+                  <p>{t.blurb}</p>
+                  <p className="muted">{levelText(t, t.levels[0])}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {tab === 'monsters' && (
+          <ul className="td-cards">
+            {spec.monsters.map((m) => (
+              <li key={m.id}>
+                <span className="td-card-icon" aria-hidden="true">
+                  {MONSTER_LOOK[m.id].icon}
+                </span>
+                <div>
+                  <strong>{m.name}</strong>
+                  {m.air && <span className="chip subtle">飛行</span>}
+                  {m.phys < 1 && <span className="chip subtle">物抗 {Math.round((1 - m.phys) * 100)}%</span>}
+                  {m.magic < 1 && <span className="chip subtle">魔抗 {Math.round((1 - m.magic) * 100)}%</span>}
+                  <p>{m.blurb}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
 
-/** 塔和怪物的圖鑑 */
-function Guide({ spec }: { spec: Spec }) {
-  const [tab, setTab] = useState<'towers' | 'monsters'>('towers')
-  return (
-    <section className="td-guide">
-      <Segmented
-        label="圖鑑"
-        value={tab}
-        options={[
-          { value: 'towers', label: '塔' },
-          { value: 'monsters', label: '怪物' },
-        ]}
-        onChange={setTab}
-      />
-      {tab === 'towers' ? (
-        <ul className="td-cards">
-          {spec.towers.map((t) => (
-            <li key={t.id}>
-              <span className="td-card-icon" aria-hidden="true">
-                {TOWER_LOOK[t.id].icon}
-              </span>
-              <div>
-                <strong>{t.name}</strong>
-                <span className="chip subtle">{reachText(t)}</span>
-                <span className="chip subtle">{t.levels[0].cost} 元</span>
-                <p>{t.blurb}</p>
-                <p className="muted">
-                  1 級：{levelText(t, t.levels[0])}
-                  <br />
-                  {t.levels.length} 級：{levelText(t, t.levels[t.levels.length - 1])}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <ul className="td-cards">
-          {spec.monsters.map((m) => (
-            <li key={m.id}>
-              <span className="td-card-icon" aria-hidden="true">
-                {MONSTER_LOOK[m.id].icon}
-              </span>
-              <div>
-                <strong>{m.name}</strong>
-                {m.air && <span className="chip subtle">飛行</span>}
-                {m.phys < 1 && <span className="chip subtle">物理抗性 {Math.round((1 - m.phys) * 100)}%</span>}
-                {m.magic < 1 && <span className="chip subtle">魔法抗性 {Math.round((1 - m.magic) * 100)}%</span>}
-                <p>{m.blurb}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  )
-}
-
-/** 選單畫面：還沒進房間時建立／加入（也可以一鍵自己練習），進了房間是大廳和聊天 */
-export function Menu({
-  party,
-  spec,
-  touch,
-  onPractice,
-}: {
-  party: TdRoom
-  spec: Spec
-  touch: boolean
-  onPractice: () => void
-}) {
+/** 選單畫面：還沒進房間時建立／加入（也可以一鍵自己練習），進了房間是大廳和聊天。玩法在「說明」按鈕裡 */
+export function Menu({ party, spec, onPractice }: { party: TdRoom; spec: Spec; onPractice: () => void }) {
   if (!party.code) {
     return (
-      <>
-        <PartyEntry party={party}>
-          <p className="td-help">
-            蓋塔擋住一波一波的怪物：塔會擋路，所以怎麼排迷宮和蓋什麼塔一樣重要。可以大家一起守同一塊場地（合作），
-            也可以各守各的、派怪去打別人（對抗）。1～8 人，人不夠可以加電腦。
-          </p>
-          <button type="button" className="secondary" onClick={onPractice} disabled={party.busy}>
-            自己先練習（一個人、合作模式）
-          </button>
-        </PartyEntry>
-        <HowTo touch={touch} />
-        <Guide spec={spec} />
-      </>
+      <PartyEntry party={party}>
+        <p className="td-help">蓋塔排迷宮，擋住一波波怪物。1～8 人，合作或對抗。</p>
+        <button type="button" className="secondary" onClick={onPractice} disabled={party.busy}>
+          單人練習
+        </button>
+      </PartyEntry>
     )
   }
   return (
@@ -177,8 +187,6 @@ export function Menu({
         <>
           <PartyLobby party={party} options={<Options party={party} spec={spec} />} />
           <ChatBox party={party} />
-          <HowTo touch={touch} />
-          <Guide spec={spec} />
         </>
       ) : (
         !party.error && <p className="muted">連線中…</p>
@@ -253,7 +261,7 @@ export function Results({
     detail = (
       <>
         {view.won ? `${view.wave} 波全部撐過去` : `倒在第 ${view.wave} 波`}
-        {view.best > 0 && <span className="muted">（這個房間最多撐過 {view.best} 波）</span>}
+        {view.best > 0 && <span className="muted">（最佳 {view.best} 波）</span>}
       </>
     )
   } else {
@@ -297,35 +305,36 @@ export function Results({
 /** 對戰中按 Esc：遊戲不會停，只是打開選單 */
 export function PauseMenu({
   party,
-  touch,
   sound,
   onSound,
+  onInfo,
   onResume,
   onLeave,
 }: {
   party: TdRoom
-  touch: boolean
   sound: boolean
   onSound: () => void
+  /** 打開說明（玩法、圖鑑） */
+  onInfo: () => void
   onResume: () => void
   onLeave: () => void
 }) {
   return (
     <div className="td-layer td-center" onClick={onResume}>
       <div className="td-panel td-pause" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="選單">
-        <h2>選單</h2>
-        <p className="td-help">遊戲不會暫停，怪物還在走！</p>
+        <h2>
+          選單 <small className="muted">遊戲不會暫停</small>
+        </h2>
         <button type="button" onClick={onResume}>
           回到遊戲
         </button>
         <button type="button" className="secondary" onClick={onSound} aria-pressed={sound}>
           {sound ? '🔊 音效：開' : '🔇 音效：關'}
         </button>
+        <button type="button" className="secondary" onClick={onInfo}>
+          ℹ️ 說明
+        </button>
         <ChatBox party={party} />
-        <details className="td-chat">
-          <summary>怎麼玩</summary>
-          <HowTo touch={touch} />
-        </details>
         {party.isHost && (
           <button type="button" className="secondary" onClick={() => window.confirm('中止這一局，大家回到大廳？') && party.abort()}>
             中止這局

@@ -16,6 +16,14 @@ export type HudSeat = { name: string; team: Team }
 
 const RADAR_STATE = ['hidden', 'ally', 'enemy', 'me', 'spotted'] as const
 
+/** 操控偵察機時畫面下面的按鍵提示（鍵盤滑鼠） */
+const FLIGHT_KEYS: [string, string][] = [
+  ['空白鍵', '上升'],
+  ['Shift', '下降'],
+  ['左鍵', '引爆'],
+  ['E', '回機甲'],
+]
+
 /** 小地圖上偵察機的掃描範圍：半徑 1、朝 +y（往南，方向角 0）的扇形，再照鏡頭方向轉、照看得多遠放大 */
 const WEDGE = (() => {
   const a = (DRONE.viewH * Math.PI) / 180
@@ -325,11 +333,9 @@ export function Hud({
         </div>
         <div className="mecha-flight-reticle" />
         <div className="mecha-flight-signal" ref={signalMsg} data-state="ok">
-          <span className="weak">
-            訊號變弱<em>：畫面越來越糊，看得到的距離變短</em>
-          </span>
+          <span className="weak">訊號變弱</span>
           <span className="lost">
-            訊號中斷<em>：往回飛一點才看得到</em>
+            訊號中斷<em>，往回飛</em>
           </span>
         </div>
         <div className="mecha-flight-info mecha-chip">
@@ -349,14 +355,20 @@ export function Hud({
             <span ref={farText} className="mecha-flight-secs" />
           </span>
         </div>
-        <div className="mecha-flight-hint mecha-chip">
-          {touch
-            ? '框裡看得到的敵人才掃得到。「上升」「下降」調高度，「引爆」炸掉偵察機；「回到機甲」讓它停在原地繼續偵測'
-            : '框裡看得到的敵人才掃得到。WASD 移動、滑鼠轉方向，空白鍵上升、Shift 下降；左鍵引爆，E 回到機甲（停在原地，鏡頭朝同一個方向繼續偵測）'}
-        </div>
+        {/* 觸控的按鈕上就寫著做什麼，不用再說明 */}
+        {!touch && (
+          <dl className="mecha-flight-hint mecha-chip">
+            {FLIGHT_KEYS.map(([key, what]) => (
+              <div key={key}>
+                <dt>{key}</dt>
+                <dd>{what}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
       <div className="mecha-scanned" ref={scannedRef} data-on="false" role="status">
-        ◉ 被敵人的偵察機掃到了
+        ◉ 被偵察機掃到了
       </div>
       <div className="mecha-mortar" ref={mortarRef} data-on="false" aria-live="off">
         <div className="mecha-elev" aria-hidden="true" style={{ '--steps': ELEV_STEPS } as CSSProperties}>
@@ -387,7 +399,7 @@ export function Hud({
         ⚠ 飛彈鎖定！
       </div>
       <div className="mecha-safe" ref={safeRef} data-on="false">
-        重生點：敵人打不到你，你也不能開火
+        重生點・無敵，不能開火
       </div>
 
       <div className="mecha-chip mecha-vitals" aria-label="機體狀態">

@@ -8,7 +8,7 @@ import { useParty } from '../shared/useParty'
 import { TdGame, type GameEvent, type TowerInfo } from './game'
 import { BuildInfo, Players, Resources, SendPanel, Shop, TowerPanel, WaveBar } from './Hud'
 import { loadSpec, seatName, type AimMode, type Spec, type TdAction, type TdParty, type TdView, type TowerId } from './online'
-import { Menu, PauseMenu, Results } from './Panels'
+import { InfoPanel, Menu, PauseMenu, Results } from './Panels'
 import { createStats } from './stats'
 import './towerdefense.css'
 
@@ -47,6 +47,8 @@ export default function TowerDefense() {
   const [feed, setFeed] = useState<Note[]>([])
   const [leak, setLeak] = useState(0)
   const [menu, setMenu] = useState(false)
+  /** 說明（玩法、圖鑑）開著 */
+  const [info, setInfo] = useState(false)
   const [board, setBoard] = useState(false)
   const [sending, setSending] = useState(false)
   const [hideResults, setHideResults] = useState(false)
@@ -221,6 +223,7 @@ export default function TowerDefense() {
     setCell(null)
     setFeed([])
     setMenu(false)
+    setInfo(false)
     setSending(false)
     setHideResults(false)
     if (view) {
@@ -228,6 +231,8 @@ export default function TowerDefense() {
       setAim(view.aim)
     }
   }
+  // 說明是從對戰中的選單打開的：這一局結束、選單收起來時跟著關
+  if (info && ended) setInfo(false)
   // 每次收到 view：準備好了沒、收入、派兵的目標以伺服器的為準
   const [seen, setSeen] = useState<TdView | null>(null)
   if (view !== seen) {
@@ -399,6 +404,10 @@ export default function TowerDefense() {
     const down = (e: KeyboardEvent) => {
       if (typing(e.target) || e.ctrlKey || e.metaKey || e.altKey) return
       const g = gameRef.current
+      if (info) {
+        if (e.code === 'Escape') setInfo(false)
+        return
+      }
       if (!battle || !g || !spec) {
         if (e.code === 'KeyM') toggleSound()
         return
@@ -630,13 +639,7 @@ export default function TowerDefense() {
               ) : home && (build || cell !== null) ? (
                 <BuildInfo
                   tower={spec.towers.find((t) => t.id === build) ?? null}
-                  hint={
-                    cell !== null
-                      ? '選好格子了：按下面的塔就蓋在這一格'
-                      : touch
-                        ? '點格子看範圍，再點一次同一格就蓋'
-                        : '點格子就蓋；右鍵或 Esc 取消'
-                  }
+                  hint={cell !== null ? '按下面的塔，蓋在這一格' : touch ? '點格子預覽，再點一次蓋下' : '點格子蓋塔・右鍵取消'}
                   onCancel={cancel}
                 />
               ) : null}
@@ -671,7 +674,14 @@ export default function TowerDefense() {
           )}
 
           {menu && !ended && (
-            <PauseMenu party={party} touch={touch} sound={sound} onSound={toggleSound} onResume={() => setMenu(false)} onLeave={leaveRoom} />
+            <PauseMenu
+              party={party}
+              sound={sound}
+              onSound={toggleSound}
+              onInfo={() => setInfo(true)}
+              onResume={() => setMenu(false)}
+              onLeave={leaveRoom}
+            />
           )}
           {ended && !hideResults && (
             <Results party={party} view={view} spec={spec} onLeave={leaveRoom} onHide={() => setHideResults(true)} />
@@ -712,13 +722,20 @@ export default function TowerDefense() {
           </div>
           <div className="td-layer td-menu">
             <div className="td-panel">
-              <h1 className="td-title">
-                <span aria-hidden="true">🏰</span> 迷宮塔防
-              </h1>
+              <div className="td-title-row">
+                <h1 className="td-title">
+                  <span aria-hidden="true">🏰</span> 迷宮塔防
+                </h1>
+                {spec && (
+                  <button type="button" className="secondary" onClick={() => setInfo(true)}>
+                    ℹ️ 說明
+                  </button>
+                )}
+              </div>
               {error ? (
                 <p className="error">{error}</p>
               ) : spec ? (
-                <Menu party={party} spec={spec} touch={touch} onPractice={startPractice} />
+                <Menu party={party} spec={spec} onPractice={startPractice} />
               ) : (
                 <p className="muted">載入中…</p>
               )}
@@ -731,6 +748,8 @@ export default function TowerDefense() {
           </div>
         </>
       )}
+
+      {info && spec && <InfoPanel spec={spec} touch={touch} onClose={() => setInfo(false)} />}
     </div>
   )
 }

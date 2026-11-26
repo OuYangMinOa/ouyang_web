@@ -60,12 +60,6 @@
   font-size: 22px;
   color: var(--text-h);
 }
-.mecha-loading span {
-  max-width: 28em;
-  font-size: 14px;
-  line-height: 1.6;
-  text-wrap: balance;
-}
 .mecha-loading-bar {
   width: min(260px, 70%);
   height: 4px;
@@ -893,6 +887,65 @@ button.mecha-click span {
   font-size: 13px;
   line-height: 1.6;
 }
+/* 標題和旁邊的按鈕同一排（選單的「說明」、說明面板的關閉） */
+.mecha-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mecha-head button.secondary,
+.mecha-select-tools button {
+  flex: none;
+  min-height: 40px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+.mecha-panel h2 small {
+  margin-left: 6px;
+  font-size: 13px;
+  font-weight: 400;
+}
+/* 說明：蓋在選單、選隊和對戰中的選單上面 */
+.mecha-info-layer {
+  z-index: 10;
+}
+/* 操作表：左邊按鍵、右邊做什麼 */
+.mecha-keys {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+.mecha-keys div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.mecha-keys dt,
+.mecha-flight-hint dt {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-h);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.mecha-keys dd {
+  margin: 0;
+  text-align: right;
+}
+.mecha-tips {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 13px;
+  line-height: 1.5;
+}
 .mecha-actions {
   display: flex;
   flex-wrap: wrap;
@@ -968,6 +1021,11 @@ button.mecha-start {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+}
+.mecha-select-tools {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 .mecha-select-timer {
@@ -1403,7 +1461,8 @@ button.mecha-btn.on {
   .mecha-teams {
     grid-template-columns: 1fr;
   }
-  .mecha-stats {
+  .mecha-stats,
+  .mecha-keys {
     grid-template-columns: 1fr;
   }
   .mecha-vitals {
@@ -1627,28 +1686,31 @@ button.mecha-btn.on {
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
 }
+/* 操控偵察機的按鍵提示（鍵盤滑鼠才有；觸控的按鈕上就寫著） */
 .mecha-flight-hint {
   position: absolute;
   left: 50%;
   bottom: var(--m-bottom);
   transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  margin: 0;
   max-width: min(560px, calc(100% - 2 * 320px));
   box-sizing: border-box;
   padding: 8px 14px;
   font-size: 13px;
   color: var(--text-h);
-  text-align: center;
 }
-/* 觸控版面、窄螢幕：說明放在訊號下面（下面是搖桿、按鈕和儀表） */
-.mecha-root.touch .mecha-flight-hint {
-  left: var(--m-left);
-  bottom: auto;
-  top: calc(var(--m-top) + 140px);
-  transform: none;
-  width: min(240px, 46vw);
-  max-width: none;
-  font-size: 12px;
-  text-align: left;
+.mecha-flight-hint div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.mecha-flight-hint dd {
+  margin: 0;
 }
 /* 窄螢幕：框的角短一點（框會壓到儀表，只畫細細的角） */
 @media (max-width: 640px) {
@@ -1678,15 +1740,16 @@ button.mecha-btn.on {
     display: none;
   }
 }
+/* 窄的視窗：提示放在訊號下面（下面是儀表） */
 @media (max-width: 900px) {
-  .mecha-root:not(.touch) .mecha-flight-hint {
+  .mecha-flight-hint {
     left: var(--m-left);
     bottom: auto;
     top: calc(var(--m-top) + 140px);
     transform: none;
+    justify-content: flex-start;
     width: min(240px, 46vw);
     max-width: none;
-    text-align: left;
   }
 }
 
@@ -1798,8 +1861,7 @@ button.mecha-btn.fire.boom {
   .mecha-flight-info {
     top: calc(var(--m-top) + 100px);
   }
-  .mecha-root .mecha-flight-hint,
-  .mecha-root.touch .mecha-flight-hint {
+  .mecha-flight-hint {
     top: calc(var(--m-top) + 194px);
   }
 }

@@ -6,7 +6,7 @@ import type { Team } from './map'
 import { DIFFICULTIES, seatName, type MechaParty, type MechaView } from './online'
 import { DRONE, MECH, MECH_KINDS, mechKind, MECHS, SHELL, teamClass, TEAMS, type MechKind } from './spec'
 
-/** 選單、選隊、記分板、結算、比賽中的選單（連線和開局在 index.tsx） */
+/** 選單、說明（操作和機體介紹）、選隊、記分板、結算、比賽中的選單（連線和開局在 index.tsx） */
 
 type MechaRoom = Party<MechaParty>
 
@@ -44,21 +44,51 @@ function Options({ party }: { party: MechaRoom }) {
           disabled={locked}
         />
       )}
-      {!party.isHost && <p className="muted mecha-help">這些設定由房主決定。</p>}
     </>
   )
 }
 
 const KIND_OPTIONS = MECH_KINDS.map((kind) => ({ value: kind, label: `${MECHS[kind].name}・${MECHS[kind].short}` }))
 
+const deg = (rad: number) => Math.round((rad * 180) / Math.PI)
+
 /** 射速：一秒好幾發的寫「幾發/秒」，慢的寫「幾秒一發」 */
 function rateText(rate: number) {
   return rate >= 1 ? `${rate} 發/秒` : `${(1 / rate).toFixed(1)} 秒一發`
 }
 
-/** 一台機甲的介紹：名字、定位、數值 */
-export function MechCard({ kind }: { kind: MechKind }) {
+/** 每台機甲要知道的幾件事（說明面板裡才看得到；選機體的卡片只有一句定位） */
+const MECH_TIPS: Record<MechKind, string[]> = {
+  speed: ['衝刺和飛行共用能量，用完要等回復。'],
+  sniper: ['放大瞄準、站穩不動最準。', '沒有推進器，靠距離活下來。'],
+  recon: [
+    '框裡看得到的敵人會標記給全隊。',
+    '引爆炸到的一擊擊倒；偵察機也會被打下來。',
+    '操控時機甲不能動，可以讓它停在原地繼續偵測。',
+    `離機甲超過 ${DRONE.clear} m 訊號開始變差。`,
+  ],
+  fortress: ['變身後只能轉向，不能走。', '盾牌只擋正面，側面、背後和高處打得到。'],
+  mortar: [
+    `沒有落點標示：左右轉向、上下調仰角（${deg(SHELL.elevMin)}～${deg(SHELL.elevMax)}°）。`,
+    `45° 最遠（約 ${SHELL.range} m），再高再低都變近。`,
+    '高角度能越過大樓，低角度快但會被擋。',
+    '架砲時不能走，也不能發射飛彈。',
+  ],
+}
+
+function Stat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
+/** 一台機甲的卡片：名字、定位和四個主要數值；`full`（說明面板）多了其餘的數值和要知道的幾件事 */
+export function MechCard({ kind, full }: { kind: MechKind; full?: boolean }) {
   const m = MECHS[kind]
+  const d = m.deploy
   return (
     <div className="mecha-card">
       <div className="mecha-card-head">
@@ -67,95 +97,118 @@ export function MechCard({ kind }: { kind: MechKind }) {
       </div>
       <p>{m.blurb}</p>
       <dl className="mecha-stats">
-        <div>
-          <dt>耐久</dt>
-          <dd>{m.hp}</dd>
-        </div>
-        <div>
-          <dt>極速</dt>
-          <dd>{Math.round(m.boost * 3.6)} km/h</dd>
-        </div>
-        <div>
-          <dt>{m.weapon}</dt>
-          <dd>
-            {rateText(m.fireRate)}・{m.magazine} 發
-          </dd>
-        </div>
-        <div>
-          <dt>射程</dt>
-          <dd>{m.gunRange} 公尺</dd>
-        </div>
-        <div>
-          <dt>一發傷害</dt>
-          <dd>{kind === 'sniper' ? `${m.gunDamage}・打中頭一發擊倒` : m.gunDamage}</dd>
-        </div>
-        <div>
-          <dt>飛彈</dt>
-          <dd>每條命 {MECH.missiles} 發</dd>
-        </div>
-        {m.drones > 0 && (
-          <div>
-            <dt>偵察機</dt>
-            <dd>
-              每條命 {m.drones} 架・爆炸一發擊倒（半徑 {DRONE.blast} 公尺）・機身 {DRONE.hp}
-            </dd>
-          </div>
-        )}
-        {m.deploy && !m.deploy.mortar && (
-          <div>
-            <dt>變身後</dt>
-            <dd>
-              {m.deploy.arms.weapon} {rateText(m.deploy.arms.fireRate)}・{m.deploy.arms.magazine} 發・射程 {m.deploy.arms.gunRange} 公尺
-            </dd>
-          </div>
-        )}
-        {m.deploy?.shield && (
-          <div>
-            <dt>盾牌</dt>
-            <dd>
-              寬 {m.deploy.shield.width} 公尺・高 {m.deploy.shield.height} 公尺，擋正面
-            </dd>
-          </div>
-        )}
-        {m.deploy?.mortar && (
-          <div>
-            <dt>架砲後</dt>
-            <dd>
-              {m.deploy.arms.weapon} {rateText(m.deploy.arms.fireRate)}・射程大約 {SHELL.min}～{SHELL.range} 公尺（沒有落點的標示，調仰角和左右）
-            </dd>
-          </div>
-        )}
-        {m.deploy?.mortar && (
-          <div>
-            <dt>砲彈傷害</dt>
-            <dd>炸到一發擊倒（半徑 {SHELL.blast} 公尺）</dd>
-          </div>
+        <Stat label="耐久">{m.hp}</Stat>
+        <Stat label="極速">{Math.round(m.boost * 3.6)} km/h</Stat>
+        <Stat label={m.weapon}>
+          {rateText(m.fireRate)}・{m.magazine} 發
+        </Stat>
+        <Stat label="射程">{m.gunRange} m</Stat>
+        {full && (
+          <>
+            <Stat label="一發傷害">{m.gunDamage}</Stat>
+            <Stat label="飛彈">{MECH.missiles} 發</Stat>
+            {m.drones > 0 && (
+              <Stat label="偵察機">
+                {m.drones} 架・爆炸半徑 {DRONE.blast} m
+              </Stat>
+            )}
+            {d && (
+              <Stat label={d.arms.weapon}>
+                {rateText(d.arms.fireRate)}・{d.arms.magazine} 發
+              </Stat>
+            )}
+            {d?.shield && (
+              <Stat label="盾牌">
+                寬 {d.shield.width} m・高 {d.shield.height} m
+              </Stat>
+            )}
+            {d?.mortar && (
+              <>
+                <Stat label="砲擊距離">
+                  {SHELL.min}～{SHELL.range} m
+                </Stat>
+                <Stat label="爆炸半徑">{SHELL.blast} m</Stat>
+              </>
+            )}
+          </>
         )}
       </dl>
+      {full && (
+        <ul className="mecha-tips">
+          {MECH_TIPS[kind].map((tip) => (
+            <li key={tip}>{tip}</li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
 
-/** 操作說明 */
-function ControlsHelp({ touch }: { touch: boolean }) {
-  return (
-    <p className="mecha-help">
-      {touch
-        ? '左下拖曳移動，右半邊拖曳瞄準。按住「開火」射擊（按著也能拖曳瞄準），「瞄準」放大（狙擊型是狙擊鏡，打中頭一發擊倒），「衝刺」噴火加速，「跳躍」按住往上飛（只有速度型有推進器，其他的「快跑」跑快一點、只能跳一下），「飛彈」發射（把敵人放在準星附近一下子就會鎖定）。偵察型按「偵察機」放出偵察機：搖桿和拖曳操控它、「上升」「下降」調高度，畫面中間框裡看得到的敵人會被掃到、隊友都看得到（飛太遠訊號會變差，畫面越來越糊），按「引爆」炸掉它；操控時機甲站著不能動，按「回到機甲」讓偵察機停在原地繼續偵測，之後按「操控偵察機」回去。堡壘型按「變身」、砲擊型按「架砲」：變身時不能走、只能轉向，再按「收回」恢復；砲擊型架了砲沒有落點的標示：左右拖曳轉方向、上下拖曳調砲管的仰角（20～85 度，45 度最遠，往上往下都變近；低角度飛得快但會被大樓擋住），照畫面上的仰角和「平地約幾公尺」估距離，炸到就一發擊倒。在自己家的機庫裡（或倒下等復活時）按「換機甲」換一台。'
-        : 'WASD 移動、滑鼠瞄準、左鍵開火、右鍵放大瞄準（狙擊型是狙擊鏡，站穩了打得最準，打中頭一發擊倒）。Shift 噴火衝刺，空白鍵跳躍、按住往上飛（和衝刺共用能量；只有速度型有推進器，其他的 Shift 是快跑、只能跳一下）。Q 發射飛彈：準星對著敵人一下子就會鎖定、自動追蹤，每條命只有兩發。偵察型按 E 放出偵察機：WASD 和滑鼠操控、空白鍵上升、Shift 下降，畫面中間框裡看得到的敵人會被掃到、隊友的畫面和小地圖都看得到（飛太遠訊號會變差，畫面越來越糊），左鍵引爆；操控時機甲站著不能動，再按 E 回到機甲（偵察機停在原地繼續偵測），之後再按 E 回去操控。堡壘型、砲擊型按 E 變身（架砲）：變身時不能走、只能轉向，再按 E 收回；砲擊型架了砲沒有落點的標示：滑鼠左右轉方向、上下調砲管的仰角（20～85 度，45 度最遠，往上往下都變近；低角度飛得快但會被大樓擋住；右鍵放大轉得慢、方便微調），照畫面上的仰角和「平地約幾公尺」估距離，炸到就一發擊倒。R 換彈、Tab 看記分板、Esc 叫出選單；在自己家的機庫裡（或倒下等復活時）按 B 換機甲。也可以接遊戲手把。'}
-    </p>
-  )
-}
+/** 操作：按鍵（觸控是畫面上的按鈕）對照表 */
+const KEYS: [string, string][] = [
+  ['WASD', '移動'],
+  ['滑鼠', '瞄準'],
+  ['左鍵', '開火'],
+  ['右鍵', '放大瞄準'],
+  ['Shift', '衝刺'],
+  ['空白鍵', '跳躍（疾風按住飛行）'],
+  ['Q', '飛彈（自動鎖定）'],
+  ['E', '偵察機・變身・架砲'],
+  ['R', '換彈'],
+  ['B', '換機甲（在機庫裡）'],
+  ['Tab', '記分板'],
+  ['Esc', '選單'],
+]
+const GESTURES: [string, string][] = [
+  ['左下拖曳', '移動'],
+  ['右半邊拖曳', '瞄準'],
+  ['開火', '按住射擊，可邊拖邊瞄'],
+  ['瞄準', '放大'],
+  ['衝刺・跳躍', '疾風可噴射、飛行'],
+  ['飛彈', '自動鎖定準星附近的敵人'],
+  ['換機甲', '在機庫裡或等復活時'],
+]
 
-/** 選單上的機體介紹：五台切換著看，加上操作說明 */
-function MechGuide({ touch }: { touch: boolean }) {
-  const [kind, setKind] = useState<MechKind>('speed')
+type InfoTab = 'keys' | 'mechs'
+const INFO_TABS: { value: InfoTab; label: string }[] = [
+  { value: 'keys', label: '操作' },
+  { value: 'mechs', label: '機體' },
+]
+
+/** 說明：操作表和五台機體的介紹。選單、選隊和對戰中的選單都從「說明」按鈕打開 */
+export function InfoPanel({ touch, kind: first = 'speed', onClose }: { touch: boolean; kind?: MechKind; onClose: () => void }) {
+  const [tab, setTab] = useState<InfoTab>('keys')
+  const [kind, setKind] = useState<MechKind>(first)
   return (
-    <section className="mecha-guide">
-      <Segmented label="機體介紹" value={kind} options={KIND_OPTIONS} onChange={setKind} />
-      <MechCard kind={kind} />
-      <ControlsHelp touch={touch} />
-    </section>
+    <div className="mecha-layer mecha-center mecha-info-layer" onClick={onClose}>
+      <div className="mecha-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="說明">
+        <div className="mecha-head">
+          <h2>說明</h2>
+          <button type="button" className="mecha-icon" onClick={onClose} aria-label="關閉" title="關閉（Esc）">
+            ×
+          </button>
+        </div>
+        <Segmented value={tab} options={INFO_TABS} onChange={setTab} />
+        {tab === 'keys' ? (
+          <>
+            <dl className="mecha-keys">
+              {(touch ? GESTURES : KEYS).map(([key, what]) => (
+                <div key={key}>
+                  <dt>{key}</dt>
+                  <dd>{what}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mecha-help muted">先擊倒對方指定次數的隊伍贏。{!touch && '也支援遊戲手把。'}</p>
+          </>
+        ) : (
+          <>
+            <Segmented value={kind} options={KIND_OPTIONS} onChange={setKind} />
+            <MechCard kind={kind} full />
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -179,36 +232,30 @@ function InProgress({ party, onWatch }: { party: MechaRoom; onWatch: () => void 
   )
 }
 
-/** 選單畫面：還沒進房間時建立／加入（也可以一鍵開練習房），進了房間是大廳和聊天 */
+/** 選單畫面：還沒進房間時建立／加入（也可以一鍵開練習房），進了房間是大廳和聊天。操作和機體介紹在「說明」按鈕裡 */
 export function OnlineMenu({
   party,
-  touch,
   onWatch,
   onPractice,
 }: {
   party: MechaRoom
-  touch: boolean
   onWatch: () => void
   /** 開練習房：加幾台電腦 */
   onPractice: (bots: number) => void
 }) {
   if (!party.code) {
     return (
-      <>
-        <MechGuide touch={touch} />
-        <PartyEntry party={party}>
-          <p className="mecha-help">
-            紅藍兩隊在一大片城區裡對戰，先擊倒對方指定次數的隊伍贏。兩邊各有一座機庫當重生點，敵人進不去。
-            開一個房間把連結傳給朋友，2～60 人（最多 30 對 30），人不夠可以加電腦。
-          </p>
+      <PartyEntry party={party}>
+        <p className="mecha-help">紅藍兩隊機甲對戰，最多 30 對 30，人不夠加電腦。</p>
+        <div className="mecha-actions">
           <button type="button" className="secondary" onClick={() => onPractice(3)} disabled={party.busy}>
-            練習：和 3 台電腦打
+            練習（3 台電腦）
           </button>
           <button type="button" className="secondary" onClick={() => onPractice(59)} disabled={party.busy}>
-            大混戰：30 對 30（59 台電腦）
+            大混戰 30 對 30
           </button>
-        </PartyEntry>
-      </>
+        </div>
+      </PartyEntry>
     )
   }
   return (
@@ -225,13 +272,8 @@ export function OnlineMenu({
           <PartyLobby
             party={party}
             options={<Options party={party} />}
-            hint={
-              <p className="mecha-help">
-                按開始後有 20 秒選紅隊或藍隊和機體（兩隊人數最多差一個），大家都準備好就開打。對戰中不能暫停。
-              </p>
-            }
+            hint={<p className="mecha-help muted">開始後有 20 秒選隊伍和機體。</p>}
           />
-          <MechGuide touch={touch} />
           <ChatBox party={party} />
         </>
       ) : (
@@ -242,7 +284,18 @@ export function OnlineMenu({
 }
 
 /** 選隊：每個人選紅隊或藍隊和機體，按「準備好了」就不能換 */
-export function TeamSelect({ party, view, touch, onLeave }: { party: MechaRoom; view: MechaView; touch: boolean; onLeave: () => void }) {
+export function TeamSelect({
+  party,
+  view,
+  onInfo,
+  onLeave,
+}: {
+  party: MechaRoom
+  view: MechaView
+  /** 打開說明（操作、機體介紹） */
+  onInfo: () => void
+  onLeave: () => void
+}) {
   const me = view.you
   const ready = view.select?.ready ?? []
   const done = me !== null && ready[me] === true
@@ -256,14 +309,19 @@ export function TeamSelect({ party, view, touch, onLeave }: { party: MechaRoom; 
       <div className="mecha-panel">
         <div className="mecha-select-head">
           <h2>{me === null ? '大家在選隊伍' : '選隊伍和機體'}</h2>
-          {view.select && (
-            <span className="mecha-chip mecha-select-timer" role="timer">
-              <Countdown ms={view.select.endsIn} stamp={view} />
-            </span>
-          )}
+          <span className="mecha-select-tools">
+            {view.select && (
+              <span className="mecha-chip mecha-select-timer" role="timer">
+                <Countdown ms={view.select.endsIn} stamp={view} />
+              </span>
+            )}
+            <button type="button" className="secondary" onClick={onInfo}>
+              ℹ️ 說明
+            </button>
+          </span>
         </div>
-        <p className="mecha-help">
-          先擊倒對方 {view.killTarget} 次的隊伍贏，時間上限 {view.timeLimit} 分鐘。兩隊人數最多差一個，想去的那隊有電腦就和電腦交換。
+        <p className="mecha-help muted">
+          先到 {view.killTarget} 擊倒・限時 {view.timeLimit} 分鐘
         </p>
         <div className="mecha-teams">
           {([0, 1] as Team[]).map((team) => {
@@ -300,10 +358,7 @@ export function TeamSelect({ party, view, touch, onLeave }: { party: MechaRoom; 
           })}
         </div>
         {me === null ? (
-          <>
-            <MechGuide touch={touch} />
-            <p className="mecha-help">你在觀戰，大家選好就開打。</p>
-          </>
+          <p className="mecha-help">觀戰中，大家選好就開打。</p>
         ) : (
           <section className="mecha-guide">
             <Segmented
@@ -314,7 +369,6 @@ export function TeamSelect({ party, view, touch, onLeave }: { party: MechaRoom; 
               disabled={done || !party.connected}
             />
             <MechCard kind={myKind} />
-            <ControlsHelp touch={touch} />
           </section>
         )}
         {!party.connected && <p className="error">連線中斷，重新連線中…</p>}
@@ -449,12 +503,9 @@ export function MechSwap({
   return (
     <div className="mecha-layer mecha-center" onClick={onClose}>
       <div className="mecha-panel mecha-swap-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="換機甲">
-        <h2>換機甲</h2>
-        <p className="mecha-help">
-          {alive
-            ? '在自己家的機庫裡才能換：換了馬上就是新的一台，耐久、飛彈、偵察機都是滿的（放出去的偵察機會收回來）。'
-            : '倒下等復活時先選好，復活就開這一台出擊。'}
-        </p>
+        <h2>
+          換機甲 <small className="muted">{alive ? '馬上換好，耐久和彈藥補滿' : '復活時開這一台'}</small>
+        </h2>
         <Segmented label="機體" value={kind} options={KIND_OPTIONS} onChange={setKind} />
         <MechCard kind={kind} />
         <div className="mecha-actions">
@@ -475,6 +526,7 @@ export function PauseMenu({
   party,
   sensitivity,
   onSensitivity,
+  onInfo,
   onResume,
   onLeave,
   extra,
@@ -482,6 +534,8 @@ export function PauseMenu({
   party: MechaRoom
   sensitivity: number
   onSensitivity: (v: number) => void
+  /** 打開說明（操作、機體介紹） */
+  onInfo: () => void
   onResume: () => void
   onLeave: () => void
   extra?: ReactNode
@@ -489,10 +543,14 @@ export function PauseMenu({
   return (
     <div className="mecha-layer mecha-center">
       <div className="mecha-panel mecha-pause">
-        <h2>選單</h2>
-        <p className="mecha-help">線上對戰不會暫停，你的機甲還站在原地！</p>
+        <h2>
+          選單 <small className="muted">對戰不會暫停</small>
+        </h2>
         <button type="button" onClick={onResume}>
           回到對戰
+        </button>
+        <button type="button" className="secondary" onClick={onInfo}>
+          ℹ️ 說明
         </button>
         <label className="mecha-range">
           <span>瞄準靈敏度 {sensitivity.toFixed(1)}</span>

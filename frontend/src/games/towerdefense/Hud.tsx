@@ -73,7 +73,7 @@ export function WaveBar({
         <strong>{view.wave === 0 ? '準備中' : `第 ${view.wave}${total} 波`}</strong>
         {resting ? (
           <span className="td-wave-timer">
-            下一波 <Countdown ms={view.nextIn} stamp={view} />
+            <Countdown ms={view.nextIn} stamp={view} />
           </span>
         ) : (
           <span className="muted">進攻中</span>
@@ -99,7 +99,7 @@ export function WaveBar({
           onClick={() => onReady(!ready)}
           title="大家都準備好了，下一波就馬上開始（空白鍵）"
         >
-          {ready ? '✓ 等其他人' : resting ? '準備好了' : '提早叫下一波'}
+          {ready ? '✓ 等其他人' : resting ? '準備好了' : '叫下一波'}
           {readyTotal > 1 && (
             <small>
               {readyCount}/{readyTotal}
@@ -158,7 +158,7 @@ export function Shop({
   )
 }
 
-/** 選了一種塔（或選了一個空格）時的說明 */
+/** 選了一種塔（或選了一個空格）：數值和下一步怎麼做（塔的介紹在說明的圖鑑裡） */
 export function BuildInfo({ tower, hint, onCancel }: { tower: TowerSpec | null; hint: string; onCancel: () => void }) {
   return (
     <div className="td-info td-chip">
@@ -177,7 +177,6 @@ export function BuildInfo({ tower, hint, onCancel }: { tower: TowerSpec | null; 
           ×
         </button>
       </div>
-      {tower && <p>{tower.blurb}</p>}
       {tower && <p className="td-info-stats">{levelText(tower, tower.levels[0])}</p>}
       <p className="muted">{hint}</p>
     </div>
@@ -234,14 +233,14 @@ export function TowerPanel({
         </button>
       </div>
       <p className="td-info-stats">{levelText(t, level)}</p>
-      {next && <p className="muted">升級後：{levelText(t, next)}</p>}
+      {next && <p className="muted">▲ {levelText(t, next)}</p>}
       <div className="td-actions">
         {next ? (
           <button type="button" disabled={!canUpgrade || gold < next.cost} onClick={onUpgrade} title="升級（U）">
             升級 <span className="td-cost">{next.cost}</span>
           </button>
         ) : (
-          <span className="chip subtle">已經最高級</span>
+          <span className="chip subtle">最高級</span>
         )}
         {canManage && (
           <button type="button" className="secondary" onClick={onSell} title="拆掉（X）">
@@ -381,7 +380,7 @@ export function SendPanel({
     <div className="td-send">
       <p className="td-send-head">
         派兵打 <strong>{targetName ?? '（沒有對手了）'}</strong>
-        <span className="muted">每派一次，自己每波的收入就變多</span>
+        <span className="muted">派兵會提高自己每波的收入</span>
       </p>
       <div className="td-send-list">
         {spec.units.map((u, i) => {

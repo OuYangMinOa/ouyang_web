@@ -110,7 +110,7 @@ pub static TOWERS: [TowerSpec; 7] = [
     TowerSpec {
         kind: TowerKind::Bolt,
         name: "弩箭塔",
-        blurb: "便宜、射得快，天上地下都打得到。拿來排迷宮的牆最划算。",
+        blurb: "便宜、射得快，排迷宮的牆最划算。",
         air: true,
         ground: true,
         magic: false,
@@ -120,7 +120,7 @@ pub static TOWERS: [TowerSpec; 7] = [
     TowerSpec {
         kind: TowerKind::Cannon,
         name: "火砲塔",
-        blurb: "砲彈落地會炸開，一次打一群；打不到飛行的怪。",
+        blurb: "砲彈落地炸開，一次打一群。",
         air: false,
         ground: true,
         magic: false,
@@ -135,7 +135,7 @@ pub static TOWERS: [TowerSpec; 7] = [
     TowerSpec {
         kind: TowerKind::Frost,
         name: "冰霜塔",
-        blurb: "打中的那一圈怪都會變慢，傷害不高。魔王只會慢一半。",
+        blurb: "讓一圈怪變慢，傷害不高；魔王只慢一半。",
         air: true,
         ground: true,
         magic: true,
@@ -150,7 +150,7 @@ pub static TOWERS: [TowerSpec; 7] = [
     TowerSpec {
         kind: TowerKind::Tesla,
         name: "雷電塔",
-        blurb: "閃電會在怪物之間跳，每跳一次弱三成。魔法傷害，鐵甲擋不住。",
+        blurb: "閃電在怪物之間跳，每跳弱三成；鐵甲擋不住。",
         air: true,
         ground: true,
         magic: true,
@@ -165,7 +165,7 @@ pub static TOWERS: [TowerSpec; 7] = [
     TowerSpec {
         kind: TowerKind::Poison,
         name: "毒藤塔",
-        blurb: "讓怪物中毒、持續掉血，中毒時不能再生；會先找還沒中毒的。打不到飛行的怪。",
+        blurb: "讓怪物中毒掉血、不能再生，會先找還沒中毒的。",
         air: false,
         ground: true,
         magic: true,
@@ -180,7 +180,7 @@ pub static TOWERS: [TowerSpec; 7] = [
     TowerSpec {
         kind: TowerKind::Sniper,
         name: "重弩塔",
-        blurb: "射程很遠、一發很痛，還能穿透大半的鐵甲，但是裝填很慢。預設先打血最多的。",
+        blurb: "射程遠、一發很痛，能穿透鐵甲，但裝填慢。",
         air: true,
         ground: true,
         magic: false,
@@ -190,7 +190,7 @@ pub static TOWERS: [TowerSpec; 7] = [
     TowerSpec {
         kind: TowerKind::Beacon,
         name: "號角塔",
-        blurb: "自己不攻擊，範圍內其他塔的傷害提高（隊友的塔也算）。同一座塔只吃最強的一支號角。",
+        blurb: "不攻擊，提高範圍內其他塔的傷害；效果不疊加。",
         air: false,
         ground: false,
         magic: false,
@@ -308,36 +308,26 @@ const fn mon(
 }
 
 pub static MONSTERS: [MonsterSpec; 11] = [
-    mon(MonsterKind::Grunt, "果凍怪", "最普通的怪，沒有特別的本事。", 1.0, 1.1, 1.0),
-    MonsterSpec {
-        size: 0.22,
-        ..mon(MonsterKind::Runner, "飛毛腿", "血少但跑得飛快，迷宮不夠長就衝過去了。", 0.55, 2.1, 0.9)
-    },
+    mon(MonsterKind::Grunt, "果凍怪", "最普通的怪。", 1.0, 1.1, 1.0),
+    MonsterSpec { size: 0.22, ..mon(MonsterKind::Runner, "飛毛腿", "血少但跑得飛快。", 0.55, 2.1, 0.9) },
     MonsterSpec {
         phys: 0.45,
         size: 0.36,
-        ..mon(
-            MonsterKind::Brute,
-            "鐵甲龜",
-            "又慢又硬，物理傷害只吃得到不到一半。用雷電、毒或重弩對付。",
-            2.3,
-            0.75,
-            2.2,
-        )
+        ..mon(MonsterKind::Brute, "鐵甲龜", "又慢又硬，用雷電、毒藤或重弩對付。", 2.3, 0.75, 2.2)
     },
     MonsterSpec {
         size: 0.15,
-        ..mon(MonsterKind::Swarm, "小蟲", "一隻很弱，但是一來就是一大群。範圍傷害最有效。", 0.22, 1.6, 0.35)
+        ..mon(MonsterKind::Swarm, "小蟲", "一隻很弱，但一來一大群；範圍傷害最有效。", 0.22, 1.6, 0.35)
     },
     MonsterSpec {
         air: true,
         size: 0.24,
-        ..mon(MonsterKind::Flyer, "蝙蝠", "用飛的，不走迷宮，從入口直直飛向出口。火砲和毒藤打不到。", 0.7, 1.5, 1.2)
+        ..mon(MonsterKind::Flyer, "蝙蝠", "不走迷宮，直飛出口；火砲、毒藤打不到。", 0.7, 1.5, 1.2)
     },
     MonsterSpec {
         regen: 0.03,
         size: 0.3,
-        ..mon(MonsterKind::Regen, "樹精", "會自己回血，要一口氣打倒；中毒的時候不能回血。", 1.5, 1.0, 1.6)
+        ..mon(MonsterKind::Regen, "樹精", "會自己回血，中毒時不能回。", 1.5, 1.0, 1.6)
     },
     MonsterSpec {
         split: Some((MonsterKind::Mudling, 3)),
@@ -345,12 +335,12 @@ pub static MONSTERS: [MonsterSpec; 11] = [
         ..mon(MonsterKind::Splitter, "泥巴怪", "被打倒會分裂成三隻小泥怪。", 1.3, 0.95, 1.0)
     },
     MonsterSpec {
-        size: 0.17, ..mon(MonsterKind::Mudling, "小泥怪", "泥巴怪分裂出來的，跑得比較快。", 0.35, 1.5, 0.3)
+        size: 0.17, ..mon(MonsterKind::Mudling, "小泥怪", "泥巴怪分裂出來的，跑得快。", 0.35, 1.5, 0.3)
     },
     MonsterSpec {
         magic: 0.4,
         size: 0.26,
-        ..mon(MonsterKind::Ghost, "幽魂", "魔法傷害只吃得到四成，減速照樣有效。用弩箭、火砲、重弩打。", 1.1, 1.25, 1.4)
+        ..mon(MonsterKind::Ghost, "幽魂", "減速照樣有效，用弩箭、火砲、重弩打。", 1.1, 1.25, 1.4)
     },
     MonsterSpec {
         phys: 0.8,
@@ -358,28 +348,14 @@ pub static MONSTERS: [MonsterSpec; 11] = [
         lives: 5,
         slowable: 0.5,
         size: 0.55,
-        ..mon(
-            MonsterKind::Boss,
-            "魔王",
-            "每十波來一次，血非常多，減速只有一半的效果，走到出口一次扣 5 條命。",
-            14.0,
-            0.6,
-            12.0,
-        )
+        ..mon(MonsterKind::Boss, "魔王", "每十波來一次，血非常多，減速只剩一半；漏掉扣 5 命。", 14.0, 0.6, 12.0)
     },
     MonsterSpec {
         air: true,
         lives: 5,
         slowable: 0.5,
         size: 0.5,
-        ..mon(
-            MonsterKind::Wyvern,
-            "飛龍",
-            "會飛的魔王：不走迷宮，要靠打得到天上的塔。走到出口一次扣 5 條命。",
-            9.0,
-            0.8,
-            10.0,
-        )
+        ..mon(MonsterKind::Wyvern, "飛龍", "會飛的魔王，要靠對空的塔；漏掉扣 5 命。", 9.0, 0.8, 10.0)
     },
 ];
 
@@ -512,7 +488,7 @@ pub static MAPS: [MapSpec; 4] = [
     MapSpec {
         id: "plains",
         name: "曠野",
-        blurb: "一個入口、一個出口，中間一大片空地隨你排。",
+        blurb: "一進一出，空地隨你排。",
         rows: &[
             ".....................",
             ".....................",
@@ -532,7 +508,7 @@ pub static MAPS: [MapSpec; 4] = [
     MapSpec {
         id: "forks",
         name: "雙岔口",
-        blurb: "兩個入口的怪會合成一路，迷宮要兩邊都顧到。",
+        blurb: "兩個入口會合成一路。",
         rows: &[
             ".....................",
             ".....................",
@@ -554,7 +530,7 @@ pub static MAPS: [MapSpec; 4] = [
     MapSpec {
         id: "cross",
         name: "十字路口",
-        blurb: "一路從左到右、一路從上到下，在中間交叉：一座迷宮要同時拖住兩路。",
+        blurb: "兩路在中間交叉。",
         rows: &[
             "........b........",
             "........_........",
@@ -578,7 +554,7 @@ pub static MAPS: [MapSpec; 4] = [
     MapSpec {
         id: "canyon",
         name: "大峽谷",
-        blurb: "最大的一張，岩壁已經隔出幾道關口。人多的時候才蓋得滿。",
+        blurb: "最大的一張，適合人多。",
         rows: &[
             "...........................",
             "......#.............#......",

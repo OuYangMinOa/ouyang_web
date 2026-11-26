@@ -662,15 +662,62 @@ button.td-send-item:hover:not(:disabled) {
   font-size: 13px;
   line-height: 1.6;
 }
-.td-help ul {
+/* 標題和「說明」按鈕同一排 */
+.td-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.td-title-row button {
+  flex: none;
+  min-height: 40px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+.td-panel h2 small {
+  margin-left: 6px;
+  font-size: 13px;
+  font-weight: 400;
+}
+/* 說明：蓋在選單（和對戰中的選單）上面 */
+.td-info-layer {
+  z-index: 10;
+}
+.td-rules {
   margin: 0;
   padding-left: 1.2em;
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.5;
 }
-.td-guide {
+/* 操作表：左邊按鍵、右邊做什麼 */
+.td-keys {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+.td-keys div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.td-keys dt {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-h);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.td-keys dd {
+  margin: 0;
+  text-align: right;
 }
 .td-cards {
   display: grid;
@@ -692,7 +739,8 @@ button.td-send-item:hover:not(:disabled) {
 .td-cards p {
   margin: 2px 0 0;
 }
-.td-cards .chip {
+.td-cards .chip,
+.td-cards .td-cost {
   margin: 0 0 0 6px;
 }
 .td-card-icon {
@@ -876,6 +924,9 @@ button.td-send-item:hover:not(:disabled) {
   }
   .td-panel {
     padding: 14px 14px 16px;
+  }
+  .td-keys {
+    grid-template-columns: 1fr;
   }
   .td-sticky {
     bottom: -16px;

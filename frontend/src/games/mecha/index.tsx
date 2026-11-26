@@ -8,7 +8,7 @@ import { MechGame, type BattleSetup, type DroneMode, type GameEvent, type HudFra
 import { Hud, type HudSeat } from './Hud'
 import type { MapData, Team } from './map'
 import { seatName, slotOf, type MechaParty, type MechaView } from './online'
-import { MechSwap, OnlineMenu, PauseMenu, Results, Scoreboard, TeamSelect } from './Panels'
+import { InfoPanel, MechSwap, OnlineMenu, PauseMenu, Results, Scoreboard, TeamSelect } from './Panels'
 import { mechKind, MECHS, teamClass, TEAMS, type MechKind } from './spec'
 import { TouchControls } from './Touch'
 import './mecha.css'
@@ -96,6 +96,8 @@ export default function Mecha() {
   const [feed, setFeed] = useState<Feed[]>([])
   const [deathBy, setDeathBy] = useState<string | null>(null)
   const [menu, setMenu] = useState(false)
+  /** 說明（操作、機體介紹）開著 */
+  const [info, setInfo] = useState(false)
   const [board, setBoard] = useState(false)
   const [pointer, setPointer] = useState(false)
   const [lockOn, setLockOn] = useState(false)
@@ -316,6 +318,7 @@ export default function Mecha() {
       botStates: view.elapsed > 0 ? view.botStates : [],
     }
     setMenu(false)
+    setInfo(false)
     setBoard(false)
     setDeathBy(null)
     setFeed([])
@@ -409,6 +412,13 @@ export default function Mecha() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (typing(e.target)) return
+      if (info) {
+        if (e.code === 'Escape') {
+          e.preventDefault()
+          setInfo(false)
+        }
+        return
+      }
       if (e.code === 'Tab' && screen === 'battle') {
         e.preventDefault()
         setBoard(true)
@@ -531,6 +541,8 @@ export default function Mecha() {
   // 換機甲：站在自己家的重生點裡、或倒下等復活時
   const canSwap = live && me !== null && (meAlive ? home : !ended)
   if (swap && !canSwap) setSwap(false)
+  // 說明是從對戰中的選單打開的：這一局結束、選單收起來時跟著關
+  if (info && ended) setInfo(false)
   const swapLabel = touch ? '換機甲' : '換機甲（B）'
   const exitLabel = lobby.code ? '回到遊戲室' : '回到小遊戲'
 
@@ -654,7 +666,7 @@ export default function Mecha() {
           {countdown === 0 ? '開打！' : countdown}
         </div>
       )}
-      {inBattle && lockOn && <div className="mecha-lock-note">鎖定完成：按 {touch ? '「飛彈」' : 'Q'} 發射</div>}
+      {inBattle && lockOn && <div className="mecha-lock-note">已鎖定・{touch ? '按飛彈' : 'Q 發射'}</div>}
       {inBattle && toast && (
         <div className="mecha-toast mecha-chip" key={toast.id} role="status">
           {toast.text}
@@ -664,7 +676,7 @@ export default function Mecha() {
         <div className="mecha-dead" role="status">
           <strong>{deathBy ? `被 ${deathBy} 擊倒` : '機體損毀'}</strong>
           <span>
-            <Countdown ms={respawnIn} stamp={view} /> 後開{MECHS[myKind].name}在機庫重新出擊
+            <Countdown ms={respawnIn} stamp={view} /> 後開{MECHS[myKind].name}出擊
           </span>
           {!swap && (
             <button type="button" className="secondary" onClick={openSwap}>
@@ -682,13 +694,13 @@ export default function Mecha() {
         <MechSwap current={myKind} alive={meAlive} connected={party.connected} onPick={pickMech} onClose={closeSwap} />
       )}
       {inBattle && phase === 'countdown' && me !== null && (
-        <div className="mecha-chip mecha-ready-note">先熟悉一下操作：開打前可以轉動視角，還不能移動</div>
+        <div className="mecha-chip mecha-ready-note">開打前只能轉動視角</div>
       )}
 
       {showClick && (
         <button type="button" className="mecha-click" onClick={() => gameRef.current?.lockPointer()}>
           <strong>點一下開始操作</strong>
-          <span>滑鼠瞄準、左鍵開火；按 Esc 叫出選單</span>
+          <span>Esc 開選單</span>
         </button>
       )}
 
@@ -706,15 +718,19 @@ export default function Mecha() {
       {screen === 'menu' && (
         <div className="mecha-layer mecha-menu">
           <div className="mecha-panel" onClick={() => gameRef.current?.unlockAudio()}>
-            <h1 className="mecha-title">
-              <span aria-hidden="true">🤖</span> 機甲對戰
-            </h1>
+            <div className="mecha-head">
+              <h1 className="mecha-title">
+                <span aria-hidden="true">🤖</span> 機甲對戰
+              </h1>
+              <button type="button" className="secondary" onClick={() => setInfo(true)}>
+                ℹ️ 說明
+              </button>
+            </div>
             {error ? (
               <p className="error">{error}</p>
             ) : (
               <OnlineMenu
                 party={party}
-                touch={touch}
                 onPractice={startPractice}
                 onWatch={() => {
                   gameRef.current?.unlockAudio()
@@ -726,13 +742,22 @@ export default function Mecha() {
         </div>
       )}
 
-      {screen === 'select' && view && <TeamSelect party={party} view={view} touch={touch} onLeave={leaveRoom} />}
+      {screen === 'select' && view && <TeamSelect party={party} view={view} onInfo={() => setInfo(true)} onLeave={leaveRoom} />}
 
       {menu && live && (
-        <PauseMenu party={party} sensitivity={sensitivity} onSensitivity={changeSensitivity} onResume={resume} onLeave={leaveRoom} />
+        <PauseMenu
+          party={party}
+          sensitivity={sensitivity}
+          onSensitivity={changeSensitivity}
+          onInfo={() => setInfo(true)}
+          onResume={resume}
+          onLeave={leaveRoom}
+        />
       )}
 
       {ended && view && <Results party={party} view={view} onLeave={leaveRoom} />}
+
+      {info && <InfoPanel touch={touch} kind={view && view.you !== null ? myKind : undefined} onClose={() => setInfo(false)} />}
 
       {inBattle && (party.error || !party.connected) && (
         <div className="mecha-chip mecha-offline" role="alert">
@@ -743,7 +768,6 @@ export default function Mecha() {
       {!ready && !error && (
         <div className="mecha-loading" role="status">
           <strong>機甲整備中…</strong>
-          <span>正在蓋城市、替每一台機甲烘焙光影，第一次進來要幾秒</span>
           <div className="mecha-loading-bar" aria-hidden="true" />
         </div>
       )}
