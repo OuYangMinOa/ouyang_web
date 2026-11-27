@@ -146,7 +146,7 @@ export const APPS: AppInfo[] = [
     name: '米其林地圖',
     icon: '🍽️',
     glyph: '饌',
-    blurb: `${GUIDE_EDITION} 台灣米其林指南的星級和必比登餐廳，在地圖上照地區找，也能找離你最近的。點一下看地址和電話，登入後可以記想吃、吃過和設訂位提醒。`,
+    blurb: `${GUIDE_EDITION} 台灣米其林指南的星級和必比登餐廳，在地圖上照地區找，也能找離你最近的。點一下看地址和電話，登入後可以記想吃、吃過、設訂位提醒，還能看星級餐廳近兩週的空位。`,
     tag: '星級 · 必比登',
     live: true,
     wide: true,
@@ -156,6 +156,10 @@ export const APPS: AppInfo[] = [
           { to: '/michelin', label: '全台', icon: '🗺️' },
           ...REGIONS.map((r) => ({ to: `/michelin/${r.slug}`, label: r.name, icon: '📍' })),
         ],
+      },
+      {
+        label: '訂位',
+        items: [{ to: '/michelin/availability', label: '星級餐廳空位', icon: '🪑' }],
       },
       {
         label: '我的',

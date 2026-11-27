@@ -1443,8 +1443,8 @@ chmod 600 ~/ouyang_web/prod/secrets.env
 ## 米其林地圖
 
 `/michelin` 全台、`/michelin/<地區>`（`taipei`、`new-taipei`、`hsinchu`、`taichung`、`tainan`、`kaohsiung`，新竹市和新竹縣合在一起）。
-`/michelin/me` 是自己的足跡（要登入）。選中的餐廳記在網址 `?r=<id>`，連結分享出去會打開同一家。
-地圖和篩選都在前端；想吃／吃過、訂位提醒存在後端（`backend/src/michelin.rs`）。
+`/michelin/me` 是自己的足跡、`/michelin/availability` 是星級餐廳近兩週的空位（都要登入）。選中的餐廳記在網址 `?r=<id>`，連結分享出去會打開同一家。
+地圖和篩選都在前端；想吃／吃過、訂位提醒存在後端（`backend/src/michelin.rs`），空位見下面的[星級餐廳空位](#星級餐廳空位)。
 
 ```
 GET    /api/michelin/marks                 想吃／吃過 {"marks":[{restaurant,status,visited_on,updated_at}]}
@@ -1487,7 +1487,35 @@ DELETE /api/michelin/reminders/{id}
   全部在瀏覽器裡讀，照片不上傳，只讀檔案開頭；JPEG 和 iPhone 的 HEIC 都可以（`photos.ts`，HEIC 從 `meta` 的 `iinf`／`iloc` 找 Exif 那一項，TIFF 解析沿用 `tools/exif/tiff.ts`）。
   手機的相簿選取器常常會拿掉拍攝地點，頁面上有提醒改用電腦選原始檔。
 - **今年的變動**：卡片上寫「2026 新入選」「2026 新摘星（上一版入選）」「2026 升星（上一版一星）」，清單店名後面一個「新」「升」字。
-- 即時空位：台灣星級餐廳多半用 inline 訂位，但 inline 沒有公開 API，也擋程式存取，所以這裡沒有空位資訊，要談合作才拿得到。
+
+### 星級餐廳空位
+
+`/michelin/availability`（要登入）：61 家星級餐廳未來 14 天 2、4、6 位還有哪些時段可以訂。伺服器不去抓：inline 沒有公開 API，也擋伺服器的程式存取，
+所以由家裡電腦上的爬蟲 [miclin](https://github.com/ouyangminwei/miclin) 用 Edge 打開 inline、TableCheck、SevenRooms 的公開訂位頁，
+讀出頁面上顯示的時段（不會訂位），Windows 工作排程器每 3 小時跑一次，跑完用 `publish.py` 上傳。後端在 `backend/src/michelin_availability.rs`。
+
+```
+GET /api/michelin/availability   最新一次的結果 {"availability": null | {checked_at, uploaded_at, days, parties, restaurants}}  要登入
+PUT /api/michelin/availability   爬蟲上傳，標頭 X-Michelin-Key 要等於 MICHELIN_UPLOAD_KEY  → 204
+
+上傳的格式（restaurants 每家一筆，parties 是人數 → 結果）：
+{ "checked_at": "2026-11-27T14:20:19+08:00", "days": ["2026-11-27", …],
+  "restaurants": [{ "name": "頤宮", "url": "https://inline.app/booking/…", "phone": "…",
+    "parties": { "2": { "source": "inline", "checked_at": "…"|null, "note": "",
+      "days": { "2026-11-28": { "status": "open", "times": ["18:00"], "new": ["18:00"] } } } } }] }
+```
+
+- **金鑰**：repo 的 GitHub secret `MICHELIN_UPLOAD_KEY`（和 `publish.local.json` 的 `key` 一樣），部署時 `deploy.sh` 寫進 `.env`，staging 和 prod 共用；
+  換金鑰就 `gh secret set MICHELIN_UPLOAD_KEY` 再部署一次。
+  沒設定的環境上傳一律 404。金鑰放標頭不放網址，才不會進到 IP 訪問紀錄；比對完金鑰才解析內容。
+  本機開發要收上傳的話 `MICHELIN_UPLOAD_KEY=... cargo run`，`publish.py` 也會送一份到 `http://localhost:8080`（連不上就略過）。
+- **整理**：店名對到地圖上的餐廳（不分大小寫，例如「JL Studio」對到「JL STUDIO」），對到的才有星等、地區和「在地圖上看」的連結；
+  訂位網址只收 http(s)，時間統一存成 UTC，時段排序去重。格式不對整包退回 400，方便爬蟲那邊發現。只留最近 10 次，看的時候拿 `checked_at` 最新的。
+- **頁面**：選人數、地區、只看有空位（記在 localStorage）。有時段的店排前面（最早的先），每家一排 14 格看哪幾天有位（實心是有時段，
+  右上角的點是新釋出的，淺灰是額滿，沒資料是虛線框），展開看每天的時段。已經過去的時段在前端濾掉（資料最多晚 3 小時），
+  超過 7 小時沒更新會提醒爬蟲可能沒在跑。
+- **「新」**：跟同一家、同一人數、同一天上一次讀到的時段比，新出現的才算（和爬蟲自己的報表同一個算法，`publish.py` 從爬蟲的 `history.sqlite3` 算）。
+- TableCheck 列的是可以選的時間，方案和座位要進訂位頁確認；Noline 的公開日曆是備援，超過 1 小時沒同步的不用。
 
 ## LoL 世界賽
 
@@ -1813,6 +1841,7 @@ docker rollout app
 - `SERVER_HOST`：伺服器 IP
 - `SERVER_USER`：`ubuntu`
 - `SSH_PRIVATE_KEY`：部署專用的 SSH 私鑰（公鑰在伺服器的 `~/.ssh/authorized_keys`）
+- `MICHELIN_UPLOAD_KEY`：米其林空位的上傳金鑰（見[星級餐廳空位](#星級餐廳空位)），可以不設，不設就不收上傳
 
 拉 image 用的是 workflow 的 `GITHUB_TOKEN`，伺服器上不存放長期的 registry 憑證。
 

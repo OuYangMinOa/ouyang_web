@@ -163,6 +163,12 @@ pub fn find(id: &str) -> Option<&'static Restaurant> {
     RESTAURANTS.iter().find(|r| r.id == id)
 }
 
+/// 用店名找（不分大小寫，臺、台都可以）：空位爬蟲的資料只有店名，例如「JL Studio」對到「JL STUDIO」
+pub fn find_by_name(name: &str) -> Option<&'static Restaurant> {
+    let name = fold(name);
+    RESTAURANTS.iter().find(|r| fold(&r.name) == name)
+}
+
 fn existing(id: &str) -> Result<&'static Restaurant, AppError> {
     find(id).ok_or_else(|| AppError::BadRequest("沒有這家餐廳".into()))
 }

@@ -29,6 +29,7 @@ mod honeypot;
 mod lobby;
 mod mecha;
 mod michelin;
+mod michelin_availability;
 mod minesrace;
 mod monitor;
 mod music;
