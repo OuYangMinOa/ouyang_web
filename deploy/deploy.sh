@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 在伺服器上執行：deploy.sh <staging|prod> <image>
 # 需要環境變數 GHCR_USER / GHCR_TOKEN（由 GitHub Actions 的 GITHUB_TOKEN 帶入，只在這次部署期間有效）
+# 可以有 MICHELIN_UPLOAD_KEY（repo 的 GitHub secret，米其林空位的上傳金鑰），有的話寫進 .env
 set -euo pipefail
 
 ROLLOUT_VERSION=v0.14
@@ -18,6 +19,8 @@ cd "$(dirname "$0")"
 {
   cat "$env_name.env"
   if [ -f secrets.env ]; then cat secrets.env; fi
+  # 放在 GitHub secret 的金鑰由部署帶進來，不用登入伺服器改 secrets.env
+  if [ -n "${MICHELIN_UPLOAD_KEY:-}" ]; then echo "MICHELIN_UPLOAD_KEY=$MICHELIN_UPLOAD_KEY"; fi
   echo "COMPOSE_PROJECT_NAME=ouyang-web-$env_name"
   echo "IMAGE=$image"
 } > .env

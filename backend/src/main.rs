@@ -98,6 +98,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     state.funcsay = Arc::new(FuncSay::from_env());
     // 米其林地圖的訂位提醒：到了時間推播
     michelin::spawn(state.clone());
+    // 米其林空位：家裡電腦上的爬蟲用這把金鑰上傳結果，沒設定就不收（見 michelin_availability.rs）
+    state.michelin_upload_key =
+        env::var("MICHELIN_UPLOAD_KEY").ok().map(|key| key.trim().to_owned()).filter(|key| !key.is_empty());
     let draining = state.draining.clone();
     let access = state.access_log.clone();
     let app = router(state, &static_dir);

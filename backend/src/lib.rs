@@ -33,6 +33,7 @@ pub mod lunar;
 pub mod mcp;
 pub mod mecha;
 pub mod michelin;
+pub mod michelin_availability;
 pub mod minesrace;
 pub mod monitor;
 pub mod music;
@@ -165,6 +166,8 @@ pub struct AppState {
     pub push: Arc<webpush::WebPush>,
     /// 幹話語錄：主機上語錄服務的網址和清單快取（見 funcsay.rs）
     pub funcsay: Arc<funcsay::FuncSay>,
+    /// 米其林空位的上傳金鑰（MICHELIN_UPLOAD_KEY）；沒設定就不收上傳（見 michelin_availability.rs）
+    pub michelin_upload_key: Option<String>,
 }
 
 impl AppState {
@@ -217,6 +220,7 @@ impl AppState {
             chat: Arc::default(),
             push: Arc::default(),
             funcsay: Arc::default(),
+            michelin_upload_key: None,
         }
     }
 }
@@ -386,6 +390,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/michelin/marks/{restaurant}", put(michelin::set_mark).delete(michelin::delete_mark))
         .route("/michelin/reminders", get(michelin::list_reminders).post(michelin::create_reminder))
         .route("/michelin/reminders/{id}", delete(michelin::delete_reminder))
+        .route("/michelin/availability", get(michelin_availability::latest).put(michelin_availability::upload))
         .route("/push/key", get(webpush::public_key))
         .route("/push/subscriptions", post(webpush::subscribe).delete(webpush::unsubscribe))
         .route("/push/test", post(webpush::test))
