@@ -1303,3 +1303,256 @@ a.mich-me-login {
     box-sizing: border-box;
   }
 }
+
+/* ---- 空位（/michelin/availability）：一般會捲的頁面，跟「我的足跡」一樣 ---- */
+
+.mich-av-page {
+  max-width: 860px;
+}
+.mich-av-page h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+.mich-av-lead {
+  font-variant-numeric: tabular-nums;
+}
+.mich-av-stale {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--text-h);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.mich-av-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+}
+/* 人數切換：跟地圖頁的「地圖／清單」同一種樣子，但那個在寬螢幕會藏起來，所以另外寫 */
+.mich-av-party {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.mich-av-party button {
+  padding: 0 16px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.mich-av-party button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.mich-av-controls select {
+  flex: 0 1 10em;
+}
+.mich-av-summary {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.mich-av-new-text {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.mich-av-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.mich-av-row {
+  padding: 12px 16px;
+}
+.mich-av-row + .mich-av-row {
+  border-top: 1px solid var(--border);
+}
+.mich-av-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mich-av-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mich-av-name a {
+  color: var(--text-h);
+  text-decoration: none;
+}
+.mich-av-name a:hover {
+  text-decoration: underline;
+}
+a.mich-av-book {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: var(--text-h);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mich-av-row.has-slots a.mich-av-book {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 一格一天：有時段是實心（新釋出的右上角一個點），額滿淡淡一塊，公休或沒開放只有數字，沒資料是虛線框 */
+.mich-av-strip {
+  display: flex;
+  gap: 3px;
+  /* 跟店名對齊：徽章 28px 加上間距 10px */
+  margin: 10px 0 0 38px;
+  padding: 0;
+  list-style: none;
+}
+.mich-av-strip li {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 34px;
+  display: grid;
+  place-items: center;
+  height: 26px;
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.mich-av-strip li.is-open {
+  background: color-mix(in srgb, var(--ok) 24%, transparent);
+  color: var(--text-h);
+  font-weight: 700;
+}
+.mich-av-strip li.is-new::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.mich-av-strip li.is-full {
+  background: color-mix(in srgb, var(--text-h) 8%, transparent);
+}
+.mich-av-strip li.is-off {
+  color: color-mix(in srgb, var(--text) 65%, transparent);
+}
+.mich-av-strip li.is-none {
+  border: 1px dashed var(--border);
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+/* 週末的日期底下一條線 */
+.mich-av-strip .is-weekend {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mich-av-details,
+.mich-av-empty,
+.mich-av-meta {
+  margin: 8px 0 0 38px;
+}
+/* 整列都能點，高度至少 40px */
+.mich-av-details summary {
+  padding: 9px 0;
+  line-height: 22px;
+  cursor: pointer;
+}
+.mich-av-days {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.mich-av-days li {
+  display: flex;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-top: 1px dashed var(--border);
+}
+.mich-av-date {
+  flex: 0 0 6.5em;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.mich-av-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.mich-av-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--ok) 50%, var(--border));
+  border-radius: 999px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.mich-av-slot.is-new {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.mich-av-new-tag {
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 700;
+}
+.mich-av-meta {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 13px;
+}
+.mich-av-meta a {
+  color: var(--accent);
+  white-space: nowrap;
+}
+.mich-av-foot {
+  margin-top: 16px;
+}
+
+@media (max-width: 640px) {
+  .mich-av-page h1 {
+    font-size: 22px;
+  }
+  .mich-av-row {
+    padding: 12px;
+  }
+  /* 手機上十四格要擠進一列，不留左邊的對齊空間 */
+  .mich-av-strip {
+    gap: 2px;
+    margin-left: 0;
+  }
+  .mich-av-details,
+  .mich-av-empty,
+  .mich-av-meta {
+    margin-left: 0;
+  }
+  .mich-av-date {
+    flex-basis: 5.8em;
+  }
+}

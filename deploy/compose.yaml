@@ -18,6 +18,8 @@ services:
       FUNCSAY_API_URL: ${FUNCSAY_API_URL:-http://host.docker.internal:7666}
       # 中央氣象署開放資料的授權碼，放在伺服器上的 secrets.env（不進 git）；沒設定就不抓氣象署的資料
       CWA_API_KEY: ${CWA_API_KEY:-}
+      # 米其林空位：家裡電腦上的爬蟲上傳結果用的金鑰，放在 repo 的 GitHub secret，deploy.sh 寫進 .env；沒設定就不收上傳（見 michelin_availability.rs）
+      MICHELIN_UPLOAD_KEY: ${MICHELIN_UPLOAD_KEY:-}
       # 放進假 .env 的 AWS 金鑰（canarytokens.org 產生，有人拿去用會寄信通知），也放在 secrets.env；沒設定就不放（見 honeypot.rs）
       HONEYPOT_AWS_ACCESS_KEY_ID: ${HONEYPOT_AWS_ACCESS_KEY_ID:-}
       HONEYPOT_AWS_SECRET_ACCESS_KEY: ${HONEYPOT_AWS_SECRET_ACCESS_KEY:-}
