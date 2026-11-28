@@ -1482,11 +1482,22 @@ a.mich-av-book {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* 選的那天框起來（畫在格子裡面，不會蓋到旁邊那格） */
+.mich-av-strip li.is-picked {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
 
 .mich-av-details,
+.mich-av-pick,
 .mich-av-empty,
 .mich-av-meta {
   margin: 8px 0 0 38px;
+}
+/* 選了日期：那天的時段直接列在 14 格下面，排法跟展開後的每一天一樣 */
+.mich-av-pick {
+  display: flex;
+  gap: 4px 12px;
+  font-size: 14px;
 }
 /* 整列都能點，高度至少 40px */
 .mich-av-details summary {
@@ -1552,14 +1563,13 @@ a.mich-av-book {
   .mich-av-page h1 {
     font-size: 22px;
   }
-  /* 控制項排成兩欄：人數一列，地區和時段並排，自訂時間、只看有空位各一列 */
+  /* 控制項排成兩欄：人數一列，日期和時段並排，自訂時間一列，地區和只看有空位並排 */
   .mich-av-controls {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
   .mich-av-party,
-  .mich-av-range,
-  .mich-av-controls .mich-check {
+  .mich-av-range {
     grid-column: 1 / -1;
   }
   .mich-av-party {
@@ -1578,6 +1588,7 @@ a.mich-av-book {
     margin-left: 0;
   }
   .mich-av-details,
+  .mich-av-pick,
   .mich-av-empty,
   .mich-av-meta {
     margin-left: 0;
