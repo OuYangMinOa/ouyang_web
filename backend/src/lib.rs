@@ -16,6 +16,7 @@ pub mod chat;
 pub mod chat_rooms;
 pub mod chinesecheckers;
 pub mod contact;
+pub mod crawlers;
 pub mod dinner;
 pub mod draw;
 pub mod draw_words;
@@ -46,6 +47,7 @@ pub mod puyo_scores;
 pub mod racing;
 pub mod registration;
 pub mod short_links;
+pub mod site_catalog;
 pub mod telephone;
 pub mod tetris;
 pub mod tetris_scores;
@@ -76,7 +78,7 @@ use std::{
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Request, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{delete, get, patch, post, put},
@@ -422,6 +424,9 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/s/{code}", get(short_links::follow))
         .route("/mcp", mcp.clone())
         .route("/mcp/", mcp)
+        // 給搜尋引擎和網站分類的爬蟲（見 crawlers.rs）
+        .route("/robots.txt", get(crawlers::robots))
+        .route("/sitemap.xml", get(crawlers::sitemap))
         .fallback_service(spa)
         // 在 /api 和前端之前攔下 `.env`（含 `/api/.env`），IP 訪問紀錄在外層，所以也會記到
         .layer(middleware::from_fn_with_state(state.clone(), honeypot::intercept))
@@ -513,6 +518,14 @@ async fn hide_dot_paths(request: Request, next: Next) -> Response {
         return StatusCode::NOT_FOUND.into_response();
     }
     next.run(request).await
+}
+
+/// 本站的網址（https://ouyang.app），從請求的 Host 看；經過 Traefik 的會帶 X-Forwarded-Proto
+pub fn site_origin(headers: &HeaderMap, secure: bool) -> Option<String> {
+    let host = headers.get(header::HOST)?.to_str().ok()?;
+    let scheme =
+        headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or(if secure { "https" } else { "http" });
+    Some(format!("{scheme}://{host}"))
 }
 
 #[derive(Debug)]

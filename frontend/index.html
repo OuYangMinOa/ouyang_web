@@ -33,6 +33,7 @@
     </script>
   </head>
   <body>
+    <!-- 打包時 scripts/site-catalog.mjs 把沒登入時的首頁寫進 #root，給不跑 JavaScript 的爬蟲看；React 載入後會換掉 -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

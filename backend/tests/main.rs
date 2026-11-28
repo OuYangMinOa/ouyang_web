@@ -18,6 +18,7 @@ mod auth;
 mod bigtwo;
 mod calendar;
 mod chat;
+mod crawlers;
 mod draw;
 mod draw_words;
 mod feedback;

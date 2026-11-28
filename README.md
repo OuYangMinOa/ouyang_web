@@ -93,7 +93,7 @@ cd ~/ouyang_web/<env> && docker compose exec -T app /app/backend create-admin ad
 
 ### 新增 APP
 
-1. 在 `frontend/src/apps/registry.ts` 的 `APPS` 加一筆：`id`（網址前綴）、名稱、圖示、首頁卡片文字，以及 `nav`（側邊欄的頁面，可以分組）。需要權限才能用的 APP 設 `permission`，沒權限的人在切換面板和首頁都看不到；只要登入就能用的設 `loginOnly`；需要大畫面的（小遊戲）設 `wide`，內容區從 1000px 放寬到 1440px。
+1. 在 `frontend/src/apps/registry.ts` 的 `APPS` 加一筆：`id`（網址前綴）、名稱、圖示、首頁卡片文字，以及 `nav`（側邊欄的頁面，可以分組）。需要權限才能用的 APP 設 `permission`，沒權限的人在切換面板和首頁都看不到；只要登入就能用的設 `loginOnly`；需要大畫面的（小遊戲）設 `wide`，內容區從 1000px 放寬到 1440px。登記之後，AI 助手的「搜尋本站功能」、給爬蟲的首頁內容和網站地圖也會跟著更新（見[搜尋引擎與爬蟲](#搜尋引擎與爬蟲)）。
 2. 在 `App.tsx` 把路由包在 `<AppLayout />` 底下（要權限就再包一層 `<RequireAuth>`）：
    ```tsx
    <Route path="/notes" element={<AppLayout />}>
@@ -1350,6 +1350,23 @@ GET  /api/admin/visits/{page}/{session}  那次瀏覽的事件
 - 前端用 `useVisitTracking`（`frontend/src/visits.ts`）：進頁面送 open，頁面裡的按鈕被點送 click（名稱取 `data-track` 或按鈕文字），JS 錯誤送 error（每次瀏覽最多 20 筆）。
 - 後端補上來源 IP（Traefik 的 X-Forwarded-For）、登入的帳號和 User-Agent，存在 `page_events`，保留 180 天。同一個 IP 10 分鐘超過 200 筆就不再記。
 - 新增隱藏頁面：在 `backend/src/visits.rs` 的 `PAGES` 加上 id，頁面裡呼叫 `useVisitTracking('<id>', rootRef)`。
+
+## 搜尋引擎與爬蟲
+
+前端是 React 的單頁應用，不跑 JavaScript 的爬蟲（搜尋引擎、公司防火牆替網站分類用的）只拿得到 index.html。
+新網站在防火牆的資料庫裡常被當成「未分類」擋掉，所以讓它們看得出這個網站在做什麼：
+
+- **首頁的靜態內容**：`npm run build` 最後一步（`frontend/scripts/site-catalog.mjs`）把沒登入時的首頁（頁首、自我介紹、作品清單）
+  寫進 `dist/index.html` 的 `#root`。文字跟 `Home.tsx` 共用 `frontend/src/pages/homeContent.ts`，作品清單來自 `apps/registry.ts`，
+  class 也一樣，樣式直接套用。React 載入後 `createRoot` 會換掉它；每個網址回的都是這份 index.html，後面一小段程式在首頁以外先清掉，
+  等 React 畫出那一頁，不會先閃一下首頁。
+- **`/robots.txt`**（`backend/src/crawlers.rs`）：只有正式站（`APP_ENV=prod`）讓人爬，staging 和本機整站擋掉，免得跟正式站重複。
+  正式站擋 `/api/`、短網址，以及要登入或權限的 APP 和頁面（從 `site-catalog.json` 來，寫成 `/ai$` 和 `/ai/`，不會擋到同開頭的網址），
+  最後附上網站地圖的網址。
+- **`/sitemap.xml`**：首頁、不用登入的 APP、每個小工具和小遊戲、回報與許願，網址的主機照請求的 Host。
+  前端還沒 build（沒有 `site-catalog.json`）時回 404。
+- 新增 APP、小工具、小遊戲只要登記進 registry，這三樣都會跟著變。[隱藏頁面](#隱藏頁面)不在功能清單裡，不會出現在網站地圖，
+  也不寫進 robots.txt（寫了等於告訴大家網址）。
 
 ## 音樂
 

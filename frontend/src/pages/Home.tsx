@@ -7,23 +7,15 @@ import DoodleSun from '../components/DoodleSun'
 import MistScene from '../components/MistScene'
 import StickerSun from '../components/StickerSun'
 import SunStage from '../components/SunStage'
-import { GAMES } from '../games/registry'
 import { useAppearance } from '../theme'
-import { TOOLS } from '../tools/registry'
 import TyphoonHome from '../weather/TyphoonHome'
 import './Home.css'
+import { BOT, LEAD, OWNER, PROFILE, WORKS } from './homeContent'
 
 type Message = { id: number; content: string; created_at: string }
 type Health = { status: string; env: string; commit: string; db: boolean }
 
 const YEAR = new Date().getFullYear()
-
-const PROFILE = [
-  { label: '現在', value: '軟體工程師' },
-  { label: '學歷', value: '中央大學物理研究所' },
-  { label: '做過', value: '推薦系統、棋牌類強化學習、公司的 AI 管理方案' },
-  { label: '擅長', value: 'Claude Code、知識庫、Harness 建置' },
-]
 
 function Intro() {
   // 塗鴉風格換成手畫的太陽、山嵐換成一幅不會動的山景、貼紙換成一張太陽貼紙，都不載入 three.js
@@ -32,11 +24,8 @@ function Intro() {
     <section className="home-intro">
       <div className="home-wrap home-intro-grid">
         <div className="home-intro-copy">
-          <h1 className="home-name">歐陽明崴</h1>
-          <p className="home-lead">
-            這裡是我順手寫東西的地方：Discord 機器人歐陽小俠、{GAMES.length} 款小遊戲、{TOOLS.length}{' '}
-            個小工具，還有幾個自己每天會用的 APP。
-          </p>
+          <h1 className="home-name">{OWNER}</h1>
+          <p className="home-lead">{LEAD}</p>
           <dl className="home-profile">
             {PROFILE.map((row) => (
               <div key={row.label}>
@@ -65,13 +54,7 @@ type Item = { glyph: string; name: string; desc: string; tag: string; to?: strin
 function Works() {
   const auth = useAuth()
   const items: Item[] = [
-    {
-      glyph: '俠',
-      name: '歐陽小俠',
-      desc: 'Discord 機器人：點歌、音效板、AI 聊天，還有台灣天氣和地震速報。',
-      tag: '運作中',
-      live: true,
-    },
+    BOT,
     // 其他項目來自 apps/registry.ts，沒權限的不會出現
     ...visibleApps(auth).map((app) => ({
       glyph: app.glyph,
@@ -86,8 +69,8 @@ function Works() {
     <section id="works" className="home-section">
       <div className="home-wrap">
         <header className="home-head">
-          <h2>作品與工具</h2>
-          <p>點進去就能用，大部分不用登入。</p>
+          <h2>{WORKS.title}</h2>
+          <p>{WORKS.note}</p>
         </header>
         <ul className="home-items">
           {items.map((item) => {
