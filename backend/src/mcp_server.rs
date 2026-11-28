@@ -36,6 +36,7 @@ use crate::{
     AppError, AppState,
     ai_builtin::{self, Builtin},
     auth::{self, CurrentUser, token_hash},
+    site_origin,
 };
 
 /// 2026-07-28 起：每個請求自己帶版本，沒有 initialize
@@ -419,14 +420,6 @@ fn with_cors(mut response: Response) -> Response {
     headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
-}
-
-/// 本站的網址（https://ouyang.app），從請求的 Host 看；經過 Traefik 的會帶 X-Forwarded-Proto
-fn site_origin(headers: &HeaderMap, secure: bool) -> Option<String> {
-    let host = headers.get(header::HOST)?.to_str().ok()?;
-    let scheme =
-        headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or(if secure { "https" } else { "http" });
-    Some(format!("{scheme}://{host}"))
 }
 
 /// 工具結果裡的站內連結（`/michelin/...`）改成完整網址：別人的 AI 不知道是哪個網站
