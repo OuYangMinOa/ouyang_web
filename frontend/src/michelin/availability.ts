@@ -94,11 +94,65 @@ export function isWeekend(date: string) {
   return day === 0 || day === 6
 }
 
+/** 只看這段時間的時段：from ≤ 時段 ≤ to（HH:MM，兩頭都算） */
+export type TimeRange = { from: string; to: string }
+
+export type TimeFilter = 'all' | 'lunch' | 'dinner' | 'custom'
+
+export const TIME_FILTERS: { value: TimeFilter; label: string }[] = [
+  { value: 'all', label: '全部時段' },
+  { value: 'lunch', label: '午餐（10–16 點）' },
+  { value: 'dinner', label: '晚餐（16 點以後）' },
+  { value: 'custom', label: '自訂時間' },
+]
+
+// 午餐和晚餐從 16:00 切開，中間不漏掉時段（實際上 15、16 點沒有店開放訂位）。
+// 10 點前只有一家的早餐，只在「全部時段」和自訂裡看得到。
+const LUNCH: TimeRange = { from: '10:00', to: '15:59' }
+const DINNER: TimeRange = { from: '16:00', to: '23:59' }
+
+/** 自訂時間能選的鐘點：06:00 到 23:30，每半小時一個 */
+export const CLOCKS = Array.from({ length: 36 }, (_, i) => {
+  const minutes = 6 * 60 + i * 30
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${minutes % 60 === 0 ? '00' : '30'}`
+})
+
+export const DEFAULT_CUSTOM: TimeRange = { from: '18:00', to: '20:00' }
+
+export function isTimeFilter(value: unknown): value is TimeFilter {
+  return TIME_FILTERS.some((f) => f.value === value)
+}
+
+/** localStorage 讀回來的自訂時間：兩頭都要是選單上的鐘點，而且不能顛倒 */
+export function isTimeRange(value: unknown): value is TimeRange {
+  if (typeof value !== 'object' || value === null) return false
+  const { from, to } = value as Record<string, unknown>
+  return typeof from === 'string' && typeof to === 'string' && CLOCKS.includes(from) && CLOCKS.includes(to) && from <= to
+}
+
+/** 選的篩選 → 要留下的時段範圍；全部時段是 null */
+export function timeRange(filter: TimeFilter, custom: TimeRange): TimeRange | null {
+  if (filter === 'lunch') return LUNCH
+  if (filter === 'dinner') return DINNER
+  if (filter === 'custom') return custom
+  return null
+}
+
+/** 句子裡怎麼稱呼選的時段：「晚餐」「18:00–20:00」；全部時段是空字串 */
+export function timeName(filter: TimeFilter, custom: TimeRange) {
+  if (filter === 'lunch') return '午餐'
+  if (filter === 'dinner') return '晚餐'
+  if (filter === 'custom') return `${custom.from}–${custom.to}`
+  return ''
+}
+
 export type DayCell = {
   date: string
   day: DayResult | undefined
-  /** 還沒過去的時段 */
+  /** 還沒過去、在選的時段裡的時段 */
   times: string[]
+  /** 還沒過去、但不在選的時段裡的有幾個 */
+  outside: number
   fresh: Set<string>
 }
 
@@ -109,6 +163,8 @@ export type Row = {
   result: PartyResult | undefined
   cells: DayCell[]
   slots: number
+  /** 被時段篩掉的有幾個（還沒過去的） */
+  outside: number
   fresh: number
   /** 最早的時段 */
   first: { date: string; time: string } | null
@@ -118,22 +174,26 @@ export type Row = {
 
 const byId = new Map(RESTAURANTS.map((r) => [r.id, r]))
 
-/** 某個人數的結果整理成每家一列：有時段的在前（最早的先），沒時段的照星等，沒資料的最後 */
-export function buildRows(data: Availability, party: number, now = taipeiTime()): Row[] {
+/** 某個人數的結果整理成每家一列，range 是只看的時段（null 全看）。
+ * 有時段的在前（最早的先），只有其他時段的其次，沒時段的照星等，沒資料的最後 */
+export function buildRows(data: Availability, party: number, now = taipeiTime(), range: TimeRange | null = null): Row[] {
   const days = upcomingDays(data, now)
   const rows = data.restaurants.map((place): Row => {
     const result = place.parties[String(party)]
     let first: Row['first'] = null
     let slots = 0
+    let outside = 0
     let fresh = 0
     const cells = days.map((date): DayCell => {
       const day = result?.days[date]
-      const times = (day?.times ?? []).filter((t) => `${date} ${t}` > now)
+      const upcoming = (day?.times ?? []).filter((t) => `${date} ${t}` > now)
+      const times = range ? upcoming.filter((t) => t >= range.from && t <= range.to) : upcoming
       const isNew = new Set((day?.new ?? []).filter((t) => times.includes(t)))
       if (times.length > 0 && !first) first = { date, time: times[0] }
       slots += times.length
+      outside += upcoming.length - times.length
       fresh += isNew.size
-      return { date, day, times, fresh: isNew }
+      return { date, day, times, outside: upcoming.length - times.length, fresh: isNew }
     })
     return {
       place,
@@ -141,6 +201,7 @@ export function buildRows(data: Availability, party: number, now = taipeiTime())
       result,
       cells,
       slots,
+      outside,
       fresh,
       first,
       hasData: cells.some((c) => c.day),
@@ -152,6 +213,7 @@ export function buildRows(data: Availability, party: number, now = taipeiTime())
     (a, b) =>
       Number(b.slots > 0) - Number(a.slots > 0) ||
       firstKey(a).localeCompare(firstKey(b)) ||
+      Number(b.outside > 0) - Number(a.outside > 0) ||
       Number(b.hasData) - Number(a.hasData) ||
       award(b) - award(a) ||
       a.place.name.localeCompare(b.place.name, 'zh-Hant'),
