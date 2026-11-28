@@ -20,6 +20,11 @@ export default defineConfig({
       '/api': { target: 'http://localhost:8080', ws: true },
       // 短網址的跳轉由後端處理
       '/s/': 'http://localhost:8080',
+      // 本站的 MCP 伺服器（POST /mcp）由後端處理；瀏覽器打開 /mcp、/mcp/test 還是前端的頁面
+      '/mcp': {
+        target: 'http://localhost:8080',
+        bypass: (req) => (req.method === 'GET' && req.headers.accept?.includes('text/html') ? req.url : undefined),
+      },
     },
   },
 })

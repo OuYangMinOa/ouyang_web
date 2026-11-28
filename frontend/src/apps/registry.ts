@@ -227,6 +227,25 @@ export const APPS: AppInfo[] = [
     ],
   },
   {
+    id: 'mcp',
+    name: 'MCP',
+    icon: '🔌',
+    glyph: '接',
+    blurb:
+      '讓你自己的 AI（Claude、ChatGPT、Cursor…）透過 MCP 查本站的米其林空位：建立一把金鑰，把產生的提詞貼給 AI，它就會照著接上。也能在這裡看有哪些工具、填參數試試看。',
+    tag: 'AI 串接',
+    live: true,
+    loginOnly: true,
+    nav: [
+      {
+        items: [
+          { to: '/mcp', label: '連線與金鑰', icon: '🔑' },
+          { to: '/mcp/test', label: '測試工具', icon: '🧪' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'chat',
     name: '聊天室',
     icon: '💬',

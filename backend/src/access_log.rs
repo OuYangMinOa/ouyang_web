@@ -197,6 +197,18 @@ fn truncate(text: &str, max: usize) -> String {
     text.chars().take(max).collect()
 }
 
+/// 網址裡的金鑰（MCP 的 `?key=`，見 mcp_server.rs）不記下來，只留參數名稱
+fn redact_query(query: &str) -> String {
+    query
+        .split('&')
+        .map(|pair| match pair.split_once('=') {
+            Some(("key", value)) if !value.is_empty() => "key=…",
+            _ => pair,
+        })
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
 pub async fn record(State(recorder): State<Recorder>, request: Request, next: Next) -> Response {
     let path = request.uri().path().to_owned();
     if recorder.skip(&path) {
@@ -205,7 +217,7 @@ pub async fn record(State(recorder): State<Recorder>, request: Request, next: Ne
     let headers = request.headers();
     let ip = client_key(headers);
     let method = request.method().to_string();
-    let query = request.uri().query().unwrap_or_default().to_owned();
+    let query = redact_query(request.uri().query().unwrap_or_default());
     let session = read_session_token(headers, &recorder.state.session_cookie_name()).map(|t| token_hash(&t));
     let user_agent = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).unwrap_or_default();
     let user_agent = truncate(user_agent, MAX_USER_AGENT_LEN);

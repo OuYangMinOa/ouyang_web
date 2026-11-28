@@ -205,6 +205,12 @@ fn system_prompt(user: &CurrentUser, tools: &[Tool]) -> String {
                  先用 site_search 查，回答附上連結；查不到就說本站沒有，不要編造。",
             );
         }
+        if tools.iter().any(|t| t.name == "michelin_availability") {
+            prompt.push_str(
+                "\n- 使用者問米其林餐廳哪天、幾點還能訂位，用 michelin_availability 查（只有星級餐廳），不要說你查不到；\
+                 回答時說資料是幾點查的、附上訂位連結，提醒以訂位頁為準，你不能幫忙訂位。本站的空位頁是 /michelin/availability。",
+            );
+        }
         if tools.iter().any(|t| t.name == "web_search") {
             prompt.push_str(
                 "\n- 新聞、最近發生的事，或你不確定、可能已經過時的資料，先用 web_search 搜尋網路，要細節再用 web_fetch 打開網頁；\

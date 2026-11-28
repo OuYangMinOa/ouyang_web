@@ -94,6 +94,14 @@ export function isWeekend(date: string) {
   return day === 0 || day === 6
 }
 
+/** 日期選單上的字：今天、明天寫在括號裡代替星期（11/28（今天）），手機上半欄寬也放得下；today 是台灣的 YYYY-MM-DD */
+export function dateOption(date: string, today: string) {
+  const [y, m, d] = today.split('-').map(Number)
+  const tomorrow = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10)
+  const relative = date === today ? '今天' : date === tomorrow ? '明天' : ''
+  return relative ? dayLabel(date).replace(/（.）$/, `（${relative}）`) : dayLabel(date)
+}
+
 /** 只看這段時間的時段：from ≤ 時段 ≤ to（HH:MM，兩頭都算） */
 export type TimeRange = { from: string; to: string }
 
@@ -161,39 +169,63 @@ export type Row = {
   /** 地圖上的那家（星等、地區、料理） */
   restaurant: Restaurant | undefined
   result: PartyResult | undefined
+  /** 每天一格，都照選的時段篩過 */
   cells: DayCell[]
+  // slots、outside、fresh、first 只算選的那天，沒選日期就是全部的天
   slots: number
   /** 被時段篩掉的有幾個（還沒過去的） */
   outside: number
+  /** 選了日期時，其他天在選的時段裡有幾個；沒選日期是 0 */
+  others: number
   fresh: number
   /** 最早的時段 */
   first: { date: string; time: string } | null
+  /** 選的那天；沒選日期是 null */
+  picked: DayCell | null
   /** 有讀到任何一天的資料 */
   hasData: boolean
 }
 
 const byId = new Map(RESTAURANTS.map((r) => [r.id, r]))
 
-/** 某個人數的結果整理成每家一列，range 是只看的時段（null 全看）。
- * 有時段的在前（最早的先），只有其他時段的其次，沒時段的照星等，沒資料的最後 */
-export function buildRows(data: Availability, party: number, now = taipeiTime(), range: TimeRange | null = null): Row[] {
+/** 某個人數的結果整理成每家一列。range 是只看的時段（null 全看），date 是只看的那天（null 或不在查詢範圍裡就全看）。
+ * 有時段的在前（最早的先），再來是只有其他時段的、只有其他天的，沒時段的照星等，沒資料的最後 */
+export function buildRows(
+  data: Availability,
+  party: number,
+  now = taipeiTime(),
+  range: TimeRange | null = null,
+  date: string | null = null,
+): Row[] {
   const days = upcomingDays(data, now)
+  const pick = date !== null && days.includes(date) ? date : null
   const rows = data.restaurants.map((place): Row => {
     const result = place.parties[String(party)]
     let first: Row['first'] = null
     let slots = 0
     let outside = 0
+    let others = 0
     let fresh = 0
-    const cells = days.map((date): DayCell => {
-      const day = result?.days[date]
-      const upcoming = (day?.times ?? []).filter((t) => `${date} ${t}` > now)
+    const cells = days.map((d): DayCell => {
+      const day = result?.days[d]
+      const upcoming = (day?.times ?? []).filter((t) => `${d} ${t}` > now)
       const times = range ? upcoming.filter((t) => t >= range.from && t <= range.to) : upcoming
-      const isNew = new Set((day?.new ?? []).filter((t) => times.includes(t)))
-      if (times.length > 0 && !first) first = { date, time: times[0] }
+      const cell: DayCell = {
+        date: d,
+        day,
+        times,
+        outside: upcoming.length - times.length,
+        fresh: new Set((day?.new ?? []).filter((t) => times.includes(t))),
+      }
+      if (pick !== null && d !== pick) {
+        others += times.length
+        return cell
+      }
+      if (times.length > 0 && !first) first = { date: d, time: times[0] }
       slots += times.length
-      outside += upcoming.length - times.length
-      fresh += isNew.size
-      return { date, day, times, outside: upcoming.length - times.length, fresh: isNew }
+      outside += cell.outside
+      fresh += cell.fresh.size
+      return cell
     })
     return {
       place,
@@ -202,8 +234,10 @@ export function buildRows(data: Availability, party: number, now = taipeiTime(),
       cells,
       slots,
       outside,
+      others,
       fresh,
       first,
+      picked: cells.find((c) => c.date === pick) ?? null,
       hasData: cells.some((c) => c.day),
     }
   })
@@ -214,6 +248,7 @@ export function buildRows(data: Availability, party: number, now = taipeiTime(),
       Number(b.slots > 0) - Number(a.slots > 0) ||
       firstKey(a).localeCompare(firstKey(b)) ||
       Number(b.outside > 0) - Number(a.outside > 0) ||
+      Number(b.others > 0) - Number(a.others > 0) ||
       Number(b.hasData) - Number(a.hasData) ||
       award(b) - award(a) ||
       a.place.name.localeCompare(b.place.name, 'zh-Hant'),

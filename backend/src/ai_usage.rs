@@ -42,7 +42,7 @@ const MAX_REPORT_DAYS: i64 = 90;
 const KEEP_DAYS: i64 = 400;
 
 /// 台灣時間（UTC+8，沒有夏令時間）
-fn taipei_now() -> chrono::NaiveDateTime {
+pub fn taipei_now() -> chrono::NaiveDateTime {
     Utc::now().naive_utc() + ChronoDuration::hours(8)
 }
 

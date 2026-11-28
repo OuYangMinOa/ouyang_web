@@ -78,6 +78,8 @@ async fn fake_chat(State(fake): State<Arc<FakeModel>>, Json(body): Json<Value>) 
         Reply::Call("demo__echo", r#"{"text": "哈囉"}"#.into())
     } else if has_tools && text.contains("搜尋") {
         Reply::Call("web_search", r#"{"query": "颱風", "time_range": "day"}"#.into())
+    } else if has_tools && text.contains("空位") {
+        Reply::Call("michelin_availability", r#"{"restaurant": "頤宮", "meal": "dinner"}"#.into())
     } else if has_tools && text.contains("米其林") {
         Reply::Call("michelin_search", r#"{"area": "臺北", "awards": ["3"], "mine": "not_been"}"#.into())
     } else if has_tools && text.contains("讀網頁") {
@@ -635,6 +637,54 @@ async fn michelin_restaurants_can_be_searched() {
     assert_eq!(first["award"], "米其林三星");
     assert!(first["link"].as_str().unwrap().starts_with("/michelin?r="), "{first}");
     assert!(result["edition"].as_str().unwrap().contains("年版"));
+}
+
+#[tokio::test]
+async fn michelin_availability_can_be_asked() {
+    let s = setup().await;
+    let names = tool_names(&s.app.get("/api/ai/tools", Some(&s.alice)).await.body);
+    assert!(names.contains(&"michelin_availability".to_owned()), "{names:?}");
+
+    // 爬蟲還沒上傳過：告訴模型，不算失敗
+    let chat = new_chat(&s.app, &s.alice).await;
+    let (_, events) = say(&s.app, &s.alice, chat, "頤宮晚上的空位").await;
+    let call = find(&events, "tool_call");
+    assert_eq!((call["name"].clone(), call["approval"].clone()), (json!("michelin_availability"), json!(false)));
+    let result = find(&events, "tool_result");
+    assert_eq!(result["status"], "done");
+    assert!(result["content"].as_str().unwrap().contains("還沒有空位資料"), "{result}");
+
+    // 爬蟲上傳：頤宮明天中午、晚上各一個時段（router 建好後 state 就不能改了，另外開一個收上傳的）
+    let mut state = s.app.state.clone();
+    state.michelin_upload_key = Some("upload-key".into());
+    let app = TestApp { router: backend::router(state.clone(), std::path::Path::new("does-not-exist")), state };
+    let tomorrow = (chrono::Utc::now() + chrono::TimeDelta::hours(32)).format("%Y-%m-%d").to_string();
+    let mut body = json!({
+        "checked_at": chrono::Utc::now().to_rfc3339(),
+        "days": [tomorrow],
+        "restaurants": [{ "name": "頤宮", "url": "https://inline.app/booking/le-palais",
+                          "parties": { "2": { "source": "inline", "days": {} } } }]
+    });
+    body["restaurants"][0]["parties"]["2"]["days"][&tomorrow] =
+        json!({ "status": "open", "times": ["12:00", "18:30"] });
+    let request = Request::put("/api/michelin/availability")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-michelin-key", "upload-key")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    assert_eq!(app.router.clone().oneshot(request).await.unwrap().status(), StatusCode::NO_CONTENT);
+
+    // 只看晚上：中午那個不列
+    let (_, events) = say(&app, &s.alice, chat, "頤宮晚上的空位").await;
+    let result: Value = serde_json::from_str(find(&events, "tool_result")["content"].as_str().unwrap()).unwrap();
+    let palais = &result["restaurants"][0];
+    assert_eq!(palais["times"][&tomorrow], "18:30", "{result}");
+    assert_eq!(palais["booking"], "https://inline.app/booking/le-palais");
+    assert_eq!((result["party"].clone(), result["time"].clone()), (json!(2), json!("16:00–23:59")));
+    // 系統提示詞有提到這個工具
+    let requests = s.fake.requests.lock().unwrap().clone();
+    let request = requests.iter().rev().find(|r| r.get("tools").is_some()).unwrap();
+    assert!(request["messages"][0]["content"].as_str().unwrap().contains("michelin_availability"));
 }
 
 #[tokio::test]
