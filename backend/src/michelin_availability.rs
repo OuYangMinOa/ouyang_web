@@ -526,6 +526,10 @@ impl Query {
         if !elsewhere.is_empty() {
             elsewhere.truncate(LISTED_ELSEWHERE);
             out["only_other_times"] = json!(elsewhere);
+            // 實際讓模型讀過：沒寫清楚的話會當成「別天才有」
+            out["only_other_times_note"] = json!(
+                "同樣這幾天、選的時段以外還有位子的店（other_slots 是幾個），不是別天；要看是幾點就不限時段再查一次"
+            );
         }
         if named.is_empty() {
             out["no_slots"] = json!(without);
@@ -654,6 +658,7 @@ mod tests {
             out["only_other_times"],
             json!([{ "name": "頤宮", "other_slots": 2 }, { "name": "JL Studio", "other_slots": 1 }])
         );
+        assert!(out["only_other_times_note"].as_str().unwrap().contains("不是別天"), "{out}");
     }
 
     #[test]
