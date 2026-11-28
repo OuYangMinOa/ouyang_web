@@ -11,13 +11,13 @@ use axum::{
     extract::{Path, State},
 };
 use chrono::NaiveDate;
-use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
     AppState, ai_usage,
     auth::CurrentUser,
     calendar, invoice, lunar, michelin, michelin_availability, short_links,
+    site_catalog::{self, CatalogItem},
     weather::{forecast, quake, typhoon},
 };
 
@@ -976,42 +976,7 @@ async fn link_create(state: &AppState, user: &CurrentUser, args: &Value) -> Tool
     ))
 }
 
-// ---- 本站功能 ----
-
-/// 前端 build 時產生的功能清單裡的一項（frontend/scripts/site-catalog.mjs）
-#[derive(Deserialize, Debug, Clone)]
-struct CatalogItem {
-    /// app、tool、game、page
-    kind: String,
-    name: String,
-    #[serde(default)]
-    description: String,
-    url: String,
-    #[serde(default)]
-    tags: Vec<String>,
-    #[serde(default)]
-    category: Option<String>,
-    #[serde(default)]
-    players: Option<String>,
-    #[serde(default)]
-    login: bool,
-    /// 要有這個權限才看得到（例如系統管理）
-    #[serde(default)]
-    permission: Option<String>,
-    #[serde(default)]
-    pages: Vec<CatalogPage>,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-struct CatalogPage {
-    label: String,
-    url: String,
-}
-
-#[derive(Deserialize)]
-struct Catalog {
-    items: Vec<CatalogItem>,
-}
+// ---- 本站功能（前端 build 時產生的功能清單，見 site_catalog.rs） ----
 
 const MAX_SEARCH_RESULTS: usize = 12;
 
@@ -1090,10 +1055,7 @@ fn catalog_view(item: &CatalogItem, detailed: bool) -> Value {
 }
 
 async fn site_search(state: &AppState, user: &CurrentUser, args: &Value) -> ToolResult {
-    let text = tokio::fs::read_to_string(&state.site_catalog)
-        .await
-        .map_err(|_| "還沒有本站的功能清單（前端還沒 build）".to_owned())?;
-    let catalog: Catalog = serde_json::from_str(&text).map_err(|_| "本站的功能清單格式不對".to_owned())?;
+    let catalog = site_catalog::load(&state.site_catalog).await?;
     let query = arg_str(args, "query").unwrap_or_default();
     let found = search_catalog(&catalog.items, query, arg_str(args, "kind"), |p| user.has(p));
     if found.is_empty() {
@@ -1107,6 +1069,7 @@ async fn site_search(state: &AppState, user: &CurrentUser, args: &Value) -> Tool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::site_catalog::Catalog;
 
     fn period() -> invoice::Period {
         invoice::Period {
