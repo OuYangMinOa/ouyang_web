@@ -15,6 +15,7 @@ import {
   TIME_FILTERS,
   ago,
   buildRows,
+  dateOption,
   dayLabel,
   isTimeFilter,
   isTimeRange,
@@ -37,7 +38,7 @@ import './michelin.css'
 
 type Loaded = { user: number; data: Availability | null; error: string | null }
 
-/** 人數、時段、只看有空位、地區記在這個瀏覽器（讀寫失敗就用預設值） */
+/** 人數、日期、時段、只看有空位、地區記在這個瀏覽器（讀寫失敗就用預設值） */
 function useStored<T>(key: string, fallback: T) {
   const [value, setValue] = useState<T>(() => {
     try {
@@ -127,6 +128,7 @@ function Board({ data }: { data: Availability }) {
   const setTo = (to: string) => setCustom({ from: to < custom.from ? to : custom.from, to })
   const [onlyOpen, setOnlyOpen] = useStored('michelin-availability-open', false)
   const [region, setRegion] = useStored('michelin-availability-region', 'all')
+  const [storedDate, setDate] = useStored('michelin-availability-date', 'all')
   // 已經過去的時段要濾掉；頁面一直開著時每分鐘重算一次
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -134,15 +136,17 @@ function Board({ data }: { data: Availability }) {
     return () => window.clearInterval(timer)
   }, [])
 
-  const rows = useMemo(() => buildRows(data, party, taipeiTime(now), range), [data, party, now, range])
+  const today = taipeiTime(now).slice(0, 10)
   const days = upcomingDays(data, taipeiTime(now))
-  // 句子裡的時段，數字跟中文之間空一格：「2 位晚餐」「2 位 18:00–20:00 」；時段不從「–」斷行
+  // 選的那天過了（或不在這次查詢的範圍裡）就回到全部日期
+  const date = days.includes(storedDate) ? storedDate : null
+  const rows = useMemo(() => buildRows(data, party, taipeiTime(now), range, date), [data, party, now, range, date])
+  // 句子裡的人數和時段，數字跟中文之間空一格：「2 位晚餐」「2 位 18:00–20:00 」；整段不斷行
   const name = timeName(filter, custom)
   const gap = /\d$/.test(name) ? ' ' : ''
   const what = (
     <>
-      {party} 位{gap}
-      <span className="mich-av-when">{name}</span>
+      <span className="mich-av-when">{`${party} 位${gap}${name}`}</span>
       {gap}
     </>
   )
@@ -176,11 +180,11 @@ function Board({ data }: { data: Availability }) {
             </button>
           ))}
         </div>
-        <select value={region} onChange={(e) => setRegion(e.target.value)} aria-label="地區">
-          <option value="all">全部地區</option>
-          {REGIONS.map((r) => (
-            <option key={r.slug} value={r.slug}>
-              {r.name}
+        <select value={date ?? 'all'} onChange={(e) => setDate(e.target.value)} aria-label="日期">
+          <option value="all">全部日期</option>
+          {days.map((d) => (
+            <option key={d} value={d}>
+              {dateOption(d, today)}
             </option>
           ))}
         </select>
@@ -210,6 +214,14 @@ function Board({ data }: { data: Availability }) {
             </select>
           </span>
         )}
+        <select value={region} onChange={(e) => setRegion(e.target.value)} aria-label="地區">
+          <option value="all">全部地區</option>
+          {REGIONS.map((r) => (
+            <option key={r.slug} value={r.slug}>
+              {r.name}
+            </option>
+          ))}
+        </select>
         <label className="mich-check">
           <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
           只看有空位
@@ -217,12 +229,21 @@ function Board({ data }: { data: Availability }) {
       </div>
 
       <p className="mich-av-summary">
-        {inRegion.length} 家裡 {withData} 家讀到訂位資料，<strong>{open.length} 家</strong>有 {what}的時段，共 {slots} 個
+        {inRegion.length} 家裡 {withData} 家讀到訂位資料，<strong>{open.length} 家</strong>
+        {date && `在 ${dayLabel(date)}`}有 {what}的時段，共 {slots} 個
         {fresh > 0 && <>，其中 <span className="mich-av-new-text">{fresh} 個是新釋出的</span></>}。
       </p>
 
       {shown.length === 0 ? (
-        <p className="muted">{onlyOpen ? <>這個地區目前沒有 {what}的空位。</> : '這個地區沒有星級餐廳。'}</p>
+        <p className="muted">
+          {onlyOpen ? (
+            <>
+              這個地區{date ? ` ${dayLabel(date)}` : '目前'}沒有 {what}的空位。
+            </>
+          ) : (
+            '這個地區沒有星級餐廳。'
+          )}
+        </p>
       ) : (
         <ul className="mich-av-list">
           {shown.map((row) => (
@@ -246,6 +267,20 @@ function cellClass(cell: DayCell) {
   return cell.day.status === 'full' ? 'is-full' : 'is-off'
 }
 
+/** 一天的時段，新釋出的另外標 */
+function Slots({ cell }: { cell: DayCell }) {
+  return (
+    <span className="mich-av-slots">
+      {cell.times.map((t) => (
+        <span key={t} className={`mich-av-slot${cell.fresh.has(t) ? ' is-new' : ''}`}>
+          {t}
+          {cell.fresh.has(t) && <span className="mich-av-new-tag">新</span>}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 /** 那天在選的時段裡沒有位子時寫什麼；timeLead 是選的時段（「晚餐」「18:00–20:00 」） */
 function emptyText(cell: DayCell, timeLead: string) {
   return cell.outside > 0 ? `${timeLead}沒有，其他時段有 ${cell.outside} 個` : statusLabel(cell.day)
@@ -256,7 +291,7 @@ function cellTitle(cell: DayCell, timeLead: string) {
 }
 
 function RestaurantRow({ row, party, timeLead }: { row: Row; party: number; timeLead: string }) {
-  const { place, restaurant: r, result, first } = row
+  const { place, restaurant: r, result, first, picked } = row
   const url = safeUrl(place.url)
   const tel = place.phone ? phoneHref(place.phone) : null
   const summary = first ? (
@@ -309,14 +344,28 @@ function RestaurantRow({ row, party, timeLead }: { row: Row; party: number; time
       {row.cells.length > 0 && row.hasData && (
         <ol className="mich-av-strip" aria-hidden="true">
           {row.cells.map((cell) => (
-            <li key={cell.date} className={cellClass(cell)} title={cellTitle(cell, timeLead)}>
+            <li
+              key={cell.date}
+              className={`${cellClass(cell)}${cell === picked ? ' is-picked' : ''}`}
+              title={cellTitle(cell, timeLead)}
+            >
               <span className={isWeekend(cell.date) ? 'is-weekend' : undefined}>{Number(cell.date.slice(8))}</span>
             </li>
           ))}
         </ol>
       )}
 
-      {row.hasData ? (
+      {row.hasData && picked ? (
+        // 選了日期：那天的時段直接列出來，其他天看上面的 14 格
+        <p className="mich-av-pick">
+          <span className="mich-av-date">{dayLabel(picked.date)}</span>
+          {picked.times.length > 0 ? (
+            <Slots cell={picked} />
+          ) : (
+            <span className="muted">{emptyText(picked, timeLead)}</span>
+          )}
+        </p>
+      ) : row.hasData ? (
         <details className="mich-av-details">
           <summary>{summary}</summary>
           <ul className="mich-av-days">
@@ -324,14 +373,7 @@ function RestaurantRow({ row, party, timeLead }: { row: Row; party: number; time
               <li key={cell.date}>
                 <span className="mich-av-date">{dayLabel(cell.date)}</span>
                 {cell.times.length > 0 ? (
-                  <span className="mich-av-slots">
-                    {cell.times.map((t) => (
-                      <span key={t} className={`mich-av-slot${cell.fresh.has(t) ? ' is-new' : ''}`}>
-                        {t}
-                        {cell.fresh.has(t) && <span className="mich-av-new-tag">新</span>}
-                      </span>
-                    ))}
-                  </span>
+                  <Slots cell={cell} />
                 ) : (
                   <span className="muted">{emptyText(cell, timeLead)}</span>
                 )}

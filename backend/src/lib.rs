@@ -31,6 +31,7 @@ pub mod liarsdice;
 pub mod lobby;
 pub mod lunar;
 pub mod mcp;
+pub mod mcp_server;
 pub mod mecha;
 pub mod michelin;
 pub mod michelin_availability;
@@ -156,6 +157,8 @@ pub struct AppState {
     pub ai_running: Arc<ai_usage::Running>,
     /// MCP 伺服器的連線（session），見 mcp.rs
     pub mcp: Arc<mcp::Mcp>,
+    /// 本站的 MCP 伺服器（/mcp）每把金鑰呼叫工具的次數，見 mcp_server.rs
+    pub mcp_server: Arc<mcp_server::McpServer>,
     /// 前端 build 時產生的本站功能清單（frontend/scripts/site-catalog.mjs），AI 助手的 site_search 查這份
     pub site_catalog: PathBuf,
     /// AI 助手的網路搜尋（SearXNG）和讀網頁，見 ai_web.rs
@@ -215,6 +218,7 @@ impl AppState {
             ai: Arc::default(),
             ai_running: Arc::default(),
             mcp: Arc::default(),
+            mcp_server: Arc::default(),
             site_catalog: PathBuf::from("../frontend/dist/site-catalog.json"),
             web: Arc::default(),
             chat: Arc::default(),
@@ -391,6 +395,8 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .route("/michelin/reminders", get(michelin::list_reminders).post(michelin::create_reminder))
         .route("/michelin/reminders/{id}", delete(michelin::delete_reminder))
         .route("/michelin/availability", get(michelin_availability::latest).put(michelin_availability::upload))
+        .route("/mcp/keys", get(mcp_server::list_keys).post(mcp_server::create_key))
+        .route("/mcp/keys/{id}", delete(mcp_server::delete_key))
         .route("/push/key", get(webpush::public_key))
         .route("/push/subscriptions", post(webpush::subscribe).delete(webpush::unsubscribe))
         .route("/push/test", post(webpush::test))
@@ -402,11 +408,20 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .fallback(ServeFile::new(static_dir.join("index.html")).precompressed_gzip());
     let spa = Router::new().fallback_service(files).layer(middleware::from_fn(hide_dot_paths));
 
+    // 本站的 MCP 伺服器（給別人的 AI 用，見 mcp_server.rs）；瀏覽器打開 /mcp 是前端的 MCP 頁面
+    let index = ServeFile::new(static_dir.join("index.html")).precompressed_gzip();
+    let mcp = post(mcp_server::post)
+        .get(move |request: Request| mcp_server::get(index.clone(), request))
+        .delete(mcp_server::not_allowed)
+        .options(mcp_server::preflight);
+
     let recorder = access_log::Recorder::new(state.clone(), static_dir);
     Router::new()
         .nest("/api", api)
         // 短網址不放在 /api 底下，網址才短
         .route("/s/{code}", get(short_links::follow))
+        .route("/mcp", mcp.clone())
+        .route("/mcp/", mcp)
         .fallback_service(spa)
         // 在 /api 和前端之前攔下 `.env`（含 `/api/.env`），IP 訪問紀錄在外層，所以也會記到
         .layer(middleware::from_fn_with_state(state.clone(), honeypot::intercept))

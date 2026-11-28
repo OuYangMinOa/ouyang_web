@@ -180,7 +180,7 @@ fn now_text() -> String {
 // ---- 搜尋（AI 助手的 michelin_search） ----
 
 /// 「臺」「台」都有人寫（資料裡縣市是台、料理是臺），比對前統一
-fn fold(text: &str) -> String {
+pub fn fold(text: &str) -> String {
     text.trim().to_lowercase().replace('臺', "台")
 }
 

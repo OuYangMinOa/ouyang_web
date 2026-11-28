@@ -122,6 +122,18 @@ impl<P: Permission + Send + Sync> FromRequestParts<AppState> for Require<P> {
     }
 }
 
+/// 不是用 session、而是用金鑰認出來的人（例如 MCP 的金鑰，見 mcp_server.rs）；帳號停用了就是 None
+pub(crate) async fn user_by_id(pool: &SqlitePool, id: i64) -> Result<Option<CurrentUser>, sqlx::Error> {
+    let username: Option<String> = sqlx::query_scalar("SELECT username FROM users WHERE id = ? AND NOT disabled")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    match username {
+        Some(username) => Ok(Some(load_user(pool, id, username).await?)),
+        None => Ok(None),
+    }
+}
+
 async fn load_user(pool: &SqlitePool, id: i64, username: String) -> Result<CurrentUser, sqlx::Error> {
     let roles = sqlx::query_scalar(
         "SELECT r.name FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? ORDER BY r.name",

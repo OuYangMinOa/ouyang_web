@@ -15,9 +15,9 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    AppState,
+    AppState, ai_usage,
     auth::CurrentUser,
-    calendar, invoice, lunar, michelin, short_links,
+    calendar, invoice, lunar, michelin, michelin_availability, short_links,
     weather::{forecast, quake, typhoon},
 };
 
@@ -33,6 +33,7 @@ pub enum Builtin {
     Earthquakes,
     Invoice,
     Michelin,
+    MichelinAvailability,
     LinksList,
     LinkCreate,
     SiteSearch,
@@ -230,7 +231,11 @@ pub const SPECS: &[Spec] = &[
         kind: Builtin::Michelin,
         name: "michelin_search",
         title: "查米其林餐廳",
-        description: "查台灣米其林指南的星級和必比登餐廳（本站米其林地圖的資料），回傳店名、獎項、料理、價位、地址、電話和本站地圖連結。                      使用者想找餐廳、問某一區有什麼米其林、問某家店的電話地址時用。text 是店名或料理的關鍵字（例如「壽司」「牛肉麵」），                      area 是縣市或區（例如「台南」「大安區」）。mine 查使用者自己記的想吃、吃過。                      資料是靜態整理的，營業時間、能不能訂位要請使用者以店家公告為準；連結是站內網址，回答時照原樣附上。",
+        description: "查台灣米其林指南的星級和必比登餐廳（本站米其林地圖的資料），回傳店名、獎項、料理、價位、地址、電話和本站地圖連結。\
+                      使用者想找餐廳、問某一區有什麼米其林、問某家店的電話地址時用。text 是店名或料理的關鍵字（例如「壽司」「牛肉麵」），\
+                      area 是縣市或區（例如「台南」「大安區」）。mine 查使用者自己記的想吃、吃過。\
+                      資料是靜態整理的，營業時間要請使用者以店家公告為準；星級餐廳哪天、幾點還能訂位用 michelin_availability 查。\
+                      連結是站內網址，回答時照原樣附上。",
         writes: false,
         parameters: || {
             json!({ "type": "object", "properties": {
@@ -245,6 +250,41 @@ pub const SPECS: &[Spec] = &[
                 "changed_this_year": { "type": "boolean", "description": "只要今年（這一版）新入選或升星的；使用者問「今年新上榜」「新摘星」時用" },
                 "green": { "type": "boolean", "description": "只要綠星（永續美食）餐廳" },
                 "limit": { "type": "integer", "minimum": 1, "maximum": 30, "description": "幾筆，預設 10" }
+            } })
+        },
+    },
+    Spec {
+        kind: Builtin::MichelinAvailability,
+        name: "michelin_availability",
+        title: "查米其林空位",
+        description: "查台灣米其林星級餐廳近兩週還能訂的時段（本站的「星級餐廳空位」：家裡電腦上的爬蟲每 3 小時看一次 inline、\
+                      TableCheck、SevenRooms 的公開訂位頁）。使用者問「某天晚上兩個人哪家米其林有位」「某家店哪天還有位」\
+                      「最近有沒有人取消」時用。date 是哪一天，查一段日子再給 date_to（例如週末給星期六和星期日）；\
+                      meal 是 lunch（10:00–15:59）或 dinner（16:00 以後），想要更準（例如「七點左右」）改用 time_from、time_to；\
+                      restaurant 是店名，有給的話沒位子的日子也會寫原因（額滿、公休…）。只有星級餐廳，沒有必比登。\
+                      回答時寫出資料是幾點查的、附上 booking 訂位連結，提醒以訂位頁為準；你不能幫使用者訂位。",
+        writes: false,
+        parameters: || {
+            json!({ "type": "object", "properties": {
+                "party": { "type": "integer", "minimum": 1, "description": "用餐人數，預設 2（目前查的是 2、4、6 位）" },
+                "date": {
+                    "type": "string", "format": "date",
+                    "description": format!("哪一天 {DATE}；不給是查得到的每一天（今天起兩週）")
+                },
+                "date_to": {
+                    "type": "string", "format": "date",
+                    "description": format!("查一段日子時的最後一天 {DATE}（含當天）")
+                },
+                "meal": { "type": "string", "enum": ["lunch", "dinner"], "description": "lunch 是 10:00–15:59，dinner 是 16:00 以後" },
+                "time_from": { "type": "string", "description": "最早的時段 HH:MM（含），例如 18:30" },
+                "time_to": { "type": "string", "description": "最晚的時段 HH:MM（含），例如 19:30" },
+                "restaurant": { "type": "string", "description": "店名或店名的一部分" },
+                "area": { "type": "string", "description": "縣市或區，例如「台北」「台中」「大安區」" },
+                "awards": {
+                    "type": "array", "items": { "type": "string", "enum": ["3", "2", "1"] },
+                    "description": "只要這些星等，不給是全部"
+                },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 20, "description": "有位子的最多列幾家，預設 10" }
             } })
         },
     },
@@ -303,6 +343,7 @@ pub async fn run(state: &AppState, user: &CurrentUser, kind: Builtin, args: &Val
         Builtin::Earthquakes => earthquakes(state, args).await,
         Builtin::Invoice => invoice_check(state, args).await,
         Builtin::Michelin => michelin_search(state, user, args).await,
+        Builtin::MichelinAvailability => michelin_availability(state, args).await,
         Builtin::LinksList => links_list(state, user).await,
         Builtin::LinkCreate => link_create(state, user, args).await,
         Builtin::SiteSearch => site_search(state, user, args).await,
@@ -796,6 +837,70 @@ async fn michelin_search(state: &AppState, user: &CurrentUser, args: &Value) -> 
         "shown": list.len(),
         "restaurants": list,
     })))
+}
+
+/// 星級餐廳的空位：讀爬蟲最新上傳的那次（michelin_availability.rs），篩選和整理在 `Query::run`
+async fn michelin_availability(state: &AppState, args: &Value) -> ToolResult {
+    let party = match &args["party"] {
+        Value::Null => 2,
+        value => value
+            .as_u64()
+            .or_else(|| value.as_str().and_then(|s| s.trim().trim_end_matches('位').trim().parse().ok()))
+            .and_then(|n| u8::try_from(n).ok())
+            .filter(|&n| n > 0)
+            .ok_or("party 要是人數，例如 2")?,
+    };
+    let date = arg_str(args, "date").map(|d| parse_date(d, "date")).transpose()?;
+    let date_to = arg_str(args, "date_to").map(|d| parse_date(d, "date_to")).transpose()?;
+    if date.zip(date_to).is_some_and(|(from, to)| to < from) {
+        return Err("date_to 不能比 date 早".into());
+    }
+    let clock = |key: &str| {
+        arg_str(args, key)
+            .map(|t| michelin_availability::parse_clock(t).ok_or_else(|| format!("{key} 要是 HH:MM，例如 18:30")))
+            .transpose()
+    };
+    let owned = |(from, to): (&str, &str)| Some((from.to_owned(), to.to_owned()));
+    // 有給 time_from、time_to 就用，比 meal 準
+    let time = match (clock("time_from")?, clock("time_to")?) {
+        (None, None) => match arg_str(args, "meal") {
+            None => None,
+            Some("lunch") => owned(michelin_availability::LUNCH),
+            Some("dinner") => owned(michelin_availability::DINNER),
+            Some(other) => return Err(format!("meal 要是 lunch 或 dinner：{other}")),
+        },
+        (from, to) => {
+            let (from, to) = (from.unwrap_or_else(|| "00:00".into()), to.unwrap_or_else(|| "23:59".into()));
+            if to < from {
+                return Err("time_to 不能比 time_from 早".into());
+            }
+            Some((from, to))
+        }
+    };
+    let mut awards = Vec::new();
+    for value in args["awards"].as_array().into_iter().flatten() {
+        let text = value.as_str().map(str::to_owned).unwrap_or_else(|| value.to_string());
+        match michelin::Award::parse(&text) {
+            Some(michelin::Award::Bib) => return Err("空位只有星級餐廳，沒有必比登".into()),
+            Some(award) => awards.push(award),
+            None => return Err(format!("看不懂的星等 {text}，要是 3、2 或 1")),
+        }
+    }
+    let query = michelin_availability::Query {
+        party,
+        // 只給 date 是那一天，只給 date_to 是今天到那天
+        from: date,
+        to: date_to.or(date),
+        time,
+        restaurant: arg_str(args, "restaurant").unwrap_or_default().to_owned(),
+        area: arg_str(args, "area").unwrap_or_default().to_owned(),
+        awards,
+        limit: args["limit"].as_u64().map_or(10, |n| n.clamp(1, 20)) as usize,
+    };
+    match michelin_availability::latest_snapshot(state).await.map_err(|e| e.to_string())? {
+        Some(snapshot) => query.run(&snapshot, ai_usage::taipei_now()),
+        None => Ok("還沒有空位資料：家裡電腦上的爬蟲還沒上傳過".into()),
+    }
 }
 
 async fn invoice_check(state: &AppState, args: &Value) -> ToolResult {
