@@ -1355,6 +1355,16 @@ a.mich-me-login {
 .mich-av-controls select {
   flex: 0 1 10em;
 }
+/* 自訂時間：「18:00 到 20:00」兩個選單綁在一起換行 */
+.mich-av-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mich-av-controls .mich-av-range select {
+  flex: 0 0 auto;
+  width: 6.5em;
+}
 .mich-av-summary {
   margin: 12px 0 0;
   font-size: 14px;
@@ -1363,6 +1373,9 @@ a.mich-me-login {
 .mich-av-new-text {
   color: var(--warn);
   font-weight: 600;
+}
+.mich-av-when {
+  white-space: nowrap;
 }
 
 .mich-av-list {
@@ -1538,6 +1551,23 @@ a.mich-av-book {
 @media (max-width: 640px) {
   .mich-av-page h1 {
     font-size: 22px;
+  }
+  /* 控制項排成兩欄：人數一列，地區和時段並排，自訂時間、只看有空位各一列 */
+  .mich-av-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .mich-av-party,
+  .mich-av-range,
+  .mich-av-controls .mich-check {
+    grid-column: 1 / -1;
+  }
+  .mich-av-party {
+    justify-self: start;
+  }
+  .mich-av-controls .mich-av-range select {
+    flex: 1 1 0;
+    width: auto;
   }
   .mich-av-row {
     padding: 12px;
