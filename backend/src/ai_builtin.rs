@@ -267,8 +267,14 @@ pub const SPECS: &[Spec] = &[
         parameters: || {
             json!({ "type": "object", "properties": {
                 "party": { "type": "integer", "minimum": 1, "description": "用餐人數，預設 2（目前查的是 2、4、6 位）" },
-                "date": { "type": "string", "description": format!("哪一天 {DATE}；不給是查得到的每一天（今天起兩週）") },
-                "date_to": { "type": "string", "description": format!("查一段日子時的最後一天 {DATE}（含當天）") },
+                "date": {
+                    "type": "string", "format": "date",
+                    "description": format!("哪一天 {DATE}；不給是查得到的每一天（今天起兩週）")
+                },
+                "date_to": {
+                    "type": "string", "format": "date",
+                    "description": format!("查一段日子時的最後一天 {DATE}（含當天）")
+                },
                 "meal": { "type": "string", "enum": ["lunch", "dinner"], "description": "lunch 是 10:00–15:59，dinner 是 16:00 以後" },
                 "time_from": { "type": "string", "description": "最早的時段 HH:MM（含），例如 18:30" },
                 "time_to": { "type": "string", "description": "最晚的時段 HH:MM（含），例如 19:30" },

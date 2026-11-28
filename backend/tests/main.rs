@@ -27,6 +27,7 @@ mod game_settings;
 mod games;
 mod honeypot;
 mod lobby;
+mod mcp_server;
 mod mecha;
 mod michelin;
 mod michelin_availability;

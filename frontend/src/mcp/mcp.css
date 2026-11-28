@@ -1,0 +1,203 @@
+/* ---- MCP：連線與金鑰（McpPage）、測試（McpTest） ---- */
+
+.mcp {
+  max-width: 760px;
+  min-width: 0;
+}
+.mcp .card h2,
+.mcp-list h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.mcp .card p {
+  margin: 0;
+}
+.mcp-list {
+  margin-top: 28px;
+}
+
+/* 連線資訊：左邊是項目、右邊是內容；網址很長，要能在任何地方斷行 */
+.mcp-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mcp-facts > div {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+.mcp-facts dt {
+  color: var(--text);
+  font-size: 14px;
+}
+.mcp-facts dd {
+  margin: 0;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.mcp code {
+  overflow-wrap: anywhere;
+}
+.mcp-facts code {
+  color: var(--text-h);
+}
+
+/* 一段文字加一個複製按鈕：窄的時候按鈕換到下一行 */
+.mcp-copyable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.mcp-copyable > code {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.mcp-create input {
+  max-width: 360px;
+}
+
+/* 剛建立的金鑰 */
+.mcp-new {
+  padding: 16px;
+  border: 1px solid var(--ok);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.mcp-new h3 {
+  margin: 4px 0 0;
+}
+.mcp-secret {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+/* 提詞、JSON：保留換行，太長的自己斷行，不會撐出橫向捲動 */
+.mcp-prompt,
+.mcp-json {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-h);
+  font: 13px/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 360px;
+  overflow: auto;
+}
+.mcp-new .mcp-prompt {
+  max-height: 320px;
+}
+.mcp-result {
+  max-height: 480px;
+}
+
+.mcp-keys code {
+  color: var(--text-h);
+}
+
+/* ---- 測試頁 ---- */
+
+.mcp-connect {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.mcp-tool-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.mcp-description {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.mcp-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px 16px;
+}
+.mcp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 14px;
+}
+.mcp-field legend {
+  padding: 0;
+  margin-bottom: 4px;
+}
+.mcp-field code {
+  color: var(--text-h);
+  font-size: 14px;
+}
+.mcp .mcp-help {
+  font-size: 13px;
+}
+.mcp-required {
+  margin-left: 6px;
+  color: var(--danger);
+  font-size: 12px;
+}
+/* 勾選的選項也要夠大，手機上點得到 */
+.mcp-field .checks label {
+  min-height: 40px;
+}
+
+.mcp-args .muted,
+.mcp-outcome .muted,
+.mcp-exchange .muted {
+  font-size: 13px;
+}
+.mcp-outcome {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.mcp-outcome h3 {
+  margin: 0;
+}
+
+.mcp-exchanges > summary,
+.mcp-exchange > summary {
+  cursor: pointer;
+  padding: 10px 0;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+.mcp-exchanges .mcp-exchange {
+  margin-left: 12px;
+}
+.mcp-exchange pre {
+  margin: 6px 0 10px;
+}
+
+@media (max-width: 640px) {
+  .mcp-connect {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mcp-connect button {
+    justify-self: start;
+  }
+  .mcp-create input {
+    max-width: none;
+  }
+}
